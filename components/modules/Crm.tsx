@@ -49,6 +49,21 @@ export default function Crm() {
   const store = storeById(app.storeId);
   const customers = useMemo(() => buildCustomers(app.storeId), [app.storeId]);
   const [contacted, setContacted] = useState<string[]>([]);
+  const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [added, setAdded] = useState(0);
+
+  function addMember() {
+    if (!newName.trim() || newPhone.length !== 10) return;
+    setAdded((n) => n + 1);
+    app.dispatch({
+      type: "audit",
+      entry: { at: NOW, actor: app.actorName, action: `New loyalty member enrolled: ${newName.trim()}`, object: newPhone, system: "Arvind One" },
+    });
+    app.toastNow(`${newName.trim()} enrolled — welcome offer sent by SMS`, "good");
+    setNewName("");
+    setNewPhone("");
+  }
 
   const r = rng(hash("crmk" + app.storeId));
   const captureRate = 0.62 + r() * 0.3;
@@ -81,7 +96,7 @@ export default function Crm() {
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Stat label="Capture rate today" value={pct(captureRate)} tone={captureRate >= 0.8 ? "good" : "warn"} sub="Bills with a customer attached" emphasis />
-        <Stat label="Members" value={members.toLocaleString("en-IN")} sub={`+${newToday} new today`} />
+        <Stat label="Members" value={(members + added).toLocaleString("en-IN")} sub={`+${newToday + added} new today`} />
         <Stat label="Repeat share" value={pct(repeatShare)} sub="Of this month's bills" />
         <Stat label="Points liability" value={inr(pointsLiability, { compact: true })} sub="Outstanding, this store" />
         <Stat label="To contact today" value={String(customers.length - contacted.length)} tone={customers.length - contacted.length > 0 ? "warn" : "good"} sub="Birthdays, lapsing, expiring points" />
@@ -126,12 +141,33 @@ export default function Crm() {
         </Card>
 
         <Card>
-          <SectionTitle title="Member base" />
-          <BarChart data={tierMix} format={(n) => n.toLocaleString("en-IN")} />
+          <SectionTitle title="Enrol a member" sub="At the till, ten seconds." />
+          <div className="space-y-2">
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Customer name"
+              className="w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm"
+            />
+            <input
+              value={newPhone}
+              onChange={(e) => setNewPhone(e.target.value.replace(/[^\d]/g, "").slice(0, 10))}
+              placeholder="Mobile — 10 digits"
+              className="w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm num"
+            />
+            <button className="btn-primary w-full" disabled={!newName.trim() || newPhone.length !== 10} onClick={addMember}>
+              Enrol &amp; send welcome offer
+            </button>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-line">
+            <SectionTitle title="Member base" />
+            <BarChart data={tierMix} format={(n) => n.toLocaleString("en-IN")} />
           <div className="mt-4 pt-3 border-t border-line space-y-2 text-xs">
             <div className="flex justify-between"><span className="text-muted">Avg member ATV vs walk-in</span><span className="num font-semibold text-ink">1.4×</span></div>
             <div className="flex justify-between"><span className="text-muted">Redemption rate, 90 days</span><span className="num font-semibold text-ink">{pct(0.18 + r() * 0.2)}</span></div>
             <div className="flex justify-between"><span className="text-muted">Referrals this month</span><span className="num font-semibold text-ink">{3 + Math.floor(r() * 18)}</span></div>
+          </div>
           </div>
         </Card>
       </div>

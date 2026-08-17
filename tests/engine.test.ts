@@ -82,10 +82,10 @@ describe("determinism", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("dataset", () => {
-  it("has the three users Pushpal specified, one of which executes", () => {
-    expect(ROLES).toHaveLength(3);
-    expect(ROLES.map((r) => r.id).sort()).toEqual(["leadership", "planner", "store"]);
-    expect(ROLES.filter((r) => r.mode === "execute").map((r) => r.id)).toEqual(["store"]);
+  it("has the store side (manager + staff) executing and the hierarchy observing", () => {
+    expect(ROLES).toHaveLength(4);
+    expect(ROLES.map((r) => r.id).sort()).toEqual(["leadership", "planner", "staff", "store"]);
+    expect(ROLES.filter((r) => r.mode === "execute").map((r) => r.id).sort()).toEqual(["staff", "store"]);
     expect(ROLES.filter((r) => r.mode === "observe")).toHaveLength(2);
   });
 

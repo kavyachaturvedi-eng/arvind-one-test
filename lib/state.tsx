@@ -349,9 +349,9 @@ function reducer(state: AppState, action: Action): AppState {
 }
 
 function defaultModule(role: RoleId): ModuleId {
-  // Store lands on its day; planning lands on the live control tower; the CEO
-  // lands on a compact executive summary.
-  return role === "store" ? "home" : role === "planner" ? "live" : "exec";
+  // Staff lands on the till; the manager on insights; planning on the live
+  // control tower; the CEO on the executive summary.
+  return role === "staff" ? "pos" : role === "store" ? "home" : role === "planner" ? "live" : "exec";
 }
 
 // ── Context ──────────────────────────────────────────────────────────────────
@@ -390,6 +390,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     switch (state.role) {
       case "store":
         return "Rohit Sharma";
+      case "staff":
+        return "Sana Qureshi";
       case "planner":
         return "Praveen Kumar";
       case "leadership":

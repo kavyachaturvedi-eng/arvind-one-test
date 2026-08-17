@@ -60,6 +60,17 @@ export const ROLES: Role[] = [
     basedOn: "Store walkthroughs, days 1–3",
   },
   {
+    id: "staff",
+    label: "Store Staff",
+    person: "Sana Qureshi",
+    title: "Floor & Till · Phoenix Palladium",
+    scope: "Operations — billing, fulfilment, chores",
+    initials: "SQ",
+    mode: "execute",
+    does: "Bills, packs, receives, and works the floor — the ops side only.",
+    basedOn: "Store walkthroughs, days 1–3",
+  },
+  {
     id: "planner",
     label: "Retail Planning",
     person: "Praveen Kumar",

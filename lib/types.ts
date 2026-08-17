@@ -11,7 +11,7 @@
 // Three users, exactly as Pushpal specified: the store executes, the hierarchy
 // observes. Store Manager is the operator of the consolidated execution app;
 // Retail Planning and the CEO watch that execution and act on what it surfaces.
-export type RoleId = "store" | "planner" | "leadership";
+export type RoleId = "store" | "staff" | "planner" | "leadership";
 
 export type RoleMode = "execute" | "observe";
 

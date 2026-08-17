@@ -4,9 +4,9 @@
 
 import React, { useMemo, useState } from "react";
 import { NOW, STYLES, rng, storeById } from "@/lib/seed";
-import { vitalsFor } from "@/lib/engine";
+import { sellable, stockForStyleAtStore, stylesAtStore, vitalsFor } from "@/lib/engine";
 import { useApp } from "@/lib/state";
-import { Card, Chip, ColumnChart, Empty, SectionTitle, Stat, StatusDot, Table, Td, Th, fmtTime, inr, pct } from "@/components/ui";
+import { Card, Chip, ColumnChart, Empty, Modal, SectionTitle, SizeGrid, Stat, StatusDot, Table, Td, Th, fmtTime, inr, pct } from "@/components/ui";
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
 
@@ -27,7 +27,10 @@ function buildBills(storeId: string, todaySales: number, billCount: number): Bil
   const shown = Math.min(9, billCount);
   let remaining = todaySales;
   for (let i = 0; i < shown; i++) {
-    const value = i === shown - 1 ? Math.max(800, Math.round(remaining / 100) * 100) : Math.round((todaySales / billCount) * (0.5 + r()) / 100) * 100;
+    const value =
+      i === shown - 1
+        ? Math.min(9900, Math.max(800, Math.round(remaining / 100) * 100))
+        : Math.round(((todaySales / billCount) * (0.5 + r())) / 100) * 100;
     remaining -= value;
     out.push({
       id: `B-${4200 + i}`,
@@ -46,8 +49,16 @@ export default function Pos() {
   const app = useApp();
   const store = storeById(app.storeId);
   const v = vitalsFor(app.storeId);
-  const bills = useMemo(() => buildBills(app.storeId, v.todaySales, v.bills), [app.storeId, v.todaySales, v.bills]);
+  const seeded = useMemo(() => buildBills(app.storeId, v.todaySales, v.bills), [app.storeId, v.todaySales, v.bills]);
+  const [newBills, setNewBills] = useState<Bill[]>([]);
   const [held, setHeld] = useState(false);
+  const [billOpen, setBillOpen] = useState(false);
+
+  const bills = useMemo(() => [...newBills, ...seeded], [newBills, seeded]);
+  const newSales = newBills.reduce((a, b) => a + b.value, 0);
+  const salesToday = v.todaySales + newSales;
+  const billCount = v.bills + newBills.length;
+  const atv = salesToday / Math.max(1, billCount);
 
   const r = rng(hash("posx" + app.storeId));
   const upiShare = 0.34 + r() * 0.18;
@@ -55,6 +66,26 @@ export default function Pos() {
   const cashShare = Math.max(0.08, 1 - upiShare - cardShare);
   const returnsToday = bills.filter((b) => b.status === "returned").length;
   const captureRate = 0.62 + r() * 0.3;
+
+  function createBill(b: { styleId: string; size: string; qty: number; tender: Bill["tender"]; customer: string }) {
+    const style = STYLES.find((s) => s.id === b.styleId)!;
+    const bill: Bill = {
+      id: `B-${4300 + newBills.length}`,
+      at: NOW,
+      items: b.qty,
+      value: style.mrp * b.qty,
+      tender: b.tender,
+      customer: b.customer || undefined,
+      status: "billed",
+    };
+    setNewBills((x) => [bill, ...x]);
+    setBillOpen(false);
+    app.dispatch({
+      type: "audit",
+      entry: { at: NOW, actor: app.actorName, action: `Bill ${bill.id} — ${b.qty} × ${style.name} (${b.size}), ${inr(bill.value)} by ${b.tender}`, object: bill.id, system: "POS" },
+    });
+    app.toastNow(`${bill.id} billed — ${inr(bill.value)}${b.customer ? ` · ${b.customer} captured` : ""}`, "good");
+  }
 
   const hours = ["10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21"];
   const curve = hours.map((_, i) => {
@@ -74,21 +105,23 @@ export default function Pos() {
           <button className="btn" onClick={() => { setHeld(true); app.toastNow("Bill parked — recall it from the till", "info"); }}>
             {held ? "1 bill parked" : "Park bill"}
           </button>
-          <button className="btn-primary" onClick={() => app.toastNow("New bill started on till 01", "good")}>New bill</button>
+          <button className="btn-primary" onClick={() => setBillOpen(true)}>New bill</button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <Stat label="Sales today" value={inr(v.todaySales, { compact: true })} sub={`${v.bills} bills`} emphasis freshness={1} />
-        <Stat label="ATV" value={inr(v.atv)} sub={`UPT ${v.upt.toFixed(1)}`} />
+        <Stat label="Sales today" value={inr(salesToday, { compact: true })} sub={`${billCount} bills`} emphasis freshness={1} />
+        <Stat label="ATV" value={inr(atv)} sub={`UPT ${v.upt.toFixed(1)}`} />
         <Stat label="Conversion" value={pct(v.conversion, 1)} sub={`${v.footfall.toLocaleString("en-IN")} walk-ins`} tone={v.conversion >= 0.14 ? "good" : "warn"} />
         <Stat label="Customer capture" value={pct(captureRate)} tone={captureRate >= 0.8 ? "good" : "warn"} sub="Bills with a member attached" />
         <Stat label="Returns today" value={String(returnsToday)} tone={returnsToday > 1 ? "warn" : "good"} sub="Processed at this till" />
       </div>
 
+      <NewBillModal open={billOpen} onClose={() => setBillOpen(false)} onCreate={createBill} storeId={app.storeId} />
+
       <div className="grid lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">
-          <SectionTitle title="Bills" right={<Chip>{v.bills} today</Chip>} />
+          <SectionTitle title="Bills" right={<Chip>{billCount} today</Chip>} />
           <Table>
             <thead>
               <tr>
@@ -153,5 +186,122 @@ export default function Pos() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ── New bill — the native POS flow ───────────────────────────────────────────
+
+function NewBillModal({
+  open,
+  onClose,
+  onCreate,
+  storeId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (b: { styleId: string; size: string; qty: number; tender: "Card" | "UPI" | "Cash"; customer: string }) => void;
+  storeId: string;
+}) {
+  const carried = useMemo(() => stylesAtStore(storeId), [storeId]);
+  const [styleId, setStyleId] = useState<string>("");
+  const [size, setSize] = useState<string>("");
+  const [qty, setQty] = useState(1);
+  const [tender, setTender] = useState<"Card" | "UPI" | "Cash">("UPI");
+  const [customer, setCustomer] = useState("");
+
+  const style = carried.find((s) => s.id === styleId) ?? null;
+  const units: Record<string, number> = {};
+  if (style) for (const r of stockForStyleAtStore(storeId, style.id)) units[r.size] = sellable(r);
+  const canBill = !!style && !!size && (units[size] ?? 0) >= qty;
+
+  function reset() {
+    setStyleId("");
+    setSize("");
+    setQty(1);
+    setCustomer("");
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={() => { reset(); onClose(); }}
+      title="New bill"
+      sub="Scan or pick the item. Stock and loyalty update on billing."
+      footer={
+        <>
+          <button className="btn" onClick={() => { reset(); onClose(); }}>Cancel</button>
+          <button
+            className="btn-primary"
+            disabled={!canBill}
+            onClick={() => { if (style && size) { onCreate({ styleId: style.id, size, qty, tender, customer }); reset(); } }}
+          >
+            {style && size ? `Bill ${inr(style.mrp * qty)} by ${tender}` : "Bill"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <div>
+          <label className="label block mb-1">Item</label>
+          <select
+            value={styleId}
+            onChange={(e) => { setStyleId(e.target.value); setSize(""); }}
+            className="w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm text-ink"
+          >
+            <option value="">Pick a style…</option>
+            {carried.map((s) => (
+              <option key={s.id} value={s.id}>{s.name} · {s.id} · {inr(s.mrp)}</option>
+            ))}
+          </select>
+        </div>
+
+        {style && (
+          <div>
+            <label className="label block mb-1.5">Size — sellable units shown</label>
+            <SizeGrid sizes={style.sizes} units={units} core={style.coreSizes} selected={size || undefined} onPick={(s) => setSize(s)} />
+            {size && (units[size] ?? 0) === 0 && (
+              <div className="text-2xs mt-1.5" style={{ color: "var(--status-critical)" }}>
+                Zero here — use Save the Sale to bring it in for the customer.
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="label block mb-1">Qty</label>
+            <input
+              type="number"
+              min={1}
+              max={9}
+              value={qty}
+              onChange={(e) => setQty(Math.max(1, Math.min(9, Number(e.target.value) || 1)))}
+              className="w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm num"
+            />
+          </div>
+          <div>
+            <label className="label block mb-1">Tender</label>
+            <select
+              value={tender}
+              onChange={(e) => setTender(e.target.value as "Card" | "UPI" | "Cash")}
+              className="w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm text-ink"
+            >
+              <option>UPI</option>
+              <option>Card</option>
+              <option>Cash</option>
+            </select>
+          </div>
+          <div>
+            <label className="label block mb-1">Customer (optional)</label>
+            <input
+              value={customer}
+              onChange={(e) => setCustomer(e.target.value)}
+              placeholder="Name or mobile"
+              className="w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 }

@@ -73,8 +73,8 @@ const isLive = (t: Ticket) => t.status !== "resolved";
 
 export default function Tickets() {
   const app = useApp();
-  const scopedToOneStore = app.role === "store";
-  const canApprove = app.role !== "store";
+  const scopedToOneStore = app.role === "store" || app.role === "staff";
+  const canApprove = app.role !== "store" && app.role !== "staff";
 
   const [exceptionsOnly, setExceptionsOnly] = useState(!scopedToOneStore);
   const [openId, setOpenId] = useState<string | null>(null);

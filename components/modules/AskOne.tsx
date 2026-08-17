@@ -53,6 +53,7 @@ interface Answer {
 
 const STARTERS: Record<RoleId, string[]> = {
   store: ["Which of my styles have a broken size set?", "Where is my best seller under-stocked?", "Which staff member has the lowest UPT?"],
+  staff: ["Which of my styles have a broken size set?", "Where is my best seller under-stocked?"],
   planner: ["Which of my styles have a broken size set?", "Which stores are below 90% fill rate?", "Why did order OM-55019 cancel?"],
   leadership: ["What is my markdown exposure by brand?", "How does this month compare with last year?", "What is full-price sell-through by brand?"],
 };
@@ -117,7 +118,7 @@ export default function AskOne() {
         </div>
 
         <div className="mt-3">
-          <div className="label mb-1.5">Starters for {app.role === "store" ? "a store manager" : app.role === "planner" ? "retail planning" : "the CEO"}</div>
+          <div className="label mb-1.5">Starters for {app.role === "store" || app.role === "staff" ? "the store" : app.role === "planner" ? "retail planning" : "the CEO"}</div>
           <div className="flex flex-wrap gap-1.5">
             {roleStarters.map((q) => (
               <button key={q} onClick={() => ask(q)} className="chip text-ink2 bg-[color:var(--plane)] hover:bg-[color:var(--brand-soft)]">

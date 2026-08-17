@@ -139,11 +139,11 @@ export default function Omni() {
   const [photoCaptured, setPhotoCaptured] = useState(false);
 
   const scope = useMemo(() => {
-    if (app.role === "store") return app.omni.filter((o) => o.storeId === app.storeId);
+    if (app.role === "store" || app.role === "staff") return app.omni.filter((o) => o.storeId === app.storeId);
     return app.omni;
   }, [app.omni, app.role, app.storeId]);
 
-  const scopeLabel = app.role === "store" ? storeById(app.storeId).name : "All stores";
+  const scopeLabel = app.role === "store" || app.role === "staff" ? storeById(app.storeId).name : "All stores";
 
   const queue = useMemo(
     () => [...scope].filter((o) => o.status !== "cancelled" && o.status !== "reassigned").sort((a, b) => b.placedAt - a.placedAt),
@@ -303,7 +303,7 @@ export default function Omni() {
                       <div className="mt-1">
                         <Chip tone="neutral">{o.channel}</Chip>
                       </div>
-                      {app.role !== "store" && <div className="text-2xs text-muted mt-1">{storeById(o.storeId).name}</div>}
+                      {app.role !== "store" && app.role !== "staff" && <div className="text-2xs text-muted mt-1">{storeById(o.storeId).name}</div>}
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2">

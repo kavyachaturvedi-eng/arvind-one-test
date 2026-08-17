@@ -16,21 +16,24 @@ interface NavItem {
 }
 
 export const NAV: NavItem[] = [
-  // Store — the day
-  { id: "home", label: "Today", glyph: "◧", roles: ["store"], group: "Today", hint: "The whole day in one place" },
-  { id: "storeday", label: "Briefing & Tasks", glyph: "☰", roles: ["store"], group: "Today", hint: "HQ tasks, training, floor chores" },
-  { id: "pos", label: "Billing", glyph: "▣", roles: ["store"], group: "Today", hint: "POS, tenders, returns" },
-  { id: "crm", label: "Customers", glyph: "◐", roles: ["store"], group: "Today", hint: "Capture, loyalty, outreach" },
-  { id: "tickets", label: "Raise an Issue", glyph: "⚑", roles: ["store"], group: "Today", hint: "Scan the asset and raise it" },
-  { id: "cash", label: "Cash & Close", glyph: "₹", roles: ["store"], group: "Today", hint: "Tender reconciliation and day close" },
+  // Store — OPERATIONS: the doing side. Staff live here; the manager can too.
+  { id: "pos", label: "Billing", glyph: "▣", roles: ["staff", "store"], group: "Operations", hint: "New bills, tenders, returns" },
+  { id: "storeday", label: "Tasks & Chores", glyph: "☰", roles: ["staff", "store"], group: "Operations", hint: "HQ tasks, training, floor chores" },
+  { id: "savesale", label: "Save the Sale", glyph: "⇄", roles: ["staff", "store"], group: "Operations", hint: "Transfer a size in from another store" },
+  { id: "omni", label: "Online Orders", glyph: "◱", roles: ["staff", "store"], group: "Operations", hint: "Find, pack, hand over" },
+  { id: "grn", label: "Inward & GRN", glyph: "▼", roles: ["staff", "store"], group: "Operations", hint: "Receive against advice notes" },
+  { id: "outward", label: "Outward & RTV", glyph: "⇥", roles: ["staff", "store"], group: "Operations", hint: "Pullbacks and returns to vendor" },
+  { id: "crm", label: "Customers", glyph: "◐", roles: ["staff", "store"], group: "Operations", hint: "Capture members, send offers" },
+  { id: "tickets", label: "Raise an Issue", glyph: "⚑", roles: ["staff", "store"], group: "Operations", hint: "Scan the asset and raise it" },
 
-  // Store — stock
-  { id: "savesale", label: "Save the Sale", glyph: "⇄", roles: ["store"], group: "Stock", hint: "Transfer a size in from another store" },
-  { id: "sizeset", label: "Size & Stock", glyph: "▤", roles: ["store"], group: "Stock", hint: "Broken sizes and what to do about each" },
-  { id: "replenish", label: "Replenishment", glyph: "↺", roles: ["store"], group: "Stock", hint: "Warehouse pulls and store transfers" },
-  { id: "grn", label: "Inward & GRN", glyph: "▼", roles: ["store"], group: "Stock", hint: "Receive against advice notes" },
-  { id: "omni", label: "Online Orders", glyph: "◱", roles: ["store"], group: "Stock", hint: "Find, pack, hand over" },
-  { id: "outward", label: "Outward & RTV", glyph: "⇥", roles: ["store"], group: "Stock", hint: "Pullbacks and returns to vendor" },
+  // Store — INSIGHTS: the manager's side. Staff do not see these.
+  { id: "home", label: "Overview", glyph: "◧", roles: ["store"], group: "Insights", hint: "KPIs and today's decisions" },
+  { id: "sizeset", label: "Size & Stock", glyph: "▤", roles: ["store"], group: "Insights", hint: "Broken sizes and what to do about each" },
+  { id: "replenish", label: "Replenishment", glyph: "↺", roles: ["store"], group: "Insights", hint: "Warehouse pulls and store transfers" },
+  { id: "cash", label: "Cash & Close", glyph: "₹", roles: ["store"], group: "Insights", hint: "Tender reconciliation and day close" },
+  { id: "truth", label: "Stock Position", glyph: "◎", roles: ["store"], group: "Insights", hint: "What is in the system, per style" },
+  { id: "reports", label: "Reports", glyph: "▥", roles: ["store"], group: "Insights", hint: "DSR, stock, size sets, staff" },
+  { id: "ask", label: "Ask One", glyph: "✳", roles: ["store"], group: "Insights", hint: "Ask in plain language" },
 
   // Hierarchy — live view
   { id: "exec", label: "Executive View", glyph: "◆", roles: ["leadership"], group: "Live", hint: "The business on one screen" },
@@ -43,14 +46,13 @@ export const NAV: NavItem[] = [
   { id: "moves", label: "Strategic Moves", glyph: "⇉", roles: ["planner", "leadership"], group: "Planning", hint: "Network transfers ranked by value" },
   { id: "catchment", label: "Catchment", glyph: "◈", roles: ["planner", "leadership"], group: "Planning", hint: "Customer concentration by pin code" },
 
-  // Shared
-  { id: "truth", label: "Stock Position", glyph: "◎", roles: ["store", "planner", "leadership"], group: "Data", hint: "What is in the system, per style" },
-  { id: "reports", label: "Reports", glyph: "▥", roles: ["store"], group: "Data", hint: "DSR, stock, size sets, staff" },
+  // Hierarchy — data
+  { id: "truth", label: "Stock Position", glyph: "◎", roles: ["planner", "leadership"], group: "Data", hint: "What is in the system, per style" },
   { id: "governance", label: "Metric Registry", glyph: "§", roles: ["planner", "leadership"], group: "Data", hint: "One definition per metric" },
-  { id: "ask", label: "Ask One", glyph: "✳", roles: ["store", "planner", "leadership"], group: "Data", hint: "Ask in plain language" },
+  { id: "ask", label: "Ask One", glyph: "✳", roles: ["planner", "leadership"], group: "Data", hint: "Ask in plain language" },
 ];
 
-const GROUP_ORDER = ["Today", "Stock", "Live", "Planning", "Data"];
+const GROUP_ORDER = ["Operations", "Insights", "Live", "Planning", "Data"];
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const app = useApp();
@@ -96,7 +98,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           >
             {role.person} · {role.label}
           </span>
-          {app.role === "store" ? (
+          {app.role === "store" || app.role === "staff" ? (
             <StorePicker />
           ) : (
             <span className="text-xs text-ink2 font-medium shrink-0">{STORES.length} stores · live</span>

@@ -361,7 +361,7 @@ export default function SaveTheSale() {
                   {created.customerName} will get the pickup date by SMS, and an update if it changes.
                 </div>
               )}
-              {created.status === "pending_approval" && app.role !== "store" && (
+              {created.status === "pending_approval" && app.role !== "store" && app.role !== "staff" && (
                 <div className="mt-3 flex gap-2">
                   <button
                     className="btn-primary !py-1.5 !text-xs"

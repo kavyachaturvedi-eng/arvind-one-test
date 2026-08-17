@@ -12,11 +12,13 @@ mkdirSync(SHOTS, { recursive: true });
 
 const ROLES = [
   ["store", "Store Manager"],
+  ["staff", "Store Staff"],
   ["planner", "Retail Planning"],
   ["leadership", "CEO"],
 ];
 const MODULES_BY_ROLE = {
-  store: ["home", "storeday", "pos", "crm", "tickets", "cash", "savesale", "sizeset", "replenish", "grn", "omni", "outward", "truth", "reports", "ask"],
+  store: ["pos", "storeday", "savesale", "omni", "grn", "outward", "crm", "tickets", "home", "sizeset", "replenish", "cash", "truth", "reports", "ask"],
+  staff: ["pos", "storeday", "savesale", "omni", "grn", "outward", "crm", "tickets"],
   planner: ["live", "performance", "tickets", "allocate", "moves", "catchment", "truth", "governance", "ask"],
   leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "ask"],
 };
@@ -239,12 +241,12 @@ const IGNORE = [/favicon/i, /Download the React DevTools/i, /webpack-hmr/i];
   for (const [roleId, role] of ROLES) {
     await page.locator(`[data-role="${roleId}"]`).first().click();
     await page.waitForTimeout(300);
-    const landing = roleId === "store" ? "home" : roleId === "planner" ? "live" : "exec";
+    const landing = roleId === "store" ? "home" : roleId === "staff" ? "pos" : roleId === "planner" ? "live" : "exec";
     await page.locator(`nav [data-module="${landing}"]`).first().click();
     await page.waitForTimeout(450);
     await page.screenshot({ path: `${SHOTS}/home-${roleId}.png`, fullPage: true });
   }
-  pass("captured landing screenshots for all three roles");
+  pass("captured landing screenshots for all roles");
 
   // ── 9. Mobile viewport ─────────────────────────────────────────────────
   await page.setViewportSize({ width: 390, height: 844 });

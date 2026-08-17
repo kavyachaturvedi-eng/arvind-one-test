@@ -299,7 +299,7 @@ function SameNumberStrip() {
         }
       />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {ROLES.map((r) => (
+        {ROLES.filter((r) => r.id !== "staff").map((r) => (
           <button
             key={r.id}
             onClick={() => app.setRole(r.id)}
