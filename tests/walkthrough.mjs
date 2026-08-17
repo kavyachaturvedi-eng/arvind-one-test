@@ -214,7 +214,7 @@ const IGNORE = [/favicon/i, /Download the React DevTools/i, /webpack-hmr/i];
     await sel.selectOption({ index: i });
     await page.waitForTimeout(200);
     const t = await page.locator("main").innerText();
-    if (/sellable now/i.test(t) && /source systems/i.test(t) && !/NaN|undefined/.test(t)) reconOk++;
+    if (/sellable now/i.test(t) && /movements/i.test(t) && !/NaN|undefined/.test(t)) reconOk++;
   }
   if (reconOk === Math.min(optCount, 6)) pass(`reconciliation held for ${reconOk} styles`);
   else fail(`reconciliation broke on ${Math.min(optCount, 6) - reconOk} styles`);

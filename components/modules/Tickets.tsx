@@ -436,7 +436,7 @@ function TicketModal({
         {t.status === "auto_dispatched" && t.kind === "tag_reprint" && (
           <Callout tone="brand" title="Created automatically from a price change">
             <ol className="space-y-1 mt-0.5">
-              <li>1. SAP published a price change for 11 styles at 10:38.</li>
+              <li>1. Commercial published a price revision for 11 styles at 10:38.</li>
               <li>2. {t.qty ?? 41} affected units identified in this store.</li>
               <li>3. Tags queued to the in-store printer.</li>
               <li>4. Task assigned with a 24h SLA and a photo close-out.</li>

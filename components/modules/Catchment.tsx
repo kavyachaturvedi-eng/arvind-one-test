@@ -133,7 +133,7 @@ export default function Catchment() {
         actor: app.actorName,
         action: `Built launch campaign list — ${underServed.map((u) => u.area).join(", ")}`,
         object: `${reach.toLocaleString("en-IN")} customers`,
-        system: "Capillary",
+        system: "Arvind One",
       },
     });
     app.toastNow(
@@ -152,7 +152,7 @@ export default function Catchment() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Chip tone="brand">Source: Capillary loyalty · {store.name}</Chip>
+          <Chip tone="brand">Source: loyalty ledger · {store.name}</Chip>
           <Freshness minutes={42} />
         </div>
       </div>
@@ -346,7 +346,7 @@ export default function Catchment() {
             </Chip>
           )}
           <span className="text-2xs text-muted">
-            Writes to the audit trail against Capillary. No CRM request, no wait.
+            Written to the audit trail. No CRM request, no wait.
           </span>
         </div>
       </Card>

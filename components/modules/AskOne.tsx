@@ -427,7 +427,7 @@ function resolve(q: string, app: ReturnType<typeof useApp>): Answer {
         needs: [
           "Owner: Omni Operations",
           "Definition: cancelled units / units routed to store, by root cause",
-          "Source: Omuni order feed joined to the Arvind One find-timer",
+          "Source: omni order ledger joined to the find-timer",
           "Freshness contract: live, with a 24-hour restatement window for late root causes",
         ],
       },
@@ -467,7 +467,7 @@ function resolve(q: string, app: ReturnType<typeof useApp>): Answer {
         needs: [
           "Owner: Store Operations",
           "Agreed treatment of returns, exchanges and split bills in the denominator",
-          "Source: D365 POS line-level feed, not the daily summary",
+          "Source: POS line-level ledger, not the daily summary",
           "Freshness contract: live",
         ],
       },
@@ -519,7 +519,7 @@ function resolve(q: string, app: ReturnType<typeof useApp>): Answer {
         needs: [
           "Owner: Finance & Planning",
           "A like-for-like store rule (minimum trading days, refit and closure handling)",
-          "Source: SAP billing, restated for store openings and closures",
+          "Source: POS billing ledger, restated for store openings and closures",
           "Freshness contract: daily, restated at month close",
         ],
       },
@@ -539,7 +539,7 @@ function resolve(q: string, app: ReturnType<typeof useApp>): Answer {
 
   // Graceful failure — the honest default.
   const topic = t.includes("margin")
-    ? { metric: "gross_margin_by_style", owner: "Finance & Planning", extra: "Landed cost by style, which today only exists in SAP at the PO level" }
+    ? { metric: "gross_margin_by_style", owner: "Finance & Planning", extra: "Needs landed cost by style, posted from SAP Finance at the PO level" }
     : t.includes("footfall")
     ? { metric: "footfall_capture", owner: "Store Operations", extra: "A single counted-footfall source; today the counters and the manual tally disagree" }
     : t.includes("return")

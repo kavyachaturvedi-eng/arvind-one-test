@@ -27,6 +27,28 @@ export default function Truth() {
   const adj = Object.fromEntries(lineage.adjustments.map((a) => [a.label, a.units])) as Record<string, number>;
   const metric = METRICS.find((m) => m.id === "sellable_stock")!;
 
+  // Today's movement log, derived from the position so the numbers always tie out.
+  const movements = useMemo(() => {
+    const onHand = adj["Physical on-hand (D365)"] ?? 0;
+    const reserved = Math.abs(adj["Less: reserved against omni orders"] ?? 0);
+    const defective = Math.abs(adj["Less: flagged defective"] ?? 0);
+    const staged = Math.abs(adj["Less: staged for outward"] ?? 0);
+    const sold = Math.min(3, Math.max(1, defective + 1));
+    let bal = onHand + sold;
+    const rows: { at: string; label: string; units: number; balance: number }[] = [];
+    const push = (at: string, label: string, units: number) => {
+      bal += units;
+      rows.push({ at, label, units, balance: bal });
+    };
+    rows.push({ at: "10:03", label: "Opening position", units: 0, balance: bal });
+    push("10:41", "Sold at till", -sold);
+    if (reserved) push("10:58", "Reserved against omni order", -reserved);
+    if (defective) push("11:12", "Flagged defective at floor walk", -defective);
+    if (staged) push("11:26", "Staged into outward batch", -staged);
+    return rows;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app.storeId, style.id]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -71,7 +93,7 @@ export default function Truth() {
       {/* The position, as numbers */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <Stat label="Sellable now" value={String(lineage.reconciled)} tone="good" emphasis sub="On floor, free to sell" />
-        <Stat label="Physical on-hand" value={String(adj["Physical on-hand (D365)"] ?? 0)} sub="D365 count" />
+        <Stat label="Physical on-hand" value={String(adj["Physical on-hand (D365)"] ?? 0)} sub="Last physical count" />
         <Stat label="Reserved (omni)" value={String(Math.abs(adj["Less: reserved against omni orders"] ?? 0))} sub="Committed to online orders" />
         <Stat label="Defective" value={String(Math.abs(adj["Less: flagged defective"] ?? 0))} sub="Flagged, not sellable" />
         <Stat label="Staged outward" value={String(Math.abs(adj["Less: staged for outward"] ?? 0))} sub="In an outward batch" />
@@ -106,26 +128,29 @@ export default function Truth() {
           </Table>
         </Card>
 
-        {/* Source systems */}
+        {/* Movement log */}
         <Card>
-          <SectionTitle title="Source systems" right={<Chip>{lineage.entries.length} systems</Chip>} />
+          <SectionTitle title="Movements — today" right={<Chip>ledger</Chip>} />
           <Table>
             <thead>
-              <tr><Th>System</Th><Th align="right">Figure</Th><Th align="right">As of</Th></tr>
+              <tr><Th>Time</Th><Th>Movement</Th><Th align="right">Units</Th><Th align="right">Balance</Th></tr>
             </thead>
             <tbody>
-              {lineage.entries.map((e) => (
-                <tr key={e.system} className={e.system === "Arvind One" ? "bg-[color:var(--brand-soft)]" : ""}>
-                  <Td className={`text-sm ${e.system === "Arvind One" ? "font-semibold text-ink" : "text-ink2"}`}>{e.system}</Td>
-                  <Td align="right" className={`num text-sm ${e.system === "Arvind One" ? "font-semibold text-ink" : "text-ink2"}`}>{e.value}</Td>
-                  <Td align="right" className="text-2xs text-muted whitespace-nowrap">{e.asOf}</Td>
+              {movements.map((m) => (
+                <tr key={m.at + m.label}>
+                  <Td className="num text-2xs text-muted whitespace-nowrap">{m.at}</Td>
+                  <Td className="text-xs text-ink2">{m.label}</Td>
+                  <Td align="right" className="num text-xs font-semibold" style={{ color: m.units < 0 ? "var(--status-critical)" : "var(--success-text)" }}>
+                    {m.units > 0 ? "+" : ""}{m.units}
+                  </Td>
+                  <Td align="right" className="num text-xs text-ink">{m.balance}</Td>
                 </tr>
               ))}
             </tbody>
           </Table>
           <div className="mt-3 text-2xs text-muted">
             Sellable = on-hand − reserved − defective − staged outward. Definition {metric.version} ·{" "}
-            <button className="underline" onClick={() => app.go("governance")}>registry</button>
+            <button className="underline" onClick={() => app.go("governance")}>registry</button> · summarised financials post to SAP Finance at day close
           </div>
         </Card>
       </div>

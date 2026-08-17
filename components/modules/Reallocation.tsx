@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Reallocation — a ranked, conserved, explainable re-cut of units already
 // bought, using the freshest store signals, that writes allocation
-// instructions back to D365.
+// instructions to each store's task list.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useMemo, useState } from "react";
@@ -213,7 +213,7 @@ export default function Reallocation() {
       });
     }
     setAcceptedKey(key);
-    app.toastNow(`${movers.length} allocation instructions written back to D365`, "good");
+    app.toastNow(`${movers.length} allocation instructions pushed to store task lists`, "good");
   }
 
   return (
@@ -506,7 +506,7 @@ export default function Reallocation() {
           </div>
           {accepted && (
             <div className="text-2xs text-muted mt-2 text-right">
-              Written back to D365 as allocation tasks, due in 2 days, visible to each store on its own task list.
+              Created as allocation tasks, due in 2 days, visible to each store on its own task list.
             </div>
           )}
         </Card>

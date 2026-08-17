@@ -67,7 +67,7 @@ export default function Crm() {
     setContacted((x) => [...x, c.phone]);
     app.dispatch({
       type: "audit",
-      entry: { at: NOW, actor: app.actorName, action: `Loyalty outreach sent to ${c.name} (${c.reason})`, object: c.phone, system: "Capillary" },
+      entry: { at: NOW, actor: app.actorName, action: `Loyalty outreach sent to ${c.name} (${c.reason})`, object: c.phone, system: "Arvind One" },
     });
     app.toastNow(`Offer sent to ${c.name} on WhatsApp`, "good");
   }

@@ -53,6 +53,13 @@ export interface ExecutionEvent {
 
 export type SourceSystem =
   | "SAP"
+  | "SAP Finance"
+  | "POS"
+  | "Inventory ledger"
+  | "Replenishment engine"
+  | "Loyalty"
+  | "Omni"
+  | "Commercial"
   | "D365"
   | "D365 POS"
   | "Vector"

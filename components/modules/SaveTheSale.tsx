@@ -2,7 +2,7 @@
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Save the Sale — inter-store transfer raised at the till, checked by a policy
-// engine, written back to D365.
+// engine, posted straight to the inventory ledger.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useMemo, useState } from "react";
@@ -432,7 +432,7 @@ export default function SaveTheSale() {
         open={confirm}
         onClose={() => setConfirm(false)}
         title="Confirm the transfer"
-        sub="Writes back to D365 and raises the pickup advice."
+        sub="Posts to the inventory ledger and raises the pickup advice."
         footer={
           <>
             <button className="btn" onClick={() => setConfirm(false)}>

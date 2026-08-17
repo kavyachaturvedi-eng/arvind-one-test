@@ -419,7 +419,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ];
     if (result.outcome === "auto_approved") {
       events.push({ at: NOW + 2000, actor: "Arvind One", label: "Pick task created at the donor store; receipt task created here", system: "Arvind One" });
-      events.push({ at: NOW + 3000, actor: "Arvind One", label: "Transfer document written back to D365; pickup advice raised with the carrier", system: "Arvind One" });
+      events.push({ at: NOW + 3000, actor: "Arvind One", label: "Transfer posted to the inventory ledger; pickup advice raised with the carrier", system: "Arvind One" });
     }
 
     const request: ISTRequest = {
