@@ -70,7 +70,15 @@ export default function StoreDay() {
   const store = storeById(app.storeId);
 
   const hq = useMemo(() => buildHq(app.storeId), [app.storeId]);
-  const trainings = useMemo(() => buildTrainings(app.storeId), [app.storeId]);
+  const seededTrainings = useMemo(() => buildTrainings(app.storeId), [app.storeId]);
+  // Modules published by Planning land here instantly, on top of the seeded ones.
+  const trainings = useMemo<Training[]>(
+    () => [
+      ...app.trainings.map((t) => ({ id: t.id, title: t.title, who: t.audience, mins: t.mins, duenDays: t.dueDays, progress: 0 })),
+      ...seededTrainings,
+    ],
+    [app.trainings, seededTrainings]
+  );
   const [hqDone, setHqDone] = useState<string[]>([]);
   const [choresDone, setChoresDone] = useState<string[]>(["C-1", "C-2", "C-3"]);
   const [briefed, setBriefed] = useState(false);

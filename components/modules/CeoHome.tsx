@@ -4,6 +4,7 @@
 // a decision. Everything drills into Performance or Live Execution.
 
 import React, { useMemo } from "react";
+import { rng } from "@/lib/seed";
 import { brandRollups, enterprise, estateExecution, regionRollups } from "@/lib/engine";
 import { useApp } from "@/lib/state";
 import { Card, Chip, SectionTitle, Stat, StatusDot, Table, Td, Th, inr, pct } from "@/components/ui";
@@ -122,6 +123,11 @@ export default function CeoHome() {
           </Card>
 
           <Card>
+            <SectionTitle title="Customers" />
+            <CustomerKpis />
+          </Card>
+
+          <Card>
             <SectionTitle title="Execution now" right={<Chip tone="good">Live</Chip>} />
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-lg border border-line p-2.5">
@@ -141,6 +147,24 @@ export default function CeoHome() {
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Estate-level CRM KPIs — the loyalty engine's own numbers, rolled up.
+function CustomerKpis() {
+  const r = rng(424242);
+  const members = 118_000 + Math.floor(r() * 24_000);
+  const capture = 0.66 + r() * 0.14;
+  const repeat = 0.27 + r() * 0.1;
+  const liability = members * (150 + r() * 120);
+  return (
+    <div className="space-y-2 text-xs">
+      <div className="flex justify-between"><span className="text-muted">Members</span><span className="num font-semibold text-ink">{members.toLocaleString("en-IN")}</span></div>
+      <div className="flex justify-between"><span className="text-muted">Capture rate today</span><span className="num font-semibold" style={{ color: capture >= 0.75 ? "var(--success-text)" : "#7a5600" }}>{pct(capture)}</span></div>
+      <div className="flex justify-between"><span className="text-muted">Repeat share, MTD</span><span className="num font-semibold text-ink">{pct(repeat)}</span></div>
+      <div className="flex justify-between"><span className="text-muted">Points liability</span><span className="num font-semibold text-ink">{inr(liability, { compact: true })}</span></div>
+      <div className="flex justify-between"><span className="text-muted">Member ATV vs walk-in</span><span className="num font-semibold text-ink">1.4×</span></div>
     </div>
   );
 }

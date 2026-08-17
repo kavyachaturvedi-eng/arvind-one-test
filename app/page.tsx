@@ -26,6 +26,7 @@ import Crm from "@/components/modules/Crm";
 import Pos from "@/components/modules/Pos";
 import Reports from "@/components/modules/Reports";
 import CeoHome from "@/components/modules/CeoHome";
+import Trainings from "@/components/modules/Trainings";
 
 function Router() {
   const { module } = useApp();
@@ -74,6 +75,8 @@ function Router() {
       return <Reports />;
     case "exec":
       return <CeoHome />;
+    case "trainings":
+      return <Trainings />;
     default:
       return <Home />;
   }

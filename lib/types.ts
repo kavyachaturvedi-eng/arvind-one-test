@@ -13,6 +13,16 @@
 // Retail Planning and the CEO watch that execution and act on what it surfaces.
 export type RoleId = "store" | "staff" | "planner" | "leadership";
 
+/** A training module pushed by Planning to every store's Tasks & Chores. */
+export interface TrainingItem {
+  id: string;
+  title: string;
+  audience: string;
+  mins: number;
+  dueDays: number;
+  createdBy: string;
+}
+
 export type RoleMode = "execute" | "observe";
 
 export interface Role {

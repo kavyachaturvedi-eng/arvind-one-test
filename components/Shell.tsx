@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ROLES, STORES } from "@/lib/seed";
 import { useApp, type ModuleId } from "@/lib/state";
 import { Freshness, Toast } from "./ui";
@@ -68,7 +68,7 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    key: "stock", label: "Stock Control", glyph: "▤", roles: ["store"], section: "Insights",
+    key: "stock", label: "Stock Control", glyph: "▤", roles: ["store"], section: "Operations",
     children: [
       { id: "sizeset", label: "Size & Stock" },
       { id: "replenish", label: "Replenishment" },
@@ -76,7 +76,7 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    key: "money", label: "Money", glyph: "₹", roles: ["store"], section: "Insights",
+    key: "money", label: "Money", glyph: "₹", roles: ["store"], section: "Operations",
     children: [{ id: "cash", label: "Cash & Close" }],
   },
 
@@ -95,12 +95,14 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "allocate", label: "Reallocation" },
       { id: "moves", label: "Strategic Moves" },
       { id: "catchment", label: "Catchment" },
+      { id: "trainings", label: "Trainings" },
     ],
   },
   {
     key: "pdata", label: "Data", glyph: "◎", roles: ["planner"], section: "Planning",
     children: [
       { id: "truth", label: "Stock Position" },
+      { id: "reports", label: "Reports" },
       { id: "governance", label: "Metric Registry" },
       { id: "ask", label: "Ask One" },
     ],
@@ -138,7 +140,7 @@ const SECTION_ORDER = ["Operations", "Insights", "Planning", "Admin"];
 export function Shell({ children }: { children: React.ReactNode }) {
   const app = useApp();
   const [navOpen, setNavOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const role = ROLES.find((r) => r.id === app.role)!;
 
   const groups = useMemo(() => NAV_GROUPS.filter((g) => g.roles.includes(app.role)), [app.role]);
@@ -148,6 +150,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
   );
 
   const isActive = (c: NavChild) => app.module === c.id && (c.focus === undefined || app.focus === c.focus || (app.focus === null && c.focus === "outreach"));
+
+  // Keep the group of the active module open (sticky) so navigating elsewhere
+  // doesn't collapse the section you were just using.
+  useEffect(() => {
+    const g = groups.find((gr) => gr.children.some((c) => app.module === c.id));
+    if (g) setExpanded((c) => (c[g.key] ? c : { ...c, [g.key]: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app.module, app.focus, app.role]);
 
   return (
     <div className="min-h-screen flex flex-col bg-plane">
@@ -179,7 +189,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             className="chip shrink-0"
             style={{ background: "var(--brand-soft)", borderColor: "transparent", color: "var(--brand)" }}
           >
-            {role.person} · {role.label}
+            {role.label}
           </span>
           {app.role === "store" || app.role === "staff" ? (
             <StorePicker />
@@ -205,12 +215,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 <div className="label px-2 mb-1.5">{section}</div>
                 <div className="space-y-1">
                   {sectionGroups.map((g) => {
-                    const open = !collapsed[g.key];
                     const groupActive = g.children.some(isActive);
+                    const open = expanded[g.key] ?? groupActive;
                     return (
                       <div key={g.key}>
                         <button
-                          onClick={() => setCollapsed((c) => ({ ...c, [g.key]: !c[g.key] }))}
+                          data-group={g.key}
+                          aria-expanded={open}
+                          onClick={() => setExpanded((c) => ({ ...c, [g.key]: !open }))}
                           className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center gap-2.5 transition-colors ${
                             groupActive ? "text-ink font-semibold" : "text-ink2 hover:bg-[color:var(--plane)]"
                           }`}
@@ -299,20 +311,20 @@ function RoleSwitcher() {
       {/* Store, with its two sub-logins */}
       <div className={`flex items-center gap-0.5 rounded-lg px-1 py-0.5 ${storeSide ? "bg-[color:var(--brand-soft)]" : ""}`}>
         <span className={`text-2xs font-semibold px-1 ${storeSide ? "text-[color:var(--brand)]" : "text-muted"}`}>Store</span>
-        <button data-role="store" onClick={() => app.setRole("store")} title="Rohit Sharma — Store Manager" className={pill(app.role === "store")}>
+        <button data-role="store" onClick={() => app.setRole("store")} title="Store Manager — insights and operations" className={pill(app.role === "store")}>
           Manager
         </button>
-        <button data-role="staff" onClick={() => app.setRole("staff")} title="Sana Qureshi — Floor & Till" className={pill(app.role === "staff")}>
+        <button data-role="staff" onClick={() => app.setRole("staff")} title="Store Staff — floor and till operations" className={pill(app.role === "staff")}>
           Staff
         </button>
       </div>
 
       <span className="w-px h-5 bg-[color:var(--line)]" />
 
-      <button data-role="planner" onClick={() => app.setRole("planner")} title="Praveen Kumar — Retail Planning" className={pill(app.role === "planner")}>
+      <button data-role="planner" onClick={() => app.setRole("planner")} title="Retail Planning" className={pill(app.role === "planner")}>
         Planning
       </button>
-      <button data-role="leadership" onClick={() => app.setRole("leadership")} title="Satyen — CEO" className={pill(app.role === "leadership")}>
+      <button data-role="leadership" onClick={() => app.setRole("leadership")} title="Leadership view" className={pill(app.role === "leadership")}>
         Admin
       </button>
     </div>

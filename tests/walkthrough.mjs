@@ -19,7 +19,7 @@ const ROLES = [
 const MODULES_BY_ROLE = {
   store: ["pos", "storeday", "savesale", "omni", "grn", "outward", "crm", "tickets", "home", "sizeset", "replenish", "cash", "truth", "reports", "ask"],
   staff: ["pos", "storeday", "savesale", "omni", "grn", "outward", "crm", "tickets"],
-  planner: ["live", "performance", "tickets", "allocate", "moves", "catchment", "truth", "governance", "ask"],
+  planner: ["live", "performance", "tickets", "allocate", "moves", "catchment", "trainings", "truth", "reports", "governance", "ask"],
   leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "ask"],
 };
 
@@ -36,6 +36,18 @@ const fail = (m) => {
 };
 
 const IGNORE = [/favicon/i, /Download the React DevTools/i, /webpack-hmr/i];
+
+// Nav groups are collapsed by default — expand them all so module links exist.
+async function expandNav(page) {
+  // The collapsed-header list re-indexes after every click, so open them one
+  // at a time until none are left.
+  for (let pass = 0; pass < 12; pass++) {
+    const closed = page.locator('nav [data-group][aria-expanded="false"]');
+    if ((await closed.count()) === 0) break;
+    await closed.first().click().catch(() => {});
+    await page.waitForTimeout(60);
+  }
+}
 
 (async () => {
   // The sandbox ships a pinned Chromium build; point Playwright at it rather
@@ -67,6 +79,7 @@ const IGNORE = [/favicon/i, /Download the React DevTools/i, /webpack-hmr/i];
     console.log(`\n[Role] ${role}`);
     await page.locator(`[data-role="${roleId}"]`).first().click();
     await page.waitForTimeout(220);
+    await expandNav(page);
 
     for (const mod of MODULES_BY_ROLE[roleId]) {
       const link = page.locator(`nav [data-module="${mod}"]`).first();
@@ -96,6 +109,7 @@ const IGNORE = [/favicon/i, /Download the React DevTools/i, /webpack-hmr/i];
   console.log(`\n[Flow] Save the Sale`);
   await page.locator('[data-role="store"]').first().click();
   await page.waitForTimeout(200);
+  await expandNav(page);
   await page.locator('nav [data-module="savesale"]').first().click();
   await page.waitForTimeout(300);
 
@@ -241,6 +255,7 @@ const IGNORE = [/favicon/i, /Download the React DevTools/i, /webpack-hmr/i];
   for (const [roleId, role] of ROLES) {
     await page.locator(`[data-role="${roleId}"]`).first().click();
     await page.waitForTimeout(300);
+    await expandNav(page);
     const landing = roleId === "store" ? "home" : roleId === "staff" ? "pos" : roleId === "planner" ? "live" : "exec";
     await page.locator(`nav [data-module="${landing}"]`).first().click();
     await page.waitForTimeout(450);

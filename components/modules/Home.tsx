@@ -45,7 +45,7 @@ export default function Home() {
       {/* Greeting */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold text-ink tracking-tight">Good morning, {role.person.split(" ")[0]}</h1>
+          <h1 className="text-2xl font-semibold text-ink tracking-tight">Good morning</h1>
           <p className="text-sm text-ink2 mt-1.5 max-w-2xl leading-relaxed">
             Today&apos;s decisions, ranked by what they are worth.
           </p>

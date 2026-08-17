@@ -4,7 +4,7 @@
 
 import React, { useMemo, useState } from "react";
 import { rng, storeById } from "@/lib/seed";
-import { sizeSetExceptions, topSellers, vitalsFor } from "@/lib/engine";
+import { allVitals, brandRollups, enterprise, regionRollups, sizeSetExceptions, topSellers, vitalsFor } from "@/lib/engine";
 import { useApp } from "@/lib/state";
 import { Card, Chip, SectionTitle, Swatch, Table, Tabs, Td, Th, inr, pct } from "@/components/ui";
 
@@ -13,6 +13,85 @@ const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h =
 type ReportId = "dsr" | "stock" | "sizeset" | "staff";
 
 export default function Reports() {
+  const app = useApp();
+  if (app.role === "planner" || app.role === "leadership") return <EstateReports />;
+  return <StoreReports />;
+}
+
+// ── Estate reports — the planning/admin view ─────────────────────────────────
+
+function EstateReports() {
+  const app = useApp();
+  const e = useMemo(() => enterprise(), []);
+  const brands = useMemo(() => brandRollups(), []);
+  const regions = useMemo(() => regionRollups(), []);
+  const vitals = useMemo(() => allVitals(), []);
+  const laggards = useMemo(() => [...vitals].sort((a, b) => a.achievement - b.achievement).slice(0, 5), [vitals]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-xl font-semibold text-ink">Reports</h1>
+          <p className="text-sm text-ink2 mt-1">Estate level · generated from live numbers.</p>
+        </div>
+        <button className="btn-primary !py-1.5 !text-xs" onClick={() => app.toastNow("Estate pack sent to leadership", "good")}>Send pack</button>
+      </div>
+
+      <Card>
+        <SectionTitle title="Estate DSR" />
+        <Table>
+          <tbody>
+            <tr><Td className="text-xs text-muted">MTD sales</Td><Td align="right" className="num font-semibold text-ink">{inr(e.mtdSales, { compact: true })}</Td><Td className="text-xs text-muted">MTD target</Td><Td align="right" className="num">{inr(e.mtdTarget, { compact: true })}</Td></tr>
+            <tr><Td className="text-xs text-muted">Achievement</Td><Td align="right" className="num font-semibold" style={{ color: e.mtdSales >= e.mtdTarget ? "var(--success-text)" : "var(--status-critical)" }}>{pct(e.mtdSales / Math.max(1, e.mtdTarget))}</Td><Td className="text-xs text-muted">Full-price sell-through</Td><Td align="right" className="num">{pct(e.sellThrough)}</Td></tr>
+            <tr><Td className="text-xs text-muted">Markdown exposure</Td><Td align="right" className="num" style={{ color: "var(--status-critical)" }}>{inr(e.markdownExposure, { compact: true })}</Td><Td className="text-xs text-muted">Value at risk this week</Td><Td align="right" className="num" style={{ color: "var(--status-critical)" }}>{inr(e.valueAtRisk, { compact: true })}</Td></tr>
+            <tr><Td className="text-xs text-muted">Fill rate</Td><Td align="right" className="num">{pct(e.fillRate)}</Td><Td className="text-xs text-muted">Broken size sets</Td><Td align="right" className="num">{e.brokenStyles}</Td></tr>
+          </tbody>
+        </Table>
+      </Card>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Card>
+          <SectionTitle title="By brand" />
+          <Table>
+            <thead><tr><Th>Brand</Th><Th align="right">Sell-through</Th><Th align="right">Markdown exposure</Th><Th align="right">Fill</Th></tr></thead>
+            <tbody>
+              {brands.map((b) => (
+                <tr key={b.brand}>
+                  <Td className="text-sm text-ink">{b.brand}</Td>
+                  <Td align="right" className="num text-xs">{pct(b.sellThrough)}</Td>
+                  <Td align="right" className="num text-xs">{inr(b.markdownExposure, { compact: true })}</Td>
+                  <Td align="right" className="num text-xs">{pct(b.fillRate)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
+        <Card>
+          <SectionTitle title="Bottom five stores — achievement" />
+          <Table>
+            <thead><tr><Th>Store</Th><Th align="right">Achievement</Th><Th align="right">Fill</Th><Th align="right">Size-set health</Th></tr></thead>
+            <tbody>
+              {laggards.map((v) => (
+                <tr key={v.store.id}>
+                  <Td className="text-sm text-ink">{v.store.name}</Td>
+                  <Td align="right" className="num text-xs" style={{ color: "var(--status-critical)" }}>{pct(v.achievement)}</Td>
+                  <Td align="right" className="num text-xs">{pct(v.fillRate)}</Td>
+                  <Td align="right" className="num text-xs">{pct(v.sizeSetScore)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+          <div className="mt-2 text-2xs text-muted">By region: {regions.map((r) => `${r.region} ${pct(r.sellThrough)}`).join(" · ")}</div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ── Store reports — the manager's pack ───────────────────────────────────────
+
+function StoreReports() {
   const app = useApp();
   const store = storeById(app.storeId);
   const v = vitalsFor(app.storeId);

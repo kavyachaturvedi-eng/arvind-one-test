@@ -447,7 +447,7 @@ function TicketModal({
         {needsApproval && !canApprove && (
           <Callout tone="warn" title="Approval needed above your threshold">
             The quote of {inr(t.quoteValue ?? 0)} is above this store&apos;s {inr(t.approvalThreshold)} threshold, so it has
-            gone to Retail Planning for approval.
+            gone to Planning for approval.
           </Callout>
         )}
 

@@ -118,7 +118,7 @@ export default function AskOne() {
         </div>
 
         <div className="mt-3">
-          <div className="label mb-1.5">Starters for {app.role === "store" || app.role === "staff" ? "the store" : app.role === "planner" ? "retail planning" : "the CEO"}</div>
+          <div className="label mb-1.5">Starters for {app.role === "store" || app.role === "staff" ? "the store" : app.role === "planner" ? "planning" : "admin"}</div>
           <div className="flex flex-wrap gap-1.5">
             {roleStarters.map((q) => (
               <button key={q} onClick={() => ask(q)} className="chip text-ink2 bg-[color:var(--plane)] hover:bg-[color:var(--brand-soft)]">

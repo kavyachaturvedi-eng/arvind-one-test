@@ -4,9 +4,9 @@
 // work today's outreach list. The nav's sub-items deep-link to each.
 
 import React, { useEffect, useMemo, useState } from "react";
-import { NOW, rng, storeById } from "@/lib/seed";
+import { NOW, STYLES, rng, storeById } from "@/lib/seed";
 import { useApp } from "@/lib/state";
-import { BarChart, Card, Chip, Empty, SectionTitle, Stat, StatusDot, Table, Tabs, Td, Th, inr, pct } from "@/components/ui";
+import { BarChart, Card, Chip, Empty, Modal, SectionTitle, Stat, StatusDot, Table, Tabs, Td, Th, inr, pct } from "@/components/ui";
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
 
@@ -55,6 +55,7 @@ export default function Crm() {
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [added, setAdded] = useState(0);
+  const [profile, setProfile] = useState<Customer | null>(null);
 
   // The nav's sub-items (Enrol member / Send offers) deep-link into a tab.
   useEffect(() => {
@@ -121,6 +122,26 @@ export default function Crm() {
         <Stat label="To contact today" value={String(customers.length - contacted.length)} tone={customers.length - contacted.length > 0 ? "warn" : "good"} sub="Birthdays, lapsing, expiring points" />
       </div>
 
+      {/* RFM segments — one-tap campaign to a whole segment */}
+      <Card>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="label">Segments</span>
+          {SEGMENTS.map((sg) => (
+            <span key={sg.name} className="inline-flex items-center gap-2 rounded-lg border border-line px-2.5 py-1.5">
+              <StatusDot tone={sg.tone} />
+              <span className="text-xs text-ink">{sg.name}</span>
+              <span className="text-2xs text-muted num">{Math.round((members + added) * sg.share).toLocaleString("en-IN")}</span>
+              <button
+                className="btn !py-0.5 !px-1.5 !text-2xs"
+                onClick={() => app.toastNow(`Campaign queued to ${sg.name} — ${Math.round((members + added) * sg.share).toLocaleString("en-IN")} members on WhatsApp`, "good")}
+              >
+                Campaign
+              </button>
+            </span>
+          ))}
+        </div>
+      </Card>
+
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
           {tab === "outreach" ? (
@@ -139,8 +160,10 @@ export default function Crm() {
                     return (
                       <tr key={c.phone}>
                         <Td>
-                          <div className="text-sm text-ink">{c.name}</div>
-                          <div className="text-2xs text-muted num">{c.phone} · <Chip tone={c.tier === "Platinum" ? "brand" : "neutral"}>{c.tier}</Chip></div>
+                          <button className="text-left" onClick={() => setProfile(c)}>
+                            <div className="text-sm text-ink underline decoration-dotted underline-offset-2">{c.name}</div>
+                            <div className="text-2xs text-muted num">{c.phone} · <Chip tone={c.tier === "Platinum" ? "brand" : "neutral"}>{c.tier}</Chip></div>
+                          </button>
                         </Td>
                         <Td className="text-xs text-ink2">{c.reason}</Td>
                         <Td align="right" className="num text-xs">{inr(c.spend12m, { compact: true })}</Td>
@@ -197,6 +220,76 @@ export default function Crm() {
           </div>
         </Card>
       </div>
+
+      {profile && <Customer360 c={profile} onClose={() => setProfile(null)} onOffer={() => { contact(profile); setProfile(null); }} />}
     </div>
+  );
+}
+
+const SEGMENTS: { name: string; share: number; tone: "good" | "warn" | "critical" | "neutral" }[] = [
+  { name: "Champions", share: 0.08, tone: "good" },
+  { name: "Loyal", share: 0.22, tone: "good" },
+  { name: "At risk", share: 0.14, tone: "critical" },
+  { name: "New", share: 0.11, tone: "neutral" },
+];
+
+// ── Customer 360 — one profile: history, sizes, value ────────────────────────
+
+function Customer360({ c, onClose, onOffer }: { c: Customer; onClose: () => void; onOffer: () => void }) {
+  const r = rng(hash("c360" + c.phone));
+  const historyCount = 3 + Math.floor(r() * 3);
+  const history = Array.from({ length: historyCount }, (_, i) => {
+    const style = STYLES[Math.floor(r() * STYLES.length)];
+    return {
+      when: `${1 + Math.floor(r() * 11)} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"][Math.floor(r() * 7)]}`,
+      style: style.name,
+      size: style.sizes[Math.floor(r() * style.sizes.length)],
+      value: style.mrp,
+      key: `${i}`,
+    };
+  });
+  const favSize = history[0]?.size ?? "M";
+  const favCat = STYLES[Math.floor(r() * STYLES.length)].category;
+
+  return (
+    <Modal open onClose={onClose} title={c.name} sub={`${c.phone} · ${c.tier} · member`} footer={
+      <>
+        <button className="btn" onClick={onClose}>Close</button>
+        <button className="btn-primary" onClick={onOffer}>Send offer now</button>
+      </>
+    }>
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+          <div className="rounded-lg border border-line p-2.5"><div className="text-lg font-semibold num text-ink">{inr(c.spend12m, { compact: true })}</div><div className="text-2xs text-muted">12-m spend</div></div>
+          <div className="rounded-lg border border-line p-2.5"><div className="text-lg font-semibold num text-ink">{c.visits12m}</div><div className="text-2xs text-muted">visits</div></div>
+          <div className="rounded-lg border border-line p-2.5"><div className="text-lg font-semibold num text-ink">{c.points.toLocaleString("en-IN")}</div><div className="text-2xs text-muted">points</div></div>
+          <div className="rounded-lg border border-line p-2.5"><div className="text-lg font-semibold num text-ink">{c.lastVisitDays}d</div><div className="text-2xs text-muted">since last visit</div></div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          <span className="label">Prefers</span>
+          <Chip>size {favSize}</Chip>
+          <Chip>{favCat}</Chip>
+          <Chip tone={c.reason === "Lapsing — 90+ days" ? "critical" : "brand"}>{c.reason}</Chip>
+        </div>
+
+        <div>
+          <div className="label mb-1.5">Purchase history</div>
+          <Table>
+            <thead><tr><Th>When</Th><Th>Item</Th><Th>Size</Th><Th align="right">Value</Th></tr></thead>
+            <tbody>
+              {history.map((h) => (
+                <tr key={h.key}>
+                  <Td className="text-2xs text-muted num whitespace-nowrap">{h.when}</Td>
+                  <Td className="text-xs text-ink">{h.style}</Td>
+                  <Td className="text-xs text-ink2">{h.size}</Td>
+                  <Td align="right" className="num text-xs">{inr(h.value)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </div>
+      </div>
+    </Modal>
   );
 }

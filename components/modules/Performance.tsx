@@ -51,6 +51,9 @@ type SortKey = "achievement" | "sellThrough" | "fillRate" | "conversion" | "atv"
 
 export default function Performance() {
   const app = useApp();
+  // Admin gets the short version: KPIs, the causal chain, and the rollups —
+  // no model sliders, no store league.
+  const admin = app.role === "leadership";
   const e = useMemo(() => enterprise(), []);
   const vitals = useMemo(() => allVitals(), []);
   const brands = useMemo(() => brandRollups(), []);
@@ -233,6 +236,7 @@ export default function Performance() {
         </p>
       </Card>
 
+      {!admin && (
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         {/* ── Bridge ── */}
         <Card>
@@ -333,6 +337,7 @@ export default function Performance() {
           </div>
         </Card>
       </div>
+      )}
 
       {/* ── Brand / category / region ── */}
       <Card>
@@ -441,6 +446,7 @@ export default function Performance() {
       </Card>
 
       {/* ── Store league ── */}
+      {!admin && (
       <Card>
         <SectionTitle
           title="Store league"
@@ -502,6 +508,7 @@ export default function Performance() {
           Showing {league.length} of {vitals.length} stores. Clicking a row scopes the whole app to that store and opens its day.
         </p>
       </Card>
+      )}
     </div>
   );
 }

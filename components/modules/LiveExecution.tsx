@@ -15,7 +15,9 @@ export default function LiveExecution() {
   const app = useApp();
   const e = estateExecution();
   const statuses = useMemo(() => allExecutionStatus(), []);
-  const [filter, setFilter] = useState<"all" | "attention" | "behind">("all");
+  // Admin sees the short version: only stores needing a look, no approval queue.
+  const admin = app.role === "leadership";
+  const [filter, setFilter] = useState<"all" | "attention" | "behind">(admin ? "attention" : "all");
 
   const shown = statuses
     .filter((s) => (filter === "all" ? true : filter === "behind" ? s.health === "behind" : s.health !== "on_track"))
@@ -57,9 +59,9 @@ export default function LiveExecution() {
         />
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-5">
+      <div className={admin ? "" : "grid lg:grid-cols-3 gap-5"}>
         {/* Store grid */}
-        <div className="lg:col-span-2">
+        <div className={admin ? "" : "lg:col-span-2"}>
           <Card>
             <SectionTitle
               title="Every store, right now"
@@ -76,7 +78,7 @@ export default function LiveExecution() {
                 />
               }
             />
-            <div className="grid sm:grid-cols-2 gap-2.5">
+            <div className={`grid sm:grid-cols-2 ${admin ? "xl:grid-cols-3" : ""} gap-2.5`}>
               {shown.map((s) => (
                 <StoreCard key={s.store.id} s={s} onOpen={() => { app.setRole("store"); app.setStore(s.store.id); app.go("home"); }} />
               ))}
@@ -85,10 +87,12 @@ export default function LiveExecution() {
           </Card>
         </div>
 
-        {/* Action queue */}
-        <div>
-          <ActionQueue />
-        </div>
+        {/* Action queue — planning only; admin reads, planning decides */}
+        {!admin && (
+          <div>
+            <ActionQueue />
+          </div>
+        )}
       </div>
 
     </div>

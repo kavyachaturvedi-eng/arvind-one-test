@@ -21,6 +21,7 @@ import {
 import { classifyCancellation, evaluateIstPolicy, splitOutward, type IstPolicyInput } from "./rules";
 import type {
   AuditEntry,
+  TrainingItem,
   CashException,
   ISTRequest,
   ISTStatus,
@@ -55,6 +56,7 @@ export type ModuleId =
   | "pos"
   | "reports"
   | "exec"
+  | "trainings"
 ;
 
 interface AppState {
@@ -68,6 +70,7 @@ interface AppState {
   omni: OmniOrder[];
   outward: OutwardBatch[];
   tasks: Task[];
+  trainings: TrainingItem[];
   cash: CashException[];
   audit: AuditEntry[];
   toast: { id: number; message: string; tone: "good" | "warn" | "info" } | null;
@@ -87,6 +90,7 @@ type Action =
   | { type: "outward:update"; id: string; patch: Partial<OutwardBatch>; label?: string; actor?: string }
   | { type: "task:update"; id: string; patch: Partial<Task> }
   | { type: "task:create"; task: Task }
+  | { type: "training:create"; training: TrainingItem }
   | { type: "cash:update"; id: string; patch: Partial<CashException> }
   | { type: "audit"; entry: AuditEntry }
   | { type: "toast"; message: string; tone?: "good" | "warn" | "info" }
@@ -212,9 +216,10 @@ const initial: AppState = {
   omni: SEED_OMNI,
   outward: SEED_OUTWARD,
   tasks: initialTasks(),
+  trainings: [],
   cash: CASH_EXCEPTIONS,
   audit: [
-    { at: NOW - 64 * 60_000, actor: "SAP", action: "Price change published", object: "11 styles", system: "SAP" },
+    { at: NOW - 64 * 60_000, actor: "Commercial", action: "Price revision published", object: "11 styles", system: "Arvind One" },
     { at: NOW - 63 * 60_000, actor: "Arvind One", action: "Created reprint job TK-8803", object: "41 units", system: "Arvind One" },
     { at: NOW - 22 * 60_000, actor: "Arvind One", action: "Raised size-set exception", object: "TH-POL-4000 · size L", system: "Arvind One" },
   ],
@@ -331,6 +336,16 @@ function reducer(state: AppState, action: Action): AppState {
     case "task:create":
       return { ...state, tasks: [action.task, ...state.tasks] };
 
+    case "training:create":
+      return {
+        ...state,
+        trainings: [action.training, ...state.trainings],
+        audit: [
+          { at: NOW, actor: action.training.createdBy, action: `Training published: ${action.training.title}`, object: action.training.audience, system: "Arvind One" },
+          ...state.audit,
+        ],
+      };
+
     case "cash:update":
       return { ...state, cash: state.cash.map((c) => (c.id === action.id ? { ...c, ...action.patch } : c)) };
 
@@ -392,13 +407,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const actorName = useMemo(() => {
     switch (state.role) {
       case "store":
-        return "Rohit Sharma";
+        return "Store Manager";
       case "staff":
-        return "Sana Qureshi";
+        return "Store Staff";
       case "planner":
-        return "Praveen Kumar";
+        return "Planning";
       case "leadership":
-        return "Satyen";
+        return "Admin";
     }
   }, [state.role]);
 
