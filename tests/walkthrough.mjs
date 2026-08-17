@@ -35,7 +35,7 @@ const fail = (m) => {
   console.log(`  ✗ ${m}`);
 };
 
-const IGNORE = [/favicon/i, /Download the React DevTools/i, /webpack-hmr/i];
+const IGNORE = [/favicon/i, /Download the React DevTools/i, /webpack-hmr/i, /fonts\.googleapis/i, /fonts\.gstatic/i];
 
 // Nav groups are collapsed by default — expand them all so module links exist.
 async function expandNav(page) {

@@ -135,7 +135,7 @@ export default function CeoHome() {
                 <div className="text-2xs text-muted mt-0.5">on track</div>
               </div>
               <div className="rounded-lg border border-line p-2.5">
-                <div className="text-xl font-semibold num" style={{ color: "#7a5600" }}>{exec.attention}</div>
+                <div className="text-xl font-semibold num" style={{ color: "#9A6700" }}>{exec.attention}</div>
                 <div className="text-2xs text-muted mt-0.5">watch</div>
               </div>
               <div className="rounded-lg border border-line p-2.5">
@@ -161,7 +161,7 @@ function CustomerKpis() {
   return (
     <div className="space-y-2 text-xs">
       <div className="flex justify-between"><span className="text-muted">Members</span><span className="num font-semibold text-ink">{members.toLocaleString("en-IN")}</span></div>
-      <div className="flex justify-between"><span className="text-muted">Capture rate today</span><span className="num font-semibold" style={{ color: capture >= 0.75 ? "var(--success-text)" : "#7a5600" }}>{pct(capture)}</span></div>
+      <div className="flex justify-between"><span className="text-muted">Capture rate today</span><span className="num font-semibold" style={{ color: capture >= 0.75 ? "var(--success-text)" : "#9A6700" }}>{pct(capture)}</span></div>
       <div className="flex justify-between"><span className="text-muted">Repeat share, MTD</span><span className="num font-semibold text-ink">{pct(repeat)}</span></div>
       <div className="flex justify-between"><span className="text-muted">Points liability</span><span className="num font-semibold text-ink">{inr(liability, { compact: true })}</span></div>
       <div className="flex justify-between"><span className="text-muted">Member ATV vs walk-in</span><span className="num font-semibold text-ink">1.4×</span></div>

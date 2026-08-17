@@ -111,8 +111,7 @@ export default function Home() {
           <button
             key={q.id}
             onClick={() => app.go(q.id)}
-            className="rounded-xl p-3.5 text-center transition-all hover:shadow-pop hover:-translate-y-0.5"
-            style={{ background: "var(--brand)", color: "#fff" }}
+            className="cta-tile p-3.5 text-center"
           >
             <div className="text-2xl mb-1">{q.glyph}</div>
             <div className="text-xs font-semibold">{q.label}</div>
@@ -259,7 +258,7 @@ function ActionRow({
     <div className="rounded-lg border border-line p-3 flex items-start gap-3">
       <div
         className="w-6 h-6 rounded-full grid place-items-center text-2xs font-bold shrink-0 mt-0.5"
-        style={{ background: tone === "critical" ? "#fbe9e9" : "#fdf3dc", color: tone === "critical" ? "#8f1f1f" : "#7a5600" }}
+        style={{ background: tone === "critical" ? "var(--crit-soft)" : "var(--warn-soft)", color: tone === "critical" ? "#C0392B" : "#9A6700" }}
       >
         {index}
       </div>

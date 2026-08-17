@@ -1,65 +1,58 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   The DevX Doctrine — visual tokens.
+   Editorial restraint, one accent, typography does the work.
+   ───────────────────────────────────────────────────────────────────────────── */
+
 :root {
   color-scheme: light;
 
-  /* Surfaces & ink */
-  --surface-1: #fcfcfb;
-  --surface-2: #ffffff;
-  --plane: #f4f4f1;
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #898781;
-  --line: rgba(11, 11, 11, 0.10);
-  --grid: #e1e0d9;
-  --baseline: #c3c2b7;
+  /* Ink & paper */
+  --surface-1: #FAFAF8;          /* paper-2 */
+  --surface-2: #FFFFFF;          /* paper   */
+  --plane: #F4F4F1;              /* paper-3 */
+  --text-primary: #0A0A0A;       /* ink     */
+  --text-secondary: #1A1A1A;     /* ink-2   */
+  --text-muted: #5C6066;         /* muted   */
+  --line: #E5E5E5;               /* rule    */
+  --grid: #F0F0F0;               /* rule-2  */
+  --baseline: #8A8F96;           /* muted-2 */
 
-  /* Brand */
-  --brand: #0d366b;
-  --brand-soft: #e8eef7;
+  /* The single accent */
+  --brand: #1E6FFF;
+  --brand-soft: #E8F0FF;
 
-  /* Categorical series — validated order, never cycled */
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --series-4: #eda100;
-  --series-5: #e87ba4;
-  --series-6: #008300;
-  --series-7: #4a3aa7;
-  --series-8: #e34948;
+  /* Status — functional semantics, kept muted (a doctrine bend for an ops app) */
+  --status-good: #0A7C53;
+  --status-warning: #9A6700;
+  --status-serious: #B4552D;
+  --status-critical: #C0392B;
+  --success-text: #0A7C53;
 
-  /* Status — reserved, never used as a series colour */
-  --status-good: #0ca30c;
-  --status-warning: #fab219;
-  --status-serious: #ec835a;
-  --status-critical: #d03b3b;
-  --success-text: #006300;
-}
+  /* Soft status fills — derived from paper, never loud */
+  --ok-soft: #EBF2EE;
+  --warn-soft: #F5EEDD;
+  --serious-soft: #F6EBE4;
+  --crit-soft: #F8EBE9;
 
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --surface-1: #1a1a19;
-  --surface-2: #222221;
-  --plane: #0d0d0d;
-  --text-primary: #ffffff;
-  --text-secondary: #c3c2b7;
-  --text-muted: #898781;
-  --line: rgba(255, 255, 255, 0.12);
-  --grid: #2c2c2a;
-  --baseline: #383835;
-  --brand: #9fc0ee;
-  --brand-soft: #1d2c40;
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --series-4: #c98500;
-  --series-5: #d55181;
-  --series-6: #008300;
-  --series-7: #9085e9;
-  --series-8: #e66767;
-  --success-text: #0ca30c;
+  /* Chart series — accent first, then editorial neutrals */
+  --series-1: #1E6FFF;
+  --series-2: #0A0A0A;
+  --series-3: #0A7C53;
+  --series-4: #9A6700;
+  --series-5: #5C6066;
+  --series-6: #B4552D;
+  --series-7: #8A8F96;
+  --series-8: #C0392B;
+
+  --f-display: "Inter Tight", -apple-system, BlinkMacSystemFont, sans-serif;
+  --f-serif: "Source Serif 4", Georgia, serif;
+  --f-mono: "JetBrains Mono", "SFMono-Regular", monospace;
 }
 
 * {
@@ -72,43 +65,95 @@ body {
   margin: 0;
   background: var(--plane);
   color: var(--text-primary);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-family: var(--f-display);
+  font-feature-settings: "ss01", "cv11", "tnum";
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button {
   font: inherit;
 }
 
+/* Headlines — confident, tight, never shouting */
+h1 {
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+h2,
+h3 {
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+/* The doctrine's most recognizable device: an accent italic-serif word */
+.serif-accent {
+  font-family: var(--f-serif);
+  font-style: italic;
+  font-weight: 400;
+  color: var(--brand);
+}
+
+/* Sharp corners everywhere. The document look, not the app look.
+   Dots, pulses and pills keep their circles. */
+[class*="rounded"] {
+  border-radius: 0 !important;
+}
+.rounded-full,
+[class*="rounded-full"] {
+  border-radius: 999px !important;
+}
+
 @layer components {
   .card {
-    @apply rounded-xl2 bg-raised border border-line shadow-card;
+    @apply bg-raised border border-line;
   }
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium border border-line;
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 border border-line;
+    font-family: var(--f-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    font-weight: 500;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium
            border border-line bg-raised text-ink transition-colors
-           hover:bg-[color:var(--brand-soft)] disabled:opacity-40 disabled:cursor-not-allowed;
+           hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]
+           disabled:opacity-40 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold
-           bg-[color:var(--brand)] text-white border border-transparent transition-opacity
-           hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 text-sm font-medium
+           bg-[color:var(--text-primary)] text-white border border-transparent transition-colors
+           hover:bg-[color:var(--brand)] disabled:opacity-40 disabled:cursor-not-allowed;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-2.5 py-1.5 text-sm
-           text-ink2 hover:bg-[color:var(--plane)] transition-colors;
+    @apply inline-flex items-center justify-center gap-2 px-2.5 py-1.5 text-sm
+           text-ink2 hover:text-[color:var(--brand)] transition-colors;
   }
   .label {
-    @apply text-2xs uppercase tracking-[0.09em] text-muted font-semibold;
+    font-family: var(--f-mono);
+    font-size: 10px;
+    line-height: 14px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 500;
   }
   .num {
     font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  .cta-tile {
+    background: var(--text-primary);
+    color: #fff;
+    transition: background-color 150ms ease;
+  }
+  .cta-tile:hover {
+    background: var(--brand);
   }
   .kbd {
-    @apply rounded border border-line px-1.5 py-0.5 text-2xs font-semibold text-ink2 bg-[color:var(--plane)];
+    @apply border border-line px-1.5 py-0.5 text-2xs font-semibold text-ink2 bg-[color:var(--plane)];
+    font-family: var(--f-mono);
   }
 }
 
@@ -118,8 +163,7 @@ button {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--baseline);
-  border-radius: 8px;
+  background: var(--line);
   border: 3px solid transparent;
   background-clip: content-box;
 }
@@ -142,9 +186,9 @@ button {
 }
 
 @keyframes pulseRing {
-  0% { box-shadow: 0 0 0 0 rgba(208, 59, 59, 0.35); }
-  70% { box-shadow: 0 0 0 8px rgba(208, 59, 59, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(208, 59, 59, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(30, 111, 255, 0.3); }
+  70% { box-shadow: 0 0 0 8px rgba(30, 111, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(30, 111, 255, 0); }
 }
 .pulse-crit {
   animation: pulseRing 2.4s ease-out infinite;

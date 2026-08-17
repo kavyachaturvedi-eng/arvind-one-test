@@ -48,10 +48,10 @@ export function Chip({
 }) {
   const map: Record<string, string> = {
     neutral: "text-ink2 bg-[color:var(--plane)]",
-    good: "text-[color:var(--success-text)] bg-[#e9f6e9] border-[#bfe3bf]",
-    warn: "text-[#7a5600] bg-[#fdf3dc] border-[#f2dfa8]",
-    serious: "text-[#8a3f18] bg-[#fdece3] border-[#f5cdb8]",
-    critical: "text-[#8f1f1f] bg-[#fbe9e9] border-[#f0c2c2]",
+    good: "text-[color:var(--success-text)] bg-[var(--ok-soft)] border-[#CBDDD3]",
+    warn: "text-[#9A6700] bg-[var(--warn-soft)] border-[#E5D9BC]",
+    serious: "text-[#B4552D] bg-[var(--serious-soft)] border-[#E9D0C2]",
+    critical: "text-[#C0392B] bg-[var(--crit-soft)] border-[#E8CBC6]",
     brand: "text-[color:var(--brand)] bg-[color:var(--brand-soft)] border-transparent",
   };
   return (
@@ -478,9 +478,9 @@ export function Callout({
 }) {
   const map: Record<string, string> = {
     brand: "bg-[color:var(--brand-soft)] border-[color:var(--brand)]",
-    good: "bg-[#e9f6e9] border-[#0ca30c]",
-    warn: "bg-[#fdf3dc] border-[#fab219]",
-    critical: "bg-[#fbe9e9] border-[#d03b3b]",
+    good: "bg-[var(--ok-soft)] border-[#0ca30c]",
+    warn: "bg-[var(--warn-soft)] border-[#fab219]",
+    critical: "bg-[var(--crit-soft)] border-[#d03b3b]",
   };
   return (
     <div className={`rounded-lg border-l-[3px] px-3.5 py-3 ${map[tone]}`}>
@@ -510,7 +510,7 @@ export function BeforeAfter({
         <div className="text-sm font-semibold text-ink num">{before}</div>
       </div>
       <div className="text-muted text-sm">→</div>
-      <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--status-good)", background: "#e9f6e9" }}>
+      <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--status-good)", background: "var(--ok-soft)" }}>
         <div className="label mb-0.5" style={{ color: "var(--success-text)" }}>
           {afterLabel}
         </div>
@@ -545,9 +545,9 @@ export function SizeGrid({
         const out = u <= 0;
         const tone = out && isCore ? "critical" : out ? "neutral" : u <= 2 ? "warn" : "good";
         const bg =
-          tone === "critical" ? "#fbe9e9" : tone === "warn" ? "#fdf3dc" : tone === "good" ? "#e9f6e9" : "var(--plane)";
+          tone === "critical" ? "var(--crit-soft)" : tone === "warn" ? "var(--warn-soft)" : tone === "good" ? "var(--ok-soft)" : "var(--plane)";
         const bd =
-          tone === "critical" ? "var(--status-critical)" : tone === "warn" ? "var(--status-warning)" : tone === "good" ? "#bfe3bf" : "var(--line)";
+          tone === "critical" ? "var(--status-critical)" : tone === "warn" ? "var(--status-warning)" : tone === "good" ? "#CBDDD3" : "var(--line)";
         const Comp: React.ElementType = onPick ? "button" : "div";
         return (
           <Comp
@@ -638,7 +638,7 @@ export function Toast({ message, tone, onDone }: { message: string; tone: "good"
       if (timer.current) clearTimeout(timer.current);
     };
   }, [message, onDone]);
-  const bg = tone === "good" ? "var(--success-text)" : tone === "warn" ? "#7a5600" : "var(--brand)";
+  const bg = tone === "good" ? "var(--success-text)" : tone === "warn" ? "#9A6700" : "var(--brand)";
   return (
     <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] rise no-print">
       <div className="rounded-lg px-4 py-2.5 text-sm text-white shadow-pop max-w-md" style={{ background: bg }}>

@@ -363,7 +363,7 @@ export default function Reallocation() {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.store.id} className={r.lowFill ? "bg-[#fdf3dc]" : undefined}>
+                  <tr key={r.store.id} className={r.lowFill ? "bg-[var(--warn-soft)]" : undefined}>
                     <Td>
                       <div className="text-sm text-ink font-medium">{r.store.name}</div>
                       <div className="text-2xs text-muted mt-0.5 flex items-center gap-1.5 flex-wrap">

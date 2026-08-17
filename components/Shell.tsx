@@ -169,12 +169,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </button>
 
           <div className="flex items-center gap-2.5 shrink-0">
-            <div className="w-9 h-9 rounded-xl grid place-items-center text-white font-bold" style={{ background: "var(--brand)" }}>
+            <div className="w-9 h-9 grid place-items-center text-white font-medium" style={{ background: "var(--text-primary)" }}>
               1
             </div>
             <div className="leading-tight hidden sm:block">
-              <div className="text-[15px] font-semibold text-ink">Arvind One</div>
-              <div className="text-2xs text-muted">Retail operations</div>
+              <div className="text-[15px] font-medium text-ink tracking-tight">Arvind <span className="serif-accent">One</span></div>
+              <div className="label">Retail operations</div>
             </div>
           </div>
 

@@ -29,17 +29,21 @@ const config: Config = {
         s8: "var(--series-8)",
       },
       fontFamily: {
-        sans: ["system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "sans-serif"],
+        sans: ["Inter Tight", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        serif: ["Source Serif 4", "Georgia", "serif"],
+        mono: ["JetBrains Mono", "SFMono-Regular", "monospace"],
       },
       fontSize: {
         "2xs": ["10px", { lineHeight: "14px" }],
       },
       borderRadius: {
-        xl2: "14px",
+        xl2: "0px",
       },
       boxShadow: {
-        card: "0 1px 2px rgba(11,11,11,0.04), 0 1px 1px rgba(11,11,11,0.03)",
-        pop: "0 12px 32px rgba(11,11,11,0.14), 0 2px 8px rgba(11,11,11,0.08)",
+        // Doctrine: depth comes from rules and spacing, not elevation.
+        card: "none",
+        // The single approved shadow — the page shadow, used only on modals.
+        pop: "0 1px 0 rgba(0,0,0,.04), 0 30px 60px -30px rgba(0,0,0,.18)",
       },
     },
   },
