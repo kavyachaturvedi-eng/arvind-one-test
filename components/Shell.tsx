@@ -3,68 +3,151 @@
 import React, { useMemo, useState } from "react";
 import { ROLES, STORES } from "@/lib/seed";
 import { useApp, type ModuleId } from "@/lib/state";
-import { Chip, Freshness, StatusDot, Toast } from "./ui";
+import { Freshness, Toast } from "./ui";
 import type { RoleId } from "@/lib/types";
 
-interface NavItem {
+// ── Information architecture ─────────────────────────────────────────────────
+// Two levels: a SECTION (Operations / Insights / Planning / Admin) contains
+// function GROUPS (Movement, Customers, …), each holding selectable items.
+
+interface NavChild {
   id: ModuleId;
+  label: string;
+  /** Optional sub-view within the module (e.g. crm → enrol). */
+  focus?: string;
+}
+
+interface NavGroup {
+  key: string;
   label: string;
   glyph: string;
   roles: RoleId[];
-  group: string;
-  hint: string;
+  section: string;
+  children: NavChild[];
 }
 
-export const NAV: NavItem[] = [
-  // Store — OPERATIONS: the doing side. Staff live here; the manager can too.
-  { id: "pos", label: "Billing", glyph: "▣", roles: ["staff", "store"], group: "Operations", hint: "New bills, tenders, returns" },
-  { id: "storeday", label: "Tasks & Chores", glyph: "☰", roles: ["staff", "store"], group: "Operations", hint: "HQ tasks, training, floor chores" },
-  { id: "savesale", label: "Save the Sale", glyph: "⇄", roles: ["staff", "store"], group: "Operations", hint: "Transfer a size in from another store" },
-  { id: "omni", label: "Online Orders", glyph: "◱", roles: ["staff", "store"], group: "Operations", hint: "Find, pack, hand over" },
-  { id: "grn", label: "Inward & GRN", glyph: "▼", roles: ["staff", "store"], group: "Operations", hint: "Receive against advice notes" },
-  { id: "outward", label: "Outward & RTV", glyph: "⇥", roles: ["staff", "store"], group: "Operations", hint: "Pullbacks and returns to vendor" },
-  { id: "crm", label: "Customers", glyph: "◐", roles: ["staff", "store"], group: "Operations", hint: "Capture members, send offers" },
-  { id: "tickets", label: "Raise an Issue", glyph: "⚑", roles: ["staff", "store"], group: "Operations", hint: "Scan the asset and raise it" },
+const NAV_GROUPS: NavGroup[] = [
+  // ── Operations — staff and manager ──
+  {
+    key: "sell", label: "Sell", glyph: "▣", roles: ["staff", "store"], section: "Operations",
+    children: [
+      { id: "pos", label: "Billing" },
+      { id: "omni", label: "Online Orders" },
+    ],
+  },
+  {
+    key: "movement", label: "Movement", glyph: "⇅", roles: ["staff", "store"], section: "Operations",
+    children: [
+      { id: "grn", label: "Inward (GRN)" },
+      { id: "outward", label: "Outward & RTV" },
+      { id: "savesale", label: "Save the Sale" },
+    ],
+  },
+  {
+    key: "customers", label: "Customers", glyph: "◐", roles: ["staff", "store"], section: "Operations",
+    children: [
+      { id: "crm", label: "Enrol member", focus: "enrol" },
+      { id: "crm", label: "Send offers", focus: "outreach" },
+    ],
+  },
+  {
+    key: "work", label: "My Work", glyph: "☰", roles: ["staff", "store"], section: "Operations",
+    children: [
+      { id: "storeday", label: "Tasks & Chores" },
+      { id: "tickets", label: "Raise an Issue" },
+    ],
+  },
 
-  // Store — INSIGHTS: the manager's side. Staff do not see these.
-  { id: "home", label: "Overview", glyph: "◧", roles: ["store"], group: "Insights", hint: "KPIs and today's decisions" },
-  { id: "sizeset", label: "Size & Stock", glyph: "▤", roles: ["store"], group: "Insights", hint: "Broken sizes and what to do about each" },
-  { id: "replenish", label: "Replenishment", glyph: "↺", roles: ["store"], group: "Insights", hint: "Warehouse pulls and store transfers" },
-  { id: "cash", label: "Cash & Close", glyph: "₹", roles: ["store"], group: "Insights", hint: "Tender reconciliation and day close" },
-  { id: "truth", label: "Stock Position", glyph: "◎", roles: ["store"], group: "Insights", hint: "What is in the system, per style" },
-  { id: "reports", label: "Reports", glyph: "▥", roles: ["store"], group: "Insights", hint: "DSR, stock, size sets, staff" },
-  { id: "ask", label: "Ask One", glyph: "✳", roles: ["store"], group: "Insights", hint: "Ask in plain language" },
+  // ── Insights — manager only ──
+  {
+    key: "performance", label: "Performance", glyph: "◧", roles: ["store"], section: "Insights",
+    children: [
+      { id: "home", label: "Overview" },
+      { id: "reports", label: "Reports" },
+      { id: "ask", label: "Ask One" },
+    ],
+  },
+  {
+    key: "stock", label: "Stock Control", glyph: "▤", roles: ["store"], section: "Insights",
+    children: [
+      { id: "sizeset", label: "Size & Stock" },
+      { id: "replenish", label: "Replenishment" },
+      { id: "truth", label: "Stock Position" },
+    ],
+  },
+  {
+    key: "money", label: "Money", glyph: "₹", roles: ["store"], section: "Insights",
+    children: [{ id: "cash", label: "Cash & Close" }],
+  },
 
-  // Hierarchy — live view
-  { id: "exec", label: "Executive View", glyph: "◆", roles: ["leadership"], group: "Live", hint: "The business on one screen" },
-  { id: "live", label: "Live Execution", glyph: "◉", roles: ["planner", "leadership"], group: "Live", hint: "Every store, right now" },
-  { id: "performance", label: "Performance", glyph: "◫", roles: ["planner", "leadership"], group: "Live", hint: "Sell-through, markdown, fill rate" },
+  // ── Planning ──
+  {
+    key: "plive", label: "Live", glyph: "◉", roles: ["planner"], section: "Planning",
+    children: [
+      { id: "live", label: "Live Execution" },
+      { id: "performance", label: "Performance" },
+    ],
+  },
+  {
+    key: "pact", label: "Act", glyph: "⇉", roles: ["planner"], section: "Planning",
+    children: [
+      { id: "tickets", label: "Issues & SLA" },
+      { id: "allocate", label: "Reallocation" },
+      { id: "moves", label: "Strategic Moves" },
+      { id: "catchment", label: "Catchment" },
+    ],
+  },
+  {
+    key: "pdata", label: "Data", glyph: "◎", roles: ["planner"], section: "Planning",
+    children: [
+      { id: "truth", label: "Stock Position" },
+      { id: "governance", label: "Metric Registry" },
+      { id: "ask", label: "Ask One" },
+    ],
+  },
 
-  // Hierarchy — planning actions
-  { id: "tickets", label: "Issues & SLA", glyph: "⚑", roles: ["planner"], group: "Planning", hint: "Approvals and SLA across stores" },
-  { id: "allocate", label: "Reallocation", glyph: "⤨", roles: ["planner", "leadership"], group: "Planning", hint: "Re-cut a drop against store signal" },
-  { id: "moves", label: "Strategic Moves", glyph: "⇉", roles: ["planner", "leadership"], group: "Planning", hint: "Network transfers ranked by value" },
-  { id: "catchment", label: "Catchment", glyph: "◈", roles: ["planner", "leadership"], group: "Planning", hint: "Customer concentration by pin code" },
-
-  // Hierarchy — data
-  { id: "truth", label: "Stock Position", glyph: "◎", roles: ["planner", "leadership"], group: "Data", hint: "What is in the system, per style" },
-  { id: "governance", label: "Metric Registry", glyph: "§", roles: ["planner", "leadership"], group: "Data", hint: "One definition per metric" },
-  { id: "ask", label: "Ask One", glyph: "✳", roles: ["planner", "leadership"], group: "Data", hint: "Ask in plain language" },
+  // ── Admin ──
+  {
+    key: "aover", label: "Overview", glyph: "◆", roles: ["leadership"], section: "Admin",
+    children: [
+      { id: "exec", label: "Executive View" },
+      { id: "live", label: "Live Execution" },
+      { id: "performance", label: "Performance" },
+    ],
+  },
+  {
+    key: "aact", label: "Act", glyph: "⇉", roles: ["leadership"], section: "Admin",
+    children: [
+      { id: "allocate", label: "Reallocation" },
+      { id: "moves", label: "Strategic Moves" },
+      { id: "catchment", label: "Catchment" },
+    ],
+  },
+  {
+    key: "adata", label: "Data", glyph: "◎", roles: ["leadership"], section: "Admin",
+    children: [
+      { id: "truth", label: "Stock Position" },
+      { id: "governance", label: "Metric Registry" },
+      { id: "ask", label: "Ask One" },
+    ],
+  },
 ];
 
-const GROUP_ORDER = ["Operations", "Insights", "Live", "Planning", "Data"];
+const SECTION_ORDER = ["Operations", "Insights", "Planning", "Admin"];
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const app = useApp();
   const [navOpen, setNavOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const role = ROLES.find((r) => r.id === app.role)!;
 
-  const visible = useMemo(() => NAV.filter((n) => n.roles.includes(app.role)), [app.role]);
-  const groups = useMemo(() => {
-    const g: Record<string, NavItem[]> = {};
-    for (const item of visible) (g[item.group] ??= []).push(item);
-    return GROUP_ORDER.filter((k) => g[k]).map((k) => [k, g[k]] as const);
-  }, [visible]);
+  const groups = useMemo(() => NAV_GROUPS.filter((g) => g.roles.includes(app.role)), [app.role]);
+  const sections = useMemo(
+    () => SECTION_ORDER.filter((s) => groups.some((g) => g.section === s)).map((s) => [s, groups.filter((g) => g.section === s)] as const),
+    [groups]
+  );
+
+  const isActive = (c: NavChild) => app.module === c.id && (c.focus === undefined || app.focus === c.focus || (app.focus === null && c.focus === "outreach"));
 
   return (
     <div className="min-h-screen flex flex-col bg-plane">
@@ -113,38 +196,61 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1 min-h-0">
         {/* ── Sidebar ───────────────────────────────────────────────────── */}
         <nav
-          className={`${navOpen ? "block" : "hidden"} lg:block w-full lg:w-[236px] shrink-0 border-r border-line bg-raised overflow-y-auto no-print
+          className={`${navOpen ? "block" : "hidden"} lg:block w-full lg:w-[240px] shrink-0 border-r border-line bg-raised overflow-y-auto no-print
              fixed lg:static inset-y-16 left-0 z-30 lg:z-auto`}
         >
           <div className="p-2.5 space-y-4">
-            {groups.map(([group, items]) => (
-              <div key={group}>
-                <div className="label px-2 mb-1.5">{group}</div>
-                <ul className="space-y-0.5">
-                  {items.map((item) => {
-                    const active = app.module === item.id;
+            {sections.map(([section, sectionGroups]) => (
+              <div key={section}>
+                <div className="label px-2 mb-1.5">{section}</div>
+                <div className="space-y-1">
+                  {sectionGroups.map((g) => {
+                    const open = !collapsed[g.key];
+                    const groupActive = g.children.some(isActive);
                     return (
-                      <li key={item.id}>
+                      <div key={g.key}>
                         <button
-                          data-module={item.id}
-                          onClick={() => {
-                            app.go(item.id);
-                            setNavOpen(false);
-                          }}
-                          title={item.hint}
-                          className={`w-full text-left px-2.5 py-2 rounded-lg flex items-center gap-2.5 transition-colors ${
-                            active ? "bg-[color:var(--brand-soft)] text-[color:var(--brand)] font-semibold" : "text-ink2 hover:bg-[color:var(--plane)]"
+                          onClick={() => setCollapsed((c) => ({ ...c, [g.key]: !c[g.key] }))}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center gap-2.5 transition-colors ${
+                            groupActive ? "text-ink font-semibold" : "text-ink2 hover:bg-[color:var(--plane)]"
                           }`}
                         >
-                          <span className="w-4 text-center opacity-70">{item.glyph}</span>
-                          <span className="text-[13px]">{item.label}</span>
-                          {item.id === "sizeset" && app.role === "store" && <ExceptionBadge />}
-                          {item.id === "live" && <LiveDot />}
+                          <span className="w-4 text-center opacity-70">{g.glyph}</span>
+                          <span className="text-[13px] flex-1">{g.label}</span>
+                          {g.key === "stock" && app.role === "store" && <ExceptionBadge />}
+                          {(g.key === "plive" || g.key === "aover") && <LiveDot />}
+                          <span className="text-2xs text-muted">{open ? "▾" : "▸"}</span>
                         </button>
-                      </li>
+                        {open && (
+                          <ul className="mt-0.5 space-y-0.5">
+                            {g.children.map((c) => {
+                              const active = isActive(c);
+                              return (
+                                <li key={`${c.id}-${c.focus ?? ""}`}>
+                                  <button
+                                    data-module={c.id}
+                                    data-focus={c.focus}
+                                    onClick={() => {
+                                      app.go(c.id, c.focus);
+                                      setNavOpen(false);
+                                    }}
+                                    className={`w-full text-left pl-9 pr-2.5 py-1.5 rounded-lg flex items-center gap-2 transition-colors text-[13px] ${
+                                      active
+                                        ? "bg-[color:var(--brand-soft)] text-[color:var(--brand)] font-semibold"
+                                        : "text-ink2 hover:bg-[color:var(--plane)]"
+                                    }`}
+                                  >
+                                    {c.label}
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
                     );
                   })}
-                </ul>
+                </div>
               </div>
             ))}
 
@@ -167,42 +273,48 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
 function ExceptionBadge() {
   return (
-    <span className="ml-auto text-2xs font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background: "var(--status-critical)" }}>
+    <span className="text-2xs font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background: "var(--status-critical)" }}>
       !
     </span>
   );
 }
 
 function LiveDot() {
-  return <span className="ml-auto w-2 h-2 rounded-full pulse-crit" style={{ background: "var(--status-good)" }} aria-label="live" />;
+  return <span className="w-2 h-2 rounded-full pulse-crit" style={{ background: "var(--status-good)" }} aria-label="live" />;
 }
+
+// ── Role hierarchy: Store (Manager | Staff) · Planning · Admin ───────────────
 
 function RoleSwitcher() {
   const app = useApp();
+  const storeSide = app.role === "store" || app.role === "staff";
+
+  const pill = (active: boolean) =>
+    `px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+      active ? "bg-raised text-ink shadow-card" : "text-ink2 hover:text-ink"
+    }`;
+
   return (
-    <div className="flex items-center gap-1 p-1 rounded-xl bg-[color:var(--plane)] border border-line">
-      {ROLES.map((r) => {
-        const active = app.role === r.id;
-        return (
-          <button
-            key={r.id}
-            data-role={r.id}
-            onClick={() => app.setRole(r.id)}
-            title={`${r.person} — ${r.title}`}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap flex items-center gap-2 ${
-              active ? "bg-raised text-ink shadow-card" : "text-ink2 hover:text-ink"
-            }`}
-          >
-            <span
-              className="w-6 h-6 rounded-full grid place-items-center text-2xs font-semibold shrink-0"
-              style={{ background: active ? "var(--brand)" : "var(--baseline)", color: "#fff" }}
-            >
-              {r.initials}
-            </span>
-            <span className="hidden sm:inline">{r.label}</span>
-          </button>
-        );
-      })}
+    <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[color:var(--plane)] border border-line">
+      {/* Store, with its two sub-logins */}
+      <div className={`flex items-center gap-0.5 rounded-lg px-1 py-0.5 ${storeSide ? "bg-[color:var(--brand-soft)]" : ""}`}>
+        <span className={`text-2xs font-semibold px-1 ${storeSide ? "text-[color:var(--brand)]" : "text-muted"}`}>Store</span>
+        <button data-role="store" onClick={() => app.setRole("store")} title="Rohit Sharma — Store Manager" className={pill(app.role === "store")}>
+          Manager
+        </button>
+        <button data-role="staff" onClick={() => app.setRole("staff")} title="Sana Qureshi — Floor & Till" className={pill(app.role === "staff")}>
+          Staff
+        </button>
+      </div>
+
+      <span className="w-px h-5 bg-[color:var(--line)]" />
+
+      <button data-role="planner" onClick={() => app.setRole("planner")} title="Praveen Kumar — Retail Planning" className={pill(app.role === "planner")}>
+        Planning
+      </button>
+      <button data-role="leadership" onClick={() => app.setRole("leadership")} title="Satyen — CEO" className={pill(app.role === "leadership")}>
+        Admin
+      </button>
     </div>
   );
 }

@@ -61,6 +61,8 @@ interface AppState {
   role: RoleId;
   storeId: string;
   module: ModuleId;
+  /** Optional sub-view within a module, set by nav children (e.g. crm → "enrol"). */
+  focus: string | null;
   ist: ISTRequest[];
   tickets: Ticket[];
   omni: OmniOrder[];
@@ -75,7 +77,7 @@ interface AppState {
 type Action =
   | { type: "role"; role: RoleId }
   | { type: "store"; storeId: string }
-  | { type: "module"; module: ModuleId }
+  | { type: "module"; module: ModuleId; focus?: string | null }
   | { type: "ist:create"; request: ISTRequest }
   | { type: "ist:status"; id: string; status: ISTStatus; actor: string; label: string; by?: string; reason?: string }
   | { type: "ticket:update"; id: string; patch: Partial<Ticket>; label?: string; actor?: string }
@@ -204,6 +206,7 @@ const initial: AppState = {
   role: "store",
   storeId: STORES[0].id,
   module: "home",
+  focus: null,
   ist: [],
   tickets: SEED_TICKETS,
   omni: SEED_OMNI,
@@ -230,7 +233,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "store":
       return { ...state, storeId: action.storeId };
     case "module":
-      return { ...state, module: action.module };
+      return { ...state, module: action.module, focus: action.focus ?? null };
 
     case "ist:create":
       return {
@@ -360,7 +363,7 @@ interface Ctx extends AppState {
   dispatch: React.Dispatch<Action>;
   setRole: (r: RoleId) => void;
   setStore: (s: string) => void;
-  go: (m: ModuleId) => void;
+  go: (m: ModuleId, focus?: string) => void;
   toastNow: (m: string, tone?: "good" | "warn" | "info") => void;
   createIst: (input: CreateIstInput) => ISTRequest;
   actorName: string;
@@ -473,7 +476,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     actorName,
     setRole: (r) => dispatch({ type: "role", role: r }),
     setStore: (s) => dispatch({ type: "store", storeId: s }),
-    go: (m) => dispatch({ type: "module", module: m }),
+    go: (m, focus) => dispatch({ type: "module", module: m, focus: focus ?? null }),
     toastNow: (m, tone) => dispatch({ type: "toast", message: m, tone }),
     createIst,
   };

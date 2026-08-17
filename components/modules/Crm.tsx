@@ -1,12 +1,12 @@
 "use client";
 
-// Customers & Loyalty — capture at billing, loyalty balances, and the
-// call-list the store works today.
+// Customers — loyalty at the till. Two jobs, two tabs: enrol a member,
+// work today's outreach list. The nav's sub-items deep-link to each.
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { NOW, rng, storeById } from "@/lib/seed";
 import { useApp } from "@/lib/state";
-import { BarChart, Card, Chip, Empty, SectionTitle, Stat, StatusDot, Table, Td, Th, inr, pct } from "@/components/ui";
+import { BarChart, Card, Chip, Empty, SectionTitle, Stat, StatusDot, Table, Tabs, Td, Th, inr, pct } from "@/components/ui";
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
 
@@ -44,26 +44,23 @@ function buildCustomers(storeId: string): Customer[] {
   return out.sort((a, b) => b.spend12m - a.spend12m);
 }
 
+type TabId = "outreach" | "enrol";
+
 export default function Crm() {
   const app = useApp();
   const store = storeById(app.storeId);
   const customers = useMemo(() => buildCustomers(app.storeId), [app.storeId]);
+  const [tab, setTab] = useState<TabId>(app.focus === "enrol" ? "enrol" : "outreach");
   const [contacted, setContacted] = useState<string[]>([]);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [added, setAdded] = useState(0);
 
-  function addMember() {
-    if (!newName.trim() || newPhone.length !== 10) return;
-    setAdded((n) => n + 1);
-    app.dispatch({
-      type: "audit",
-      entry: { at: NOW, actor: app.actorName, action: `New loyalty member enrolled: ${newName.trim()}`, object: newPhone, system: "Arvind One" },
-    });
-    app.toastNow(`${newName.trim()} enrolled — welcome offer sent by SMS`, "good");
-    setNewName("");
-    setNewPhone("");
-  }
+  // The nav's sub-items (Enrol member / Send offers) deep-link into a tab.
+  useEffect(() => {
+    if (app.focus === "enrol") setTab("enrol");
+    else if (app.focus === "outreach") setTab("outreach");
+  }, [app.focus]);
 
   const r = rng(hash("crmk" + app.storeId));
   const captureRate = 0.62 + r() * 0.3;
@@ -87,11 +84,33 @@ export default function Crm() {
     app.toastNow(`Offer sent to ${c.name} on WhatsApp`, "good");
   }
 
+  function addMember() {
+    if (!newName.trim() || newPhone.length !== 10) return;
+    setAdded((n) => n + 1);
+    app.dispatch({
+      type: "audit",
+      entry: { at: NOW, actor: app.actorName, action: `New loyalty member enrolled: ${newName.trim()}`, object: newPhone, system: "Arvind One" },
+    });
+    app.toastNow(`${newName.trim()} enrolled — welcome offer sent by SMS`, "good");
+    setNewName("");
+    setNewPhone("");
+  }
+
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold text-ink">Customers &amp; Loyalty</h1>
-        <p className="text-sm text-ink2 mt-1">Capture at billing, and today&apos;s outreach list — {store.name}.</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-xl font-semibold text-ink">Customers</h1>
+          <p className="text-sm text-ink2 mt-1">{store.name}</p>
+        </div>
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          options={[
+            { id: "outreach", label: "Send offers", count: customers.length - contacted.length },
+            { id: "enrol", label: "Enrol member" },
+          ]}
+        />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -103,71 +122,78 @@ export default function Crm() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
-          <SectionTitle title="Contact today" right={<Chip tone={contacted.length === customers.length ? "good" : "warn"}>{contacted.length}/{customers.length} done</Chip>} />
-          <Table>
-            <thead>
-              <tr>
-                <Th>Customer</Th><Th>Why today</Th><Th align="right">12-m spend</Th>
-                <Th align="right">Points</Th><Th align="right">Last visit</Th><Th align="right" />
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map((c) => {
-                const done = contacted.includes(c.phone);
-                return (
-                  <tr key={c.phone}>
-                    <Td>
-                      <div className="text-sm text-ink">{c.name}</div>
-                      <div className="text-2xs text-muted num">{c.phone} · <Chip tone={c.tier === "Platinum" ? "brand" : "neutral"}>{c.tier}</Chip></div>
-                    </Td>
-                    <Td className="text-xs text-ink2">{c.reason}</Td>
-                    <Td align="right" className="num text-xs">{inr(c.spend12m, { compact: true })}</Td>
-                    <Td align="right" className="num text-xs">{c.points.toLocaleString("en-IN")}</Td>
-                    <Td align="right" className="num text-xs">{c.lastVisitDays}d ago</Td>
-                    <Td align="right">
-                      {done ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-ink2"><StatusDot tone="good" />Sent</span>
-                      ) : (
-                        <button className="btn-primary !py-1.5 !text-xs" onClick={() => contact(c)}>Send offer</button>
-                      )}
-                    </Td>
+        <div className="lg:col-span-2">
+          {tab === "outreach" ? (
+            <Card>
+              <SectionTitle title="Contact today" right={<Chip tone={contacted.length === customers.length ? "good" : "warn"}>{contacted.length}/{customers.length} done</Chip>} />
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Customer</Th><Th>Why today</Th><Th align="right">12-m spend</Th>
+                    <Th align="right">Points</Th><Th align="right">Last visit</Th><Th align="right" />
                   </tr>
-                );
-              })}
-            </tbody>
-          </Table>
-          {customers.length === 0 && <Empty title="No outreach due today" />}
-        </Card>
+                </thead>
+                <tbody>
+                  {customers.map((c) => {
+                    const done = contacted.includes(c.phone);
+                    return (
+                      <tr key={c.phone}>
+                        <Td>
+                          <div className="text-sm text-ink">{c.name}</div>
+                          <div className="text-2xs text-muted num">{c.phone} · <Chip tone={c.tier === "Platinum" ? "brand" : "neutral"}>{c.tier}</Chip></div>
+                        </Td>
+                        <Td className="text-xs text-ink2">{c.reason}</Td>
+                        <Td align="right" className="num text-xs">{inr(c.spend12m, { compact: true })}</Td>
+                        <Td align="right" className="num text-xs">{c.points.toLocaleString("en-IN")}</Td>
+                        <Td align="right" className="num text-xs">{c.lastVisitDays}d ago</Td>
+                        <Td align="right">
+                          {done ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-ink2"><StatusDot tone="good" />Sent</span>
+                          ) : (
+                            <button className="btn-primary !py-1.5 !text-xs" onClick={() => contact(c)}>Send offer</button>
+                          )}
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+              {customers.length === 0 && <Empty title="No outreach due today" />}
+            </Card>
+          ) : (
+            <Card>
+              <SectionTitle title="Enrol a member" sub="At the till, ten seconds. Welcome offer goes out by SMS." />
+              <div className="max-w-sm space-y-2.5">
+                <input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Customer name"
+                  className="w-full rounded-lg border border-line bg-raised px-3 py-2.5 text-sm"
+                />
+                <input
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value.replace(/[^\d]/g, "").slice(0, 10))}
+                  placeholder="Mobile — 10 digits"
+                  className="w-full rounded-lg border border-line bg-raised px-3 py-2.5 text-sm num"
+                />
+                <button className="btn-primary w-full" disabled={!newName.trim() || newPhone.length !== 10} onClick={addMember}>
+                  Enrol &amp; send welcome offer
+                </button>
+                {added > 0 && (
+                  <div className="text-xs text-ink2 flex items-center gap-1.5"><StatusDot tone="good" />{added} enrolled this session</div>
+                )}
+              </div>
+            </Card>
+          )}
+        </div>
 
         <Card>
-          <SectionTitle title="Enrol a member" sub="At the till, ten seconds." />
-          <div className="space-y-2">
-            <input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Customer name"
-              className="w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm"
-            />
-            <input
-              value={newPhone}
-              onChange={(e) => setNewPhone(e.target.value.replace(/[^\d]/g, "").slice(0, 10))}
-              placeholder="Mobile — 10 digits"
-              className="w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm num"
-            />
-            <button className="btn-primary w-full" disabled={!newName.trim() || newPhone.length !== 10} onClick={addMember}>
-              Enrol &amp; send welcome offer
-            </button>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-line">
-            <SectionTitle title="Member base" />
-            <BarChart data={tierMix} format={(n) => n.toLocaleString("en-IN")} />
+          <SectionTitle title="Member base" />
+          <BarChart data={tierMix} format={(n) => n.toLocaleString("en-IN")} />
           <div className="mt-4 pt-3 border-t border-line space-y-2 text-xs">
             <div className="flex justify-between"><span className="text-muted">Avg member ATV vs walk-in</span><span className="num font-semibold text-ink">1.4×</span></div>
             <div className="flex justify-between"><span className="text-muted">Redemption rate, 90 days</span><span className="num font-semibold text-ink">{pct(0.18 + r() * 0.2)}</span></div>
             <div className="flex justify-between"><span className="text-muted">Referrals this month</span><span className="num font-semibold text-ink">{3 + Math.floor(r() * 18)}</span></div>
-          </div>
           </div>
         </Card>
       </div>
