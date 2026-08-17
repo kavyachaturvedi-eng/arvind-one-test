@@ -16,17 +16,24 @@ interface NavItem {
 }
 
 export const NAV: NavItem[] = [
-  // Store
-  { id: "home", label: "Today", glyph: "◧", roles: ["store"], group: "My store", hint: "The whole day in one place" },
-  { id: "savesale", label: "Save the Sale", glyph: "⇄", roles: ["store"], group: "My store", hint: "Transfer a size in from another store" },
-  { id: "sizeset", label: "Size & Stock", glyph: "▤", roles: ["store"], group: "My store", hint: "Broken sizes and what to do about each" },
-  { id: "omni", label: "Online Orders", glyph: "◱", roles: ["store"], group: "My store", hint: "Find, pack, hand over" },
-  { id: "outward", label: "Outward & RTV", glyph: "⇥", roles: ["store"], group: "My store", hint: "Pullbacks and returns to vendor" },
-  { id: "storeday", label: "Briefing & Floor", glyph: "☰", roles: ["store"], group: "My store", hint: "Briefing, floor walk, KPIs, champs" },
-  { id: "tickets", label: "Raise an Issue", glyph: "⚑", roles: ["store"], group: "My store", hint: "Scan the asset and raise it" },
-  { id: "cash", label: "Cash & Close", glyph: "₹", roles: ["store"], group: "My store", hint: "Tender reconciliation and day close" },
+  // Store — the day
+  { id: "home", label: "Today", glyph: "◧", roles: ["store"], group: "Today", hint: "The whole day in one place" },
+  { id: "storeday", label: "Briefing & Tasks", glyph: "☰", roles: ["store"], group: "Today", hint: "HQ tasks, training, floor chores" },
+  { id: "pos", label: "Billing", glyph: "▣", roles: ["store"], group: "Today", hint: "POS, tenders, returns" },
+  { id: "crm", label: "Customers", glyph: "◐", roles: ["store"], group: "Today", hint: "Capture, loyalty, outreach" },
+  { id: "tickets", label: "Raise an Issue", glyph: "⚑", roles: ["store"], group: "Today", hint: "Scan the asset and raise it" },
+  { id: "cash", label: "Cash & Close", glyph: "₹", roles: ["store"], group: "Today", hint: "Tender reconciliation and day close" },
+
+  // Store — stock
+  { id: "savesale", label: "Save the Sale", glyph: "⇄", roles: ["store"], group: "Stock", hint: "Transfer a size in from another store" },
+  { id: "sizeset", label: "Size & Stock", glyph: "▤", roles: ["store"], group: "Stock", hint: "Broken sizes and what to do about each" },
+  { id: "replenish", label: "Replenishment", glyph: "↺", roles: ["store"], group: "Stock", hint: "Warehouse pulls and store transfers" },
+  { id: "grn", label: "Inward & GRN", glyph: "▼", roles: ["store"], group: "Stock", hint: "Receive against advice notes" },
+  { id: "omni", label: "Online Orders", glyph: "◱", roles: ["store"], group: "Stock", hint: "Find, pack, hand over" },
+  { id: "outward", label: "Outward & RTV", glyph: "⇥", roles: ["store"], group: "Stock", hint: "Pullbacks and returns to vendor" },
 
   // Hierarchy — live view
+  { id: "exec", label: "Executive View", glyph: "◆", roles: ["leadership"], group: "Live", hint: "The business on one screen" },
   { id: "live", label: "Live Execution", glyph: "◉", roles: ["planner", "leadership"], group: "Live", hint: "Every store, right now" },
   { id: "performance", label: "Performance", glyph: "◫", roles: ["planner", "leadership"], group: "Live", hint: "Sell-through, markdown, fill rate" },
 
@@ -37,12 +44,13 @@ export const NAV: NavItem[] = [
   { id: "catchment", label: "Catchment", glyph: "◈", roles: ["planner", "leadership"], group: "Planning", hint: "Customer concentration by pin code" },
 
   // Shared
-  { id: "truth", label: "Stock Position", glyph: "◎", roles: ["store", "planner", "leadership"], group: "Data", hint: "The stock figure, reconciled across systems" },
+  { id: "truth", label: "Stock Position", glyph: "◎", roles: ["store", "planner", "leadership"], group: "Data", hint: "What is in the system, per style" },
+  { id: "reports", label: "Reports", glyph: "▥", roles: ["store"], group: "Data", hint: "DSR, stock, size sets, staff" },
   { id: "governance", label: "Metric Registry", glyph: "§", roles: ["planner", "leadership"], group: "Data", hint: "One definition per metric" },
   { id: "ask", label: "Ask One", glyph: "✳", roles: ["store", "planner", "leadership"], group: "Data", hint: "Ask in plain language" },
 ];
 
-const GROUP_ORDER = ["My store", "Live", "Planning", "Data"];
+const GROUP_ORDER = ["Today", "Stock", "Live", "Planning", "Data"];
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const app = useApp();

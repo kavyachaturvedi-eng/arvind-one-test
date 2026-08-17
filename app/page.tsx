@@ -20,6 +20,12 @@ import Performance from "@/components/modules/Performance";
 import Catchment from "@/components/modules/Catchment";
 import AskOne from "@/components/modules/AskOne";
 import Governance from "@/components/modules/Governance";
+import Grn from "@/components/modules/Grn";
+import Replenishment from "@/components/modules/Replenishment";
+import Crm from "@/components/modules/Crm";
+import Pos from "@/components/modules/Pos";
+import Reports from "@/components/modules/Reports";
+import CeoHome from "@/components/modules/CeoHome";
 
 function Router() {
   const { module } = useApp();
@@ -56,6 +62,18 @@ function Router() {
       return <AskOne />;
     case "governance":
       return <Governance />;
+    case "grn":
+      return <Grn />;
+    case "replenish":
+      return <Replenishment />;
+    case "crm":
+      return <Crm />;
+    case "pos":
+      return <Pos />;
+    case "reports":
+      return <Reports />;
+    case "exec":
+      return <CeoHome />;
     default:
       return <Home />;
   }

@@ -49,6 +49,12 @@ export type ModuleId =
   | "catchment"
   | "ask"
   | "governance"
+  | "grn"
+  | "replenish"
+  | "crm"
+  | "pos"
+  | "reports"
+  | "exec"
 ;
 
 interface AppState {
@@ -343,9 +349,9 @@ function reducer(state: AppState, action: Action): AppState {
 }
 
 function defaultModule(role: RoleId): ModuleId {
-  // The store lands in its execution home; the hierarchy lands on the live view
-  // of stores executing — that is the first thing each role should see.
-  return role === "store" ? "home" : "live";
+  // Store lands on its day; planning lands on the live control tower; the CEO
+  // lands on a compact executive summary.
+  return role === "store" ? "home" : role === "planner" ? "live" : "exec";
 }
 
 // ── Context ──────────────────────────────────────────────────────────────────

@@ -6,45 +6,15 @@
 
 import React, { useMemo, useState } from "react";
 import { NOW } from "@/lib/seed";
-import {
-  allExecutionStatus,
-  estateExecution,
-  executionStatus,
-  liveFeed,
-  type ExecutionStatus,
-} from "@/lib/engine";
+import { allExecutionStatus, estateExecution, strategicMoves, type ExecutionStatus } from "@/lib/engine";
+import { slaState } from "@/lib/rules";
 import { useApp } from "@/lib/state";
-import {
-  Card,
-  Chip,
-  Empty,
-  Meter,
-  SectionTitle,
-  Stat,
-  StatusDot,
-  Tabs,
-  inr,
-  pct,
-  relTime,
-} from "@/components/ui";
-
-const CHANNEL_LABEL: Record<string, string> = {
-  briefing: "Briefing",
-  floor_walk: "Floor walk",
-  scan: "Stock scan",
-  transfer: "Transfer",
-  omni: "Online order",
-  outward: "Outward",
-  ticket: "Issue",
-  cash: "Cash",
-  replenishment: "Replenishment",
-};
+import { Card, Chip, Empty, SectionTitle, Stat, StatusDot, Tabs, inr, pct } from "@/components/ui";
 
 export default function LiveExecution() {
   const app = useApp();
   const e = estateExecution();
   const statuses = useMemo(() => allExecutionStatus(), []);
-  const feed = useMemo(() => liveFeed(30), []);
   const [filter, setFilter] = useState<"all" | "attention" | "behind">("all");
 
   const shown = statuses
@@ -115,30 +85,106 @@ export default function LiveExecution() {
           </Card>
         </div>
 
-        {/* Live feed */}
+        {/* Action queue */}
         <div>
-          <Card>
-            <SectionTitle title="Activity feed" sub="What stores are doing, newest first." right={<StatusDot tone="good" />} />
-            <ol className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
-              {feed.map((ev) => {
-                const store = statuses.find((s) => s.store.id === ev.storeId)?.store;
-                return (
-                  <li key={ev.id} className="flex items-start gap-2.5">
-                    <StatusDot tone={ev.severity === "critical" ? "critical" : ev.severity === "good" ? "good" : ev.severity === "warn" ? "warn" : "neutral"} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs text-ink leading-snug">{ev.label}</div>
-                      <div className="text-2xs text-muted mt-0.5">
-                        <span className="font-medium">{store?.name}</span> · {CHANNEL_LABEL[ev.channel]} · {relTime(ev.at, NOW)}
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          </Card>
+          <ActionQueue />
         </div>
       </div>
 
+    </div>
+  );
+}
+
+// The planner's queue: everything waiting on a decision, ranked by value.
+function ActionQueue() {
+  const app = useApp();
+  const moves = useMemo(() => strategicMoves(4), []);
+  const [acted, setActed] = useState<string[]>([]);
+
+  const istPending = app.ist.filter((r) => r.status === "pending_approval");
+  const quotePending = app.tickets.filter((t) => t.status === "awaiting_approval");
+  const breaching = app.tickets
+    .filter((t) => t.status !== "resolved" && slaState(t.raisedAt, t.slaHours, NOW).breached)
+    .slice(0, 4);
+  const openMoves = moves.filter((m) => !acted.includes(m.id));
+
+  function approveTicket(id: string) {
+    app.dispatch({ type: "ticket:update", id, patch: { status: "in_progress" } });
+    app.toastNow(`${id} approved — vendor dispatched`, "good");
+  }
+  function approveIst(id: string) {
+    app.dispatch({ type: "ist:status", id, status: "approved", actor: app.actorName, label: `Approved by ${app.actorName}`, by: app.actorName });
+    app.toastNow(`${id} approved — pick task created`, "good");
+  }
+  function approveMove(id: string) {
+    setActed((a) => [...a, id]);
+    app.toastNow(`${id} approved — transfer raised`, "good");
+  }
+
+  const total = istPending.length + quotePending.length + breaching.length + openMoves.length;
+
+  return (
+    <Card>
+      <SectionTitle title="Decide now" right={<Chip tone={total ? "warn" : "good"}>{total}</Chip>} />
+      <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+        {istPending.map((r) => (
+          <QueueRow
+            key={r.id}
+            tone="warn"
+            title={`Transfer ${r.id} — ${r.qty} unit${r.qty > 1 ? "s" : ""}, customer waiting`}
+            sub="One gated policy check"
+            cta="Approve"
+            onAct={() => approveIst(r.id)}
+          />
+        ))}
+        {quotePending.map((t) => (
+          <QueueRow
+            key={t.id}
+            tone="warn"
+            title={`${t.id} — quote ${inr(t.quoteValue ?? 0)}`}
+            sub={`${t.title} · above store threshold`}
+            cta="Approve"
+            onAct={() => approveTicket(t.id)}
+          />
+        ))}
+        {breaching.map((t) => (
+          <QueueRow
+            key={t.id}
+            tone="critical"
+            title={`${t.id} — SLA breached`}
+            sub={t.title}
+            cta="Escalate"
+            onAct={() => {
+              app.dispatch({ type: "ticket:update", id: t.id, patch: { escalationLevel: Math.min(3, (t.escalationLevel ?? 0) + 1) } });
+              app.toastNow(`${t.id} escalated`, "warn");
+            }}
+          />
+        ))}
+        {openMoves.map((m) => (
+          <QueueRow
+            key={m.id}
+            tone="neutral"
+            title={`Move ${m.units} × ${m.styleName} (${m.size})`}
+            sub={`${m.from.name} → ${m.to.name} · unlocks ${inr(m.valueUnlocked, { compact: true })}`}
+            cta="Approve"
+            onAct={() => approveMove(m.id)}
+          />
+        ))}
+        {total === 0 && <Empty title="Queue clear" body="Nothing is waiting on a decision." />}
+      </div>
+    </Card>
+  );
+}
+
+function QueueRow({ tone, title, sub, cta, onAct }: { tone: "warn" | "critical" | "neutral"; title: string; sub: string; cta: string; onAct: () => void }) {
+  return (
+    <div className="rounded-lg border border-line p-2.5 flex items-start gap-2.5">
+      <StatusDot tone={tone} />
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-medium text-ink leading-snug">{title}</div>
+        <div className="text-2xs text-muted mt-0.5 leading-snug">{sub}</div>
+      </div>
+      <button className="btn-primary !py-1 !text-2xs shrink-0" onClick={onAct}>{cta}</button>
     </div>
   );
 }

@@ -16,9 +16,9 @@ const ROLES = [
   ["leadership", "CEO"],
 ];
 const MODULES_BY_ROLE = {
-  store: ["home", "savesale", "sizeset", "omni", "outward", "storeday", "tickets", "cash", "truth", "ask"],
+  store: ["home", "storeday", "pos", "crm", "tickets", "cash", "savesale", "sizeset", "replenish", "grn", "omni", "outward", "truth", "reports", "ask"],
   planner: ["live", "performance", "tickets", "allocate", "moves", "catchment", "truth", "governance", "ask"],
-  leadership: ["live", "performance", "allocate", "moves", "catchment", "truth", "governance", "ask"],
+  leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "ask"],
 };
 
 const errors = [];
@@ -214,7 +214,7 @@ const IGNORE = [/favicon/i, /Download the React DevTools/i, /webpack-hmr/i];
     await sel.selectOption({ index: i });
     await page.waitForTimeout(200);
     const t = await page.locator("main").innerText();
-    if (/Sellable today/.test(t) && !/NaN|undefined/.test(t)) reconOk++;
+    if (/sellable now/i.test(t) && /source systems/i.test(t) && !/NaN|undefined/.test(t)) reconOk++;
   }
   if (reconOk === Math.min(optCount, 6)) pass(`reconciliation held for ${reconOk} styles`);
   else fail(`reconciliation broke on ${Math.min(optCount, 6) - reconOk} styles`);
@@ -239,7 +239,7 @@ const IGNORE = [/favicon/i, /Download the React DevTools/i, /webpack-hmr/i];
   for (const [roleId, role] of ROLES) {
     await page.locator(`[data-role="${roleId}"]`).first().click();
     await page.waitForTimeout(300);
-    const landing = roleId === "store" ? "home" : "live";
+    const landing = roleId === "store" ? "home" : roleId === "planner" ? "live" : "exec";
     await page.locator(`nav [data-module="${landing}"]`).first().click();
     await page.waitForTimeout(450);
     await page.screenshot({ path: `${SHOTS}/home-${roleId}.png`, fullPage: true });

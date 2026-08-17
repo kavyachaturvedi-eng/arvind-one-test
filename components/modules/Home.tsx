@@ -54,7 +54,7 @@ export default function Home() {
       </div>
 
       {/* Vitals */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat
           label="Month to date"
           value={inr(v.mtdSales, { compact: true })}
@@ -78,7 +78,8 @@ export default function Home() {
           }
           freshness={6}
         />
-        <Stat label="Conversion" value={pct(v.conversion, 1)} sub={`${v.bills} bills · ATV ${inr(v.atv)}`} tone={v.conversion >= 0.14 ? "good" : "warn"} />
+        <Stat label="Conversion" value={pct(v.conversion, 1)} sub={`${v.footfall.toLocaleString("en-IN")} walk-ins · ${v.bills} bills`} tone={v.conversion >= 0.14 ? "good" : "warn"} onClick={() => app.go("pos")} />
+        <Stat label="ATV · UPT" value={inr(v.atv)} sub={`${v.upt.toFixed(2)} units per bill`} onClick={() => app.go("pos")} />
         <Stat
           label="Size-set health"
           value={pct(v.sizeSetScore)}
@@ -86,6 +87,14 @@ export default function Home() {
           tone={v.sizeSetScore >= 0.9 ? "good" : v.sizeSetScore >= 0.75 ? "warn" : "critical"}
           onClick={() => app.go("sizeset")}
         />
+        <Stat
+          label="Fill rate"
+          value={pct(v.fillRate)}
+          sub={`${v.sellableUnits.toLocaleString("en-IN")} sellable vs norm ${v.store.norm.toLocaleString("en-IN")}`}
+          tone={v.fillRate >= 0.9 ? "good" : "warn"}
+          onClick={() => app.go("replenish")}
+        />
+        <Stat label="Sell-through" value={pct(v.sellThrough)} sub="Full price, season to date" tone={v.sellThrough >= 0.75 ? "good" : "warn"} onClick={() => app.go("reports")} />
         <Stat
           label="At risk this week"
           value={inr(v.valueAtRisk, { compact: true })}
@@ -96,17 +105,18 @@ export default function Home() {
         />
       </div>
 
-      {/* Quick actions — app-like tap targets */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Quick actions — the store's main CTAs, deliberately loud */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
         {QUICK.map((q) => (
           <button
             key={q.id}
             onClick={() => app.go(q.id)}
-            className="card p-4 text-center hover:shadow-pop transition-shadow"
+            className="rounded-xl p-3.5 text-center transition-all hover:shadow-pop hover:-translate-y-0.5"
+            style={{ background: "var(--brand)", color: "#fff" }}
           >
-            <div className="text-2xl mb-1.5 opacity-80">{q.glyph}</div>
-            <div className="text-xs font-semibold text-ink">{q.label}</div>
-            <div className="text-2xs text-muted mt-0.5 leading-snug">{q.sub}</div>
+            <div className="text-2xl mb-1">{q.glyph}</div>
+            <div className="text-xs font-semibold">{q.label}</div>
+            <div className="text-2xs mt-0.5 leading-snug" style={{ opacity: 0.75 }}>{q.sub}</div>
           </button>
         ))}
       </div>
@@ -216,8 +226,10 @@ export default function Home() {
 }
 
 const QUICK: { id: ModuleId; glyph: string; label: string; sub: string }[] = [
+  { id: "pos", glyph: "▣", label: "Bill", sub: "POS & returns" },
   { id: "savesale", glyph: "⇄", label: "Save a sale", sub: "Transfer a size in" },
-  { id: "sizeset", glyph: "▤", label: "Scan & stock", sub: "Sizes, inward, counts" },
+  { id: "grn", glyph: "▼", label: "Receive", sub: "Inward & GRN" },
+  { id: "replenish", glyph: "↺", label: "Replenish", sub: "Pull & transfer" },
   { id: "omni", glyph: "◱", label: "Pack orders", sub: "Online fulfilment" },
   { id: "outward", glyph: "⇥", label: "Outward", sub: "RTV & pullback" },
   { id: "tickets", glyph: "⚑", label: "Raise issue", sub: "Scan the asset" },
