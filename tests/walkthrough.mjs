@@ -17,10 +17,10 @@ const ROLES = [
   ["leadership", "CEO"],
 ];
 const MODULES_BY_ROLE = {
-  store: ["pos", "storeday", "savesale", "omni", "grn", "outward", "crm", "tickets", "home", "sizeset", "replenish", "cash", "truth", "reports", "ask"],
+  store: ["pos", "storeday", "savesale", "omni", "grn", "outward", "crm", "tickets", "home", "sizeset", "replenish", "cash", "truth", "reports", "agents", "ask"],
   staff: ["pos", "storeday", "savesale", "omni", "grn", "outward", "crm", "tickets"],
-  planner: ["live", "performance", "tickets", "allocate", "moves", "catchment", "trainings", "truth", "reports", "governance", "ask"],
-  leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "ask"],
+  planner: ["live", "performance", "tickets", "allocate", "moves", "catchment", "trainings", "truth", "reports", "governance", "agents", "ask"],
+  leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "agents", "ask"],
 };
 
 const errors = [];
@@ -73,6 +73,17 @@ async function expandNav(page) {
 
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.waitForTimeout(400);
+
+  // ── 0. Sign in — the login screen is the front door ─────────────────────
+  const signin = page.locator("[data-signin]");
+  if ((await signin.count()) > 0) {
+    await page.screenshot({ path: `${SHOTS}/login.png` });
+    await signin.click();
+    await page.waitForTimeout(400);
+    pass("signed in from the login screen");
+  } else {
+    fail("login screen did not render");
+  }
 
   // ── 1. Every module renders for every role ──────────────────────────────
   for (const [roleId, role] of ROLES) {

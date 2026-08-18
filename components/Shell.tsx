@@ -64,6 +64,12 @@ const NAV_GROUPS: NavGroup[] = [
     children: [
       { id: "home", label: "Overview" },
       { id: "reports", label: "Reports" },
+    ],
+  },
+  {
+    key: "sai", label: "AI", glyph: "✳", roles: ["store"], section: "Insights",
+    children: [
+      { id: "agents", label: "AI Agents" },
       { id: "ask", label: "Ask One" },
     ],
   },
@@ -104,6 +110,12 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "truth", label: "Stock Position" },
       { id: "reports", label: "Reports" },
       { id: "governance", label: "Metric Registry" },
+    ],
+  },
+  {
+    key: "pai", label: "AI", glyph: "✳", roles: ["planner"], section: "Planning",
+    children: [
+      { id: "agents", label: "AI Agents" },
       { id: "ask", label: "Ask One" },
     ],
   },
@@ -130,6 +142,12 @@ const NAV_GROUPS: NavGroup[] = [
     children: [
       { id: "truth", label: "Stock Position" },
       { id: "governance", label: "Metric Registry" },
+    ],
+  },
+  {
+    key: "aai", label: "AI", glyph: "✳", roles: ["leadership"], section: "Admin",
+    children: [
+      { id: "agents", label: "AI Agents" },
       { id: "ask", label: "Ask One" },
     ],
   },
@@ -181,6 +199,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="flex-1" />
 
           <RoleSwitcher />
+          <button className="btn-ghost !px-2 text-xs hidden sm:inline-flex" onClick={() => app.dispatch({ type: "logout" })} title="Sign out">
+            Sign out
+          </button>
         </div>
 
         {/* Context strip */}

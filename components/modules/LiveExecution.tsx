@@ -7,6 +7,7 @@
 import React, { useMemo, useState } from "react";
 import { NOW } from "@/lib/seed";
 import { allExecutionStatus, estateExecution, strategicMoves, type ExecutionStatus } from "@/lib/engine";
+import { agentActivity } from "@/lib/agents";
 import { slaState } from "@/lib/rules";
 import { useApp } from "@/lib/state";
 import { Card, Chip, Empty, SectionTitle, Stat, StatusDot, Tabs, inr, pct } from "@/components/ui";
@@ -58,6 +59,21 @@ export default function LiveExecution() {
           emphasis
         />
       </div>
+
+      {/* Watchtower — the agent's anomaly flags */}
+      <Card>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="serif-accent text-sm shrink-0">Ai</span>
+          <span className="label">Watchtower flags</span>
+          {agentActivity("watchtower", app.storeId).filter((x) => x.kind === "flagged").map((x) => (
+            <span key={x.label} className="inline-flex items-center gap-2 border border-line px-2.5 py-1.5 text-xs text-ink">
+              <StatusDot tone="critical" />
+              {x.label}
+            </span>
+          ))}
+          <button className="btn !py-1 !text-2xs" onClick={() => app.go("agents")}>All agents</button>
+        </div>
+      </Card>
 
       <div className={admin ? "" : "grid lg:grid-cols-3 gap-5"}>
         {/* Store grid */}

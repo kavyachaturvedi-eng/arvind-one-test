@@ -59,6 +59,24 @@ export default function CeoHome() {
         <Stat label="Fill rate" value={pct(e.fillRate)} sub="Estate vs norm" tone={e.fillRate >= 0.9 ? "good" : "warn"} />
       </div>
 
+      {/* The agent-written brief */}
+      <Card>
+        <div className="flex items-start gap-3">
+          <span className="serif-accent text-base shrink-0 mt-0.5">Ai</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="label">Morning brief · written by Watchtower · 08:00</span>
+              <button className="btn !py-0.5 !px-1.5 !text-2xs" onClick={() => app.go("agents")}>Agents</button>
+            </div>
+            <p className="text-sm text-ink2 leading-relaxed mt-1.5">
+              Estate at 94% of MTD target. Full-price sell-through 71%. Markdown exposure ₹62 L, two-thirds of it in two
+              styles — proposals are with Planning. 5 stores behind plan: 3 execution, 1 demand anomaly (UB City), 1
+              reopening after fit-out. Customer capture 78% and climbing.
+            </p>
+          </div>
+        </div>
+      </Card>
+
       {/* Decisions needed */}
       <Card>
         <SectionTitle title="Needs your attention" />

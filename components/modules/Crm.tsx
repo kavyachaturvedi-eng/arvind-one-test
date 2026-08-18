@@ -146,7 +146,7 @@ export default function Crm() {
         <div className="lg:col-span-2">
           {tab === "outreach" ? (
             <Card>
-              <SectionTitle title="Contact today" right={<Chip tone={contacted.length === customers.length ? "good" : "warn"}>{contacted.length}/{customers.length} done</Chip>} />
+              <SectionTitle title="Contact today" sub="List built and messages drafted by the Outreach Agent — review, then send." right={<Chip tone={contacted.length === customers.length ? "good" : "warn"}>{contacted.length}/{customers.length} done</Chip>} />
               <Table>
                 <thead>
                   <tr>

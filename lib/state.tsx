@@ -57,9 +57,12 @@ export type ModuleId =
   | "reports"
   | "exec"
   | "trainings"
+  | "agents"
 ;
 
 interface AppState {
+  /** Signed in? The login screen shows until a user picks who they are. */
+  authed: boolean;
   role: RoleId;
   storeId: string;
   module: ModuleId;
@@ -78,6 +81,8 @@ interface AppState {
 }
 
 type Action =
+  | { type: "login"; role: RoleId; storeId?: string }
+  | { type: "logout" }
   | { type: "role"; role: RoleId }
   | { type: "store"; storeId: string }
   | { type: "module"; module: ModuleId; focus?: string | null }
@@ -207,6 +212,7 @@ function initialTasks(): Task[] {
 }
 
 const initial: AppState = {
+  authed: false,
   role: "store",
   storeId: STORES[0].id,
   module: "home",
@@ -231,6 +237,16 @@ let toastSeq = 1;
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
+    case "login":
+      return {
+        ...state,
+        authed: true,
+        role: action.role,
+        storeId: action.storeId ?? state.storeId,
+        module: defaultModule(action.role),
+      };
+    case "logout":
+      return { ...state, authed: false };
     case "role": {
       // Leadership and planners are not scoped to a single store.
       return { ...state, role: action.role, module: defaultModule(action.role) };

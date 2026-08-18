@@ -3,6 +3,8 @@
 import React from "react";
 import { AppProvider, useApp } from "@/lib/state";
 import { Shell } from "@/components/Shell";
+import Login from "@/components/Login";
+import Copilot from "@/components/Copilot";
 
 import Home from "@/components/modules/Home";
 import LiveExecution from "@/components/modules/LiveExecution";
@@ -27,6 +29,7 @@ import Pos from "@/components/modules/Pos";
 import Reports from "@/components/modules/Reports";
 import CeoHome from "@/components/modules/CeoHome";
 import Trainings from "@/components/modules/Trainings";
+import Agents from "@/components/modules/Agents";
 
 function Router() {
   const { module } = useApp();
@@ -77,17 +80,30 @@ function Router() {
       return <CeoHome />;
     case "trainings":
       return <Trainings />;
+    case "agents":
+      return <Agents />;
     default:
       return <Home />;
   }
 }
 
-export default function Page() {
+function App() {
+  const app = useApp();
+  if (!app.authed) return <Login />;
   return (
-    <AppProvider>
+    <>
       <Shell>
         <Router />
       </Shell>
+      <Copilot />
+    </>
+  );
+}
+
+export default function Page() {
+  return (
+    <AppProvider>
+      <App />
     </AppProvider>
   );
 }

@@ -68,6 +68,16 @@ export default function Replenishment() {
         )}
       </div>
 
+      <Card>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="serif-accent text-sm shrink-0">Ai</span>
+          <span className="text-xs text-ink">
+            The Replenishment Agent raised 11 pulls inside its autonomy limit overnight. 2 above-limit moves are waiting for approval.
+          </span>
+          <button className="btn !py-1 !text-2xs" onClick={() => app.go("agents")}>Review approvals</button>
+        </div>
+      </Card>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Warehouse pulls" value={String(pulls.length)} tone={pulls.length ? "warn" : "good"} sub={`${pullUnits} units recommended`} emphasis />
         <Stat label="Store transfers" value={String(transfers.length)} sub="Warehouse empty — a peer store has it" />
