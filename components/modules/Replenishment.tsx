@@ -70,7 +70,7 @@ export default function Replenishment() {
 
       <Card>
         <div className="flex items-center gap-2.5 flex-wrap">
-          <span className="serif-accent text-sm shrink-0">Ai</span>
+          <span className="serif-accent text-sm shrink-0">Arvi</span>
           <span className="text-xs text-ink">
             The Replenishment Agent raised 11 pulls inside its autonomy limit overnight. 2 above-limit moves are waiting for approval.
           </span>

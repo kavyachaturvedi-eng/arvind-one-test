@@ -37,6 +37,14 @@ const fail = (m) => {
 
 const IGNORE = [/favicon/i, /Download the React DevTools/i, /webpack-hmr/i, /fonts\.googleapis/i, /fonts\.gstatic/i];
 
+async function exitTillIfOpen(page) {
+  const exit = page.locator("[data-exit-till]");
+  if ((await exit.count()) > 0) {
+    await exit.click().catch(() => {});
+    await page.waitForTimeout(220);
+  }
+}
+
 // Nav groups are collapsed by default — expand them all so module links exist.
 async function expandNav(page) {
   // The collapsed-header list re-indexes after every click, so open them one
@@ -90,6 +98,7 @@ async function expandNav(page) {
     console.log(`\n[Role] ${role}`);
     await page.locator(`[data-role="${roleId}"]`).first().click();
     await page.waitForTimeout(220);
+    await exitTillIfOpen(page);
     await expandNav(page);
 
     for (const mod of MODULES_BY_ROLE[roleId]) {
@@ -103,8 +112,10 @@ async function expandNav(page) {
 
       const h1 = await page.locator("main h1").first().innerText().catch(() => "");
       const bodyLen = (await page.locator("main").innerText()).length;
+      const tillOpen = (await page.locator("[data-exit-till]").count()) > 0;
 
-      if (!h1) fail(`${role} → ${mod}: no page heading rendered`);
+      if (mod === "pos" && tillOpen) pass(`${role} → ${mod} (till open)`);
+      else if (!h1) fail(`${role} → ${mod}: no page heading rendered`);
       else if (bodyLen < 400) fail(`${role} → ${mod}: page looks empty (${bodyLen} chars)`);
       else pass(`${role} → ${mod} (${bodyLen} chars)`);
 
@@ -112,6 +123,13 @@ async function expandNav(page) {
       const text = await page.locator("main").innerText();
       for (const bad of ["NaN", "undefined", "Infinity", "[object Object]"]) {
         if (text.includes(bad)) fail(`${role} → ${mod}: rendered "${bad}" in the UI`);
+      }
+
+      // The till is a full-screen takeover — leave it so the nav is usable.
+      const exit = page.locator("[data-exit-till]");
+      if ((await exit.count()) > 0) {
+        await exit.click();
+        await page.waitForTimeout(220);
       }
     }
   }
@@ -247,6 +265,29 @@ async function expandNav(page) {
   else fail(`reconciliation broke on ${Math.min(optCount, 6) - reconOk} styles`);
   await page.screenshot({ path: `${SHOTS}/onenumber.png`, fullPage: true });
 
+  // ── 6b. Command palette — ⌘K jump-to-anything ───────────────────────────
+  console.log(`\n[Flow] Command palette`);
+  await page.locator("[data-palette]").first().click();
+  await page.waitForTimeout(240);
+  const palInput = page.locator("[data-palette-input]");
+  if ((await palInput.count()) === 0) fail("command palette did not open");
+  else {
+    await palInput.fill("replen");
+    await page.waitForTimeout(200);
+    const items = await page.locator("[data-palette-item]").count();
+    if (items > 0) pass(`palette matched ${items} result(s) for "replen"`);
+    else fail(`palette returned nothing for "replen"`);
+    await page.screenshot({ path: `${SHOTS}/palette.png` });
+    await palInput.press("Enter");
+    await page.waitForTimeout(320);
+    const h1p = await page.locator("main h1").first().innerText().catch(() => "");
+    if (/replenish/i.test(h1p)) pass("palette Enter navigated to Replenishment");
+    else fail(`palette Enter landed on "${h1p}" instead of Replenishment`);
+    const crumbText = await page.locator("main").innerText();
+    if (/stock control/i.test(crumbText) && /operations/i.test(crumbText)) pass("breadcrumb shows section · group · screen");
+    else fail("breadcrumb missing above the screen");
+  }
+
   // ── 7. Store switching across the whole estate ─────────────────────────
   console.log(`\n[Flow] Store switching`);
   const storeSel = page.locator("header select").first();
@@ -266,11 +307,19 @@ async function expandNav(page) {
   for (const [roleId, role] of ROLES) {
     await page.locator(`[data-role="${roleId}"]`).first().click();
     await page.waitForTimeout(300);
-    await expandNav(page);
     const landing = roleId === "store" ? "home" : roleId === "staff" ? "pos" : roleId === "planner" ? "live" : "exec";
-    await page.locator(`nav [data-module="${landing}"]`).first().click();
-    await page.waitForTimeout(450);
+    if ((await page.locator("[data-exit-till]").count()) > 0 && landing !== "pos") {
+      await exitTillIfOpen(page);
+    }
+    if ((await page.locator("[data-exit-till]").count()) === 0) {
+      await expandNav(page);
+      await page.locator(`nav [data-module="${landing}"]`).first().click();
+      await page.waitForTimeout(450);
+    } else {
+      await page.waitForTimeout(450);
+    }
     await page.screenshot({ path: `${SHOTS}/home-${roleId}.png`, fullPage: true });
+    await exitTillIfOpen(page);
   }
   pass("captured landing screenshots for all roles");
 

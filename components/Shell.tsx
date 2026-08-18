@@ -2,162 +2,17 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { ROLES, STORES } from "@/lib/seed";
-import { useApp, type ModuleId } from "@/lib/state";
+import { AGENTS, agentApprovals } from "@/lib/agents";
+import { sizeSetExceptions } from "@/lib/engine";
+import { NAV_GROUPS, SECTION_ORDER, type NavChild } from "@/lib/nav";
+import { useApp } from "@/lib/state";
+import CommandPalette from "./CommandPalette";
 import { Freshness, Toast } from "./ui";
-import type { RoleId } from "@/lib/types";
-
-// ── Information architecture ─────────────────────────────────────────────────
-// Two levels: a SECTION (Operations / Insights / Planning / Admin) contains
-// function GROUPS (Movement, Customers, …), each holding selectable items.
-
-interface NavChild {
-  id: ModuleId;
-  label: string;
-  /** Optional sub-view within the module (e.g. crm → enrol). */
-  focus?: string;
-}
-
-interface NavGroup {
-  key: string;
-  label: string;
-  glyph: string;
-  roles: RoleId[];
-  section: string;
-  children: NavChild[];
-}
-
-const NAV_GROUPS: NavGroup[] = [
-  // ── Operations — staff and manager ──
-  {
-    key: "sell", label: "Sell", glyph: "▣", roles: ["staff", "store"], section: "Operations",
-    children: [
-      { id: "pos", label: "Billing" },
-      { id: "omni", label: "Online Orders" },
-    ],
-  },
-  {
-    key: "movement", label: "Movement", glyph: "⇅", roles: ["staff", "store"], section: "Operations",
-    children: [
-      { id: "grn", label: "Inward (GRN)" },
-      { id: "outward", label: "Outward & RTV" },
-      { id: "savesale", label: "Save the Sale" },
-    ],
-  },
-  {
-    key: "customers", label: "Customers", glyph: "◐", roles: ["staff", "store"], section: "Operations",
-    children: [
-      { id: "crm", label: "Enrol member", focus: "enrol" },
-      { id: "crm", label: "Send offers", focus: "outreach" },
-    ],
-  },
-  {
-    key: "work", label: "My Work", glyph: "☰", roles: ["staff", "store"], section: "Operations",
-    children: [
-      { id: "storeday", label: "Tasks & Chores" },
-      { id: "tickets", label: "Raise an Issue" },
-    ],
-  },
-
-  // ── Insights — manager only ──
-  {
-    key: "performance", label: "Performance", glyph: "◧", roles: ["store"], section: "Insights",
-    children: [
-      { id: "home", label: "Overview" },
-      { id: "reports", label: "Reports" },
-    ],
-  },
-  {
-    key: "sai", label: "AI", glyph: "✳", roles: ["store"], section: "Insights",
-    children: [
-      { id: "agents", label: "AI Agents" },
-      { id: "ask", label: "Ask One" },
-    ],
-  },
-  {
-    key: "stock", label: "Stock Control", glyph: "▤", roles: ["store"], section: "Operations",
-    children: [
-      { id: "sizeset", label: "Size & Stock" },
-      { id: "replenish", label: "Replenishment" },
-      { id: "truth", label: "Stock Position" },
-    ],
-  },
-  {
-    key: "money", label: "Money", glyph: "₹", roles: ["store"], section: "Operations",
-    children: [{ id: "cash", label: "Cash & Close" }],
-  },
-
-  // ── Planning ──
-  {
-    key: "plive", label: "Live", glyph: "◉", roles: ["planner"], section: "Planning",
-    children: [
-      { id: "live", label: "Live Execution" },
-      { id: "performance", label: "Performance" },
-    ],
-  },
-  {
-    key: "pact", label: "Act", glyph: "⇉", roles: ["planner"], section: "Planning",
-    children: [
-      { id: "tickets", label: "Issues & SLA" },
-      { id: "allocate", label: "Reallocation" },
-      { id: "moves", label: "Strategic Moves" },
-      { id: "catchment", label: "Catchment" },
-      { id: "trainings", label: "Trainings" },
-    ],
-  },
-  {
-    key: "pdata", label: "Data", glyph: "◎", roles: ["planner"], section: "Planning",
-    children: [
-      { id: "truth", label: "Stock Position" },
-      { id: "reports", label: "Reports" },
-      { id: "governance", label: "Metric Registry" },
-    ],
-  },
-  {
-    key: "pai", label: "AI", glyph: "✳", roles: ["planner"], section: "Planning",
-    children: [
-      { id: "agents", label: "AI Agents" },
-      { id: "ask", label: "Ask One" },
-    ],
-  },
-
-  // ── Admin ──
-  {
-    key: "aover", label: "Overview", glyph: "◆", roles: ["leadership"], section: "Admin",
-    children: [
-      { id: "exec", label: "Executive View" },
-      { id: "live", label: "Live Execution" },
-      { id: "performance", label: "Performance" },
-    ],
-  },
-  {
-    key: "aact", label: "Act", glyph: "⇉", roles: ["leadership"], section: "Admin",
-    children: [
-      { id: "allocate", label: "Reallocation" },
-      { id: "moves", label: "Strategic Moves" },
-      { id: "catchment", label: "Catchment" },
-    ],
-  },
-  {
-    key: "adata", label: "Data", glyph: "◎", roles: ["leadership"], section: "Admin",
-    children: [
-      { id: "truth", label: "Stock Position" },
-      { id: "governance", label: "Metric Registry" },
-    ],
-  },
-  {
-    key: "aai", label: "AI", glyph: "✳", roles: ["leadership"], section: "Admin",
-    children: [
-      { id: "agents", label: "AI Agents" },
-      { id: "ask", label: "Ask One" },
-    ],
-  },
-];
-
-const SECTION_ORDER = ["Operations", "Insights", "Planning", "Admin"];
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const app = useApp();
   const [navOpen, setNavOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const role = ROLES.find((r) => r.id === app.role)!;
 
@@ -169,6 +24,25 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const isActive = (c: NavChild) => app.module === c.id && (c.focus === undefined || app.focus === c.focus || (app.focus === null && c.focus === "outreach"));
 
+  // Where am I? — the breadcrumb above every screen.
+  const crumb = useMemo(() => {
+    const g = groups.find((gr) => gr.children.some(isActive)) ?? groups.find((gr) => gr.children.some((c) => c.id === app.module));
+    if (!g) return null;
+    const c = g.children.find(isActive) ?? g.children.find((ch) => ch.id === app.module)!;
+    return { section: g.section, group: g.label, label: c.label };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, app.module, app.focus]);
+
+  // Pending work, surfaced where people look — the nav.
+  const approvalsWaiting = useMemo(
+    () => AGENTS.filter((a) => a.roles.includes(app.role)).reduce((n, a) => n + agentApprovals(a.id, app.storeId).length, 0),
+    [app.role, app.storeId]
+  );
+  const stockExceptions = useMemo(
+    () => (app.role === "store" ? sizeSetExceptions(app.storeId, 40).length : 0),
+    [app.role, app.storeId]
+  );
+
   // Keep the group of the active module open (sticky) so navigating elsewhere
   // doesn't collapse the section you were just using.
   useEffect(() => {
@@ -176,6 +50,23 @@ export function Shell({ children }: { children: React.ReactNode }) {
     if (g) setExpanded((c) => (c[g.key] ? c : { ...c, [g.key]: true }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app.module, app.focus, app.role]);
+
+  // A new screen always starts at the top.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [app.module, app.focus]);
+
+  // ⌘K / Ctrl-K opens the palette from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-plane">
@@ -197,6 +88,25 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex-1" />
+
+          <button
+            data-palette
+            onClick={() => setPaletteOpen(true)}
+            className="hidden md:inline-flex items-center gap-2.5 border border-line bg-[color:var(--plane)] px-3 py-1.5 text-xs text-muted hover:border-[color:var(--brand)] hover:text-ink transition-colors"
+            title="Jump to any screen or action"
+          >
+            <span aria-hidden>⌕</span>
+            <span>Search</span>
+            <span className="kbd">⌘K</span>
+          </button>
+          <button
+            data-palette-sm
+            onClick={() => setPaletteOpen(true)}
+            className="btn-ghost md:hidden !px-2"
+            aria-label="Search"
+          >
+            ⌕
+          </button>
 
           <RoleSwitcher />
           <button className="btn-ghost !px-2 text-xs hidden sm:inline-flex" onClick={() => app.dispatch({ type: "logout" })} title="Sign out">
@@ -250,7 +160,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         >
                           <span className="w-4 text-center opacity-70">{g.glyph}</span>
                           <span className="text-[13px] flex-1">{g.label}</span>
-                          {g.key === "stock" && app.role === "store" && <ExceptionBadge />}
+                          {g.key === "stock" && stockExceptions > 0 && <CountBadge n={stockExceptions} tone="critical" />}
+                          {(g.key === "sai" || g.key === "pai" || g.key === "aai") && approvalsWaiting > 0 && (
+                            <CountBadge n={approvalsWaiting} tone="brand" />
+                          )}
                           {(g.key === "plive" || g.key === "aover") && <LiveDot />}
                           <span className="text-2xs text-muted">{open ? "▾" : "▸"}</span>
                         </button>
@@ -295,19 +208,31 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         {/* ── Content ───────────────────────────────────────────────────── */}
         <main className="flex-1 min-w-0 overflow-x-hidden">
-          <div className="max-w-[1320px] mx-auto p-3 sm:p-6">{children}</div>
+          <div key={`${app.module}:${app.focus ?? ""}`} className="max-w-[1320px] mx-auto p-3 sm:p-6 rise">
+            {crumb && (
+              <div className="label mb-3 no-print" aria-label="You are here">
+                {crumb.section} · {crumb.group} · <span style={{ color: "var(--text-primary)" }}>{crumb.label}</span>
+              </div>
+            )}
+            {children}
+          </div>
         </main>
       </div>
 
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       {app.toast && <Toast key={app.toast.id} message={app.toast.message} tone={app.toast.tone} onDone={() => app.dispatch({ type: "toast:clear" })} />}
     </div>
   );
 }
 
-function ExceptionBadge() {
+function CountBadge({ n, tone }: { n: number; tone: "brand" | "critical" }) {
+  const style =
+    tone === "critical"
+      ? { background: "var(--crit-soft)", color: "var(--status-critical)" }
+      : { background: "var(--brand-soft)", color: "var(--brand)" };
   return (
-    <span className="text-2xs font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background: "var(--status-critical)" }}>
-      !
+    <span className="text-2xs font-semibold px-1.5 py-0.5 rounded-full num" style={style}>
+      {n}
     </span>
   );
 }
@@ -359,6 +284,7 @@ function StorePicker() {
       value={app.storeId}
       onChange={(e) => app.setStore(e.target.value)}
       className="text-xs rounded-md border border-line bg-raised px-2 py-1 text-ink max-w-[260px] shrink-0"
+      aria-label="Store"
     >
       {STORES.map((s) => (
         <option key={s.id} value={s.id}>

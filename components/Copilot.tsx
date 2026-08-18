@@ -32,16 +32,15 @@ export default function Copilot() {
         className="fixed bottom-5 right-5 z-40 no-print flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium text-white transition-colors"
         style={{ background: open ? "var(--brand)" : "var(--text-primary)" }}
       >
-        <span className="serif-accent" style={{ color: "#fff" }}>Ai</span>
-        Copilot
+        <span className="serif-accent" style={{ color: "#fff" }}>Arvi</span>
       </button>
 
       {open && (
         <div className="fixed bottom-16 right-5 z-40 w-[min(420px,calc(100vw-40px))] card shadow-pop no-print rise">
           <div className="flex items-center justify-between px-4 py-3 border-b border-line">
             <div>
-              <div className="text-sm font-medium text-ink">Copilot</div>
-              <div className="text-2xs text-muted">Answers from governed metrics. Actions need your tap.</div>
+              <div className="text-sm font-medium text-ink">Arvi</div>
+              <div className="text-2xs text-muted">Asks the same numbers every screen uses. Actions need your tap.</div>
             </div>
             <button className="btn-ghost !px-2" onClick={() => { setOpen(false); setActive(null); }}>×</button>
           </div>

@@ -157,6 +157,47 @@ h3 {
   }
 }
 
+/* Keyboard users get a clear, single-accent focus ring */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Text selection carries the accent */
+::selection {
+  background: var(--brand);
+  color: #fff;
+}
+
+/* Tables reward the eye that scans them */
+tbody tr {
+  transition: background-color 120ms ease;
+}
+tbody tr:hover {
+  background: var(--surface-1);
+}
+
+/* Buttons acknowledge the press */
+.btn:active,
+.btn-primary:active,
+.cta-tile:active {
+  transform: translateY(1px);
+}
+
+/* Respect the user's motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Scrollbars — quiet */
 ::-webkit-scrollbar {
   width: 10px;

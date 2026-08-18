@@ -63,7 +63,7 @@ export default function LiveExecution() {
       {/* Watchtower — the agent's anomaly flags */}
       <Card>
         <div className="flex items-center gap-2.5 flex-wrap">
-          <span className="serif-accent text-sm shrink-0">Ai</span>
+          <span className="serif-accent text-sm shrink-0">Arvi</span>
           <span className="label">Watchtower flags</span>
           {agentActivity("watchtower", app.storeId).filter((x) => x.kind === "flagged").map((x) => (
             <span key={x.label} className="inline-flex items-center gap-2 border border-line px-2.5 py-1.5 text-xs text-ink">

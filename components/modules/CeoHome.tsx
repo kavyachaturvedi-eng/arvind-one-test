@@ -62,10 +62,10 @@ export default function CeoHome() {
       {/* The agent-written brief */}
       <Card>
         <div className="flex items-start gap-3">
-          <span className="serif-accent text-base shrink-0 mt-0.5">Ai</span>
+          <span className="serif-accent text-base shrink-0 mt-0.5">Arvi</span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="label">Morning brief · written by Watchtower · 08:00</span>
+              <span className="label">Morning brief · Arvi, from the Watchtower agent · 08:00</span>
               <button className="btn !py-0.5 !px-1.5 !text-2xs" onClick={() => app.go("agents")}>Agents</button>
             </div>
             <p className="text-sm text-ink2 leading-relaxed mt-1.5">
