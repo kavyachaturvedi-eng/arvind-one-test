@@ -208,7 +208,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         {/* ── Content ───────────────────────────────────────────────────── */}
         <main className="flex-1 min-w-0 overflow-x-hidden">
-          <div key={`${app.module}:${app.focus ?? ""}`} className="max-w-[1320px] mx-auto p-3 sm:p-6 rise">
+          <div key={`${app.module}:${app.focus ?? ""}`} className="max-w-[1320px] mx-auto p-3 sm:p-6 fade">
             {crumb && (
               <div className="label mb-3 no-print" aria-label="You are here">
                 {crumb.section} · {crumb.group} · <span style={{ color: "var(--text-primary)" }}>{crumb.label}</span>
