@@ -88,6 +88,9 @@ async function expandNav(page) {
     await page.screenshot({ path: `${SHOTS}/login.png` });
     await signin.click();
     await page.waitForTimeout(400);
+    // Default sign-in is Store Staff, which lands straight in the till —
+    // leave it so the header is clickable for the role loop.
+    await exitTillIfOpen(page);
     pass("signed in from the login screen");
   } else {
     fail("login screen did not render");

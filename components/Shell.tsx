@@ -257,11 +257,11 @@ function RoleSwitcher() {
       {/* Store, with its two sub-logins */}
       <div className={`flex items-center gap-0.5 rounded-lg px-1 py-0.5 ${storeSide ? "bg-[color:var(--brand-soft)]" : ""}`}>
         <span className={`text-2xs font-semibold px-1 ${storeSide ? "text-[color:var(--brand)]" : "text-muted"}`}>Store</span>
-        <button data-role="store" onClick={() => app.setRole("store")} title="Store Manager — insights and operations" className={pill(app.role === "store")}>
-          Manager
-        </button>
         <button data-role="staff" onClick={() => app.setRole("staff")} title="Store Staff — floor and till operations" className={pill(app.role === "staff")}>
           Staff
+        </button>
+        <button data-role="store" onClick={() => app.setRole("store")} title="Store Manager — insights and operations" className={pill(app.role === "store")}>
+          Manager
         </button>
       </div>
 

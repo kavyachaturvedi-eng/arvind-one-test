@@ -7,7 +7,7 @@ import { ROLES, STORES } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import type { RoleId } from "@/lib/types";
 
-const ORDER: RoleId[] = ["store", "staff", "planner", "leadership"];
+const ORDER: RoleId[] = ["staff", "store", "planner", "leadership"];
 
 const DESC: Record<RoleId, string> = {
   store: "Run the store: operations plus insights",
@@ -18,7 +18,7 @@ const DESC: Record<RoleId, string> = {
 
 export default function Login() {
   const app = useApp();
-  const [role, setRole] = useState<RoleId>("store");
+  const [role, setRole] = useState<RoleId>("staff");
   const [storeId, setStoreId] = useState(STORES[0].id);
   const storeSide = role === "store" || role === "staff";
 
