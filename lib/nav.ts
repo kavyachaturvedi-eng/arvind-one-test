@@ -35,18 +35,24 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    key: "inv", label: "Inventory", glyph: "▦", roles: ["staff", "store"], section: "Operations",
+    children: [
+      { id: "lookup", label: "Check stock" },
+      { id: "savesale", label: "Inter-store transfer" },
+    ],
+  },
+  {
     key: "movement", label: "Movement", glyph: "⇅", roles: ["staff", "store"], section: "Operations",
     children: [
       { id: "grn", label: "Receive stock" },
       { id: "outward", label: "Send stock out" },
-      { id: "savesale", label: "Save the Sale" },
     ],
   },
   {
     key: "customers", label: "Customers", glyph: "◐", roles: ["staff", "store"], section: "Operations",
     children: [
+      { id: "crm", label: "Check points", focus: "points" },
       { id: "crm", label: "Add a member", focus: "enrol" },
-      { id: "crm", label: "Send offers", focus: "outreach" },
     ],
   },
   {
@@ -55,6 +61,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: "storeday", label: "Tasks & Chores" },
       { id: "tickets", label: "Report a problem" },
     ],
+  },
+  {
+    key: "shiftg", label: "My Shift", glyph: "◷", roles: ["staff"], section: "Operations",
+    children: [{ id: "shift", label: "Shift & Attendance" }],
   },
   {
     key: "teamg", label: "Team", glyph: "◔", roles: ["store"], section: "Operations",
@@ -170,10 +180,12 @@ export interface NavAction {
 }
 
 export const NAV_ACTIONS: NavAction[] = [
-  { label: "Start a new bill", hint: "Opens the till", id: "pos", roles: ["staff", "store"] },
-  { label: "Enrol a member", hint: "CRM · capture at the counter", id: "crm", focus: "enrol", roles: ["staff", "store"] },
-  { label: "Send offers to a segment", hint: "CRM · outreach", id: "crm", focus: "outreach", roles: ["staff", "store"] },
-  { label: "Raise an issue", hint: "Opens tickets", id: "tickets", roles: ["staff", "store"] },
+  { label: "Start a new bill", hint: "Opens the billing screen", id: "pos", roles: ["staff", "store"] },
+  { label: "Check stock in another store", hint: "Every store and the warehouse", id: "lookup", roles: ["staff", "store"] },
+  { label: "Check a member's points", hint: "Ten seconds, no queue held up", id: "crm", focus: "points", roles: ["staff", "store"] },
+  { label: "Add a member", hint: "Name and mobile, done", id: "crm", focus: "enrol", roles: ["staff", "store"] },
+  { label: "Report a problem", hint: "Opens tickets", id: "tickets", roles: ["staff", "store"] },
+  { label: "End my shift", hint: "Handover and daily report", id: "shift", roles: ["staff"] },
   { label: "Pull stock from the warehouse", hint: "Replenishment", id: "replenish", roles: ["store"] },
   { label: "Plan next week's shifts", hint: "Staff & Shifts", id: "team", roles: ["store"] },
   { label: "Review smart stock moves", hint: "Festival & swap suggestions", id: "merch", roles: ["store", "planner"] },

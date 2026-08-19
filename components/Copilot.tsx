@@ -25,14 +25,25 @@ export default function Copilot() {
 
   return (
     <>
-      {/* The launcher */}
+      {/* The launcher — reads as an assistant, not an action button */}
       <button
         data-copilot
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-5 right-5 z-40 no-print flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium text-white transition-colors"
-        style={{ background: open ? "var(--brand)" : "var(--text-primary)" }}
+        aria-label="Arvi, AI assistant"
+        className="fixed bottom-5 right-5 z-40 no-print flex items-center gap-2 rounded-full border-2 pl-3 pr-3.5 py-2 text-sm shadow-pop transition-colors bg-raised"
+        style={{ borderColor: "var(--brand)" }}
       >
-        <span className="serif-accent" style={{ color: "#fff" }}>Arvi</span>
+        <span
+          className="w-6 h-6 grid place-items-center rounded-full text-xs"
+          style={{ background: "var(--brand-soft)", color: "var(--brand)" }}
+          aria-hidden
+        >
+          ✳
+        </span>
+        <span className="leading-tight text-left">
+          <span className="serif-accent block text-[15px]">Arvi</span>
+        </span>
+        <span className="label" style={{ color: "var(--brand)" }}>AI assist</span>
       </button>
 
       {open && (

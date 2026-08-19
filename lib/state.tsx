@@ -60,6 +60,8 @@ export type ModuleId =
   | "agents"
   | "team"
   | "merch"
+  | "lookup"
+  | "shift"
 ;
 
 interface AppState {
@@ -77,12 +79,19 @@ interface AppState {
   tasks: Task[];
   trainings: TrainingItem[];
   cash: CashException[];
-  /** Morning huddle: the manager dispatches it, staff confirm they heard it. */
-  huddleDispatched: boolean;
-  huddleHeardBy: string[];
+  /** Leave requests from staff — the manager decides in Staff & Shifts. */
+  leaves: LeaveRequest[];
   audit: AuditEntry[];
   toast: { id: number; message: string; tone: "good" | "warn" | "info" } | null;
   clockOffsetMinutes: number;
+}
+
+export interface LeaveRequest {
+  id: string;
+  who: string;
+  date: string;
+  reason: string;
+  status: "pending" | "approved" | "declined";
 }
 
 type Action =
@@ -102,8 +111,8 @@ type Action =
   | { type: "task:create"; task: Task }
   | { type: "training:create"; training: TrainingItem }
   | { type: "cash:update"; id: string; patch: Partial<CashException> }
-  | { type: "huddle:dispatch" }
-  | { type: "huddle:heard"; who: string }
+  | { type: "leave:apply"; leave: LeaveRequest }
+  | { type: "leave:decide"; id: string; status: "approved" | "declined"; by: string }
   | { type: "audit"; entry: AuditEntry }
   | { type: "toast"; message: string; tone?: "good" | "warn" | "info" }
   | { type: "toast:clear" }
@@ -231,8 +240,7 @@ const initial: AppState = {
   tasks: initialTasks(),
   trainings: [],
   cash: CASH_EXCEPTIONS,
-  huddleDispatched: false,
-  huddleHeardBy: [],
+  leaves: [{ id: "LV-1", who: "Kiran Joshi", date: "Sun 16 Aug", reason: "Family function", status: "pending" }],
   audit: [
     { at: NOW - 64 * 60_000, actor: "Commercial", action: "Price revision published", object: "11 styles", system: "Arvind One" },
     { at: NOW - 63 * 60_000, actor: "Arvind One", action: "Created reprint job TK-8803", object: "41 units", system: "Arvind One" },
@@ -265,16 +273,18 @@ function reducer(state: AppState, action: Action): AppState {
     case "module":
       return { ...state, module: action.module, focus: action.focus ?? null };
 
-    case "huddle:dispatch":
+    case "leave:apply":
       return {
         ...state,
-        huddleDispatched: true,
-        audit: [{ at: NOW, actor: "Store Manager", action: "Morning huddle dispatched to staff devices", object: "huddle", system: "Arvi" }, ...state.audit],
+        leaves: [...state.leaves, action.leave],
+        audit: [{ at: NOW, actor: action.leave.who, action: `Leave requested for ${action.leave.date} — ${action.leave.reason}`, object: action.leave.id, system: "Arvind One" }, ...state.audit],
       };
-    case "huddle:heard":
-      return state.huddleHeardBy.includes(action.who)
-        ? state
-        : { ...state, huddleHeardBy: [...state.huddleHeardBy, action.who] };
+    case "leave:decide":
+      return {
+        ...state,
+        leaves: state.leaves.map((l) => (l.id === action.id ? { ...l, status: action.status } : l)),
+        audit: [{ at: NOW, actor: action.by, action: `Leave ${action.id} ${action.status}`, object: action.id, system: "Arvind One" }, ...state.audit],
+      };
 
     case "ist:create":
       return {

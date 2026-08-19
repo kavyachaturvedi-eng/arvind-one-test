@@ -1,7 +1,8 @@
 "use client";
 
-// Customers — loyalty at the till. Two jobs, two tabs: enrol a member,
-// work today's outreach list. The nav's sub-items deep-link to each.
+// Customers — the two things the floor actually does, fast, without holding
+// up the billing queue: check a member's points, and add a new member.
+// Campaigns and offers are run by the national marketing team, not the store.
 
 import React, { useEffect, useMemo, useState } from "react";
 import { NOW, STYLES, rng, storeById } from "@/lib/seed";
@@ -13,54 +14,78 @@ const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h =
 const FIRST = ["Ananya", "Vikram", "Priya", "Rahul", "Sneha", "Arjun", "Divya", "Karan", "Pooja", "Nikhil", "Ishita", "Rohan"];
 const LAST = ["Mehta", "Iyer", "Kapoor", "Desai", "Nair", "Malhotra", "Reddy", "Bose", "Chopra", "Kulkarni", "Sinha", "Verma"];
 
+/** One point is worth 25 paise at the till. */
+const POINT_VALUE = 0.25;
+
 interface Customer {
   name: string;
   phone: string;
   tier: "Platinum" | "Gold" | "Silver";
   points: number;
+  expiring: number;
   spend12m: number;
   visits12m: number;
   lastVisitDays: number;
-  reason: "Birthday this week" | "Anniversary this week" | "Lapsing — 90+ days" | "Points expiring";
 }
 
 function buildCustomers(storeId: string): Customer[] {
   const r = rng(hash("crm" + storeId));
-  const reasons: Customer["reason"][] = ["Birthday this week", "Anniversary this week", "Lapsing — 90+ days", "Points expiring"];
   const out: Customer[] = [];
   for (let i = 0; i < 8; i++) {
     const tier = r() < 0.2 ? "Platinum" : r() < 0.55 ? "Gold" : "Silver";
+    const points = 200 + Math.floor(r() * 4200);
     out.push({
       name: `${FIRST[Math.floor(r() * FIRST.length)]} ${LAST[Math.floor(r() * LAST.length)]}`,
       phone: `98${String(10000000 + Math.floor(r() * 89999999)).slice(0, 8)}`,
       tier,
-      points: 200 + Math.floor(r() * 4200),
+      points,
+      expiring: r() < 0.4 ? Math.floor(points * (0.1 + r() * 0.3)) : 0,
       spend12m: Math.round((14000 + r() * 160000) / 100) * 100,
       visits12m: 2 + Math.floor(r() * 14),
       lastVisitDays: 4 + Math.floor(r() * 130),
-      reason: reasons[i % reasons.length],
     });
   }
   return out.sort((a, b) => b.spend12m - a.spend12m);
 }
 
-type TabId = "outreach" | "enrol";
+/** Any 10-digit number resolves deterministically — member or not. */
+function lookupByPhone(phone: string, storeId: string, known: Customer[]): Customer | null {
+  const exact = known.find((c) => c.phone === phone);
+  if (exact) return exact;
+  const h = hash("mem" + phone);
+  if (h % 4 === 0) return null; // not a member
+  const r = rng(h);
+  const tier = r() < 0.2 ? "Platinum" : r() < 0.55 ? "Gold" : "Silver";
+  const points = 150 + Math.floor(r() * 3800);
+  return {
+    name: `${FIRST[h % FIRST.length]} ${LAST[(h >> 3) % LAST.length]}`,
+    phone,
+    tier,
+    points,
+    expiring: r() < 0.4 ? Math.floor(points * (0.1 + r() * 0.3)) : 0,
+    spend12m: Math.round((9000 + r() * 120000) / 100) * 100,
+    visits12m: 1 + Math.floor(r() * 12),
+    lastVisitDays: 3 + Math.floor(r() * 140),
+  };
+}
+
+type TabId = "points" | "enrol";
 
 export default function Crm() {
   const app = useApp();
   const store = storeById(app.storeId);
   const customers = useMemo(() => buildCustomers(app.storeId), [app.storeId]);
-  const [tab, setTab] = useState<TabId>(app.focus === "enrol" ? "enrol" : "outreach");
-  const [contacted, setContacted] = useState<string[]>([]);
+  const [tab, setTab] = useState<TabId>(app.focus === "enrol" ? "enrol" : "points");
+  const [phone, setPhone] = useState("");
+  const [looked, setLooked] = useState<{ phone: string; member: Customer | null } | null>(null);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [added, setAdded] = useState(0);
   const [profile, setProfile] = useState<Customer | null>(null);
 
-  // The nav's sub-items (Enrol member / Send offers) deep-link into a tab.
   useEffect(() => {
     if (app.focus === "enrol") setTab("enrol");
-    else if (app.focus === "outreach") setTab("outreach");
+    else if (app.focus === "points") setTab("points");
   }, [app.focus]);
 
   const r = rng(hash("crmk" + app.storeId));
@@ -68,7 +93,6 @@ export default function Crm() {
   const repeatShare = 0.24 + r() * 0.22;
   const members = 1800 + Math.floor(r() * 5200);
   const newToday = 2 + Math.floor(r() * 9);
-  const pointsLiability = members * (140 + r() * 260);
 
   const tierMix = [
     { label: "Platinum", value: Math.round(members * 0.06) },
@@ -76,13 +100,11 @@ export default function Crm() {
     { label: "Silver", value: Math.round(members * 0.67) },
   ];
 
-  function contact(c: Customer) {
-    setContacted((x) => [...x, c.phone]);
-    app.dispatch({
-      type: "audit",
-      entry: { at: NOW, actor: app.actorName, action: `Loyalty outreach sent to ${c.name} (${c.reason})`, object: c.phone, system: "Arvind One" },
-    });
-    app.toastNow(`Offer sent to ${c.name} on WhatsApp`, "good");
+  function check(p?: string) {
+    const q = (p ?? phone).replace(/[^\d]/g, "");
+    if (q.length !== 10) return;
+    setPhone(q);
+    setLooked({ phone: q, member: lookupByPhone(q, app.storeId, customers) });
   }
 
   function addMember() {
@@ -92,7 +114,7 @@ export default function Crm() {
       type: "audit",
       entry: { at: NOW, actor: app.actorName, action: `New loyalty member enrolled: ${newName.trim()}`, object: newPhone, system: "Arvind One" },
     });
-    app.toastNow(`${newName.trim()} enrolled — welcome offer sent by SMS`, "good");
+    app.toastNow(`${newName.trim()} added — welcome message sent by SMS`, "good");
     setNewName("");
     setNewPhone("");
   }
@@ -100,111 +122,147 @@ export default function Crm() {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-semibold text-ink">Customers</h1>
-          <p className="text-sm text-ink2 mt-1">{store.name}</p>
-        </div>
+        <h1 className="text-xl font-semibold text-ink">Customers</h1>
         <Tabs
           value={tab}
           onChange={setTab}
           options={[
-            { id: "outreach", label: "Send offers", count: customers.length - contacted.length },
-            { id: "enrol", label: "Enrol member" },
+            { id: "points", label: "Check points" },
+            { id: "enrol", label: "Add a member" },
           ]}
         />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <Stat label="Capture rate today" value={pct(captureRate)} tone={captureRate >= 0.8 ? "good" : "warn"} sub="Bills with a customer attached" emphasis />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Stat label="Capture rate today" value={pct(captureRate)} tone={captureRate >= 0.8 ? "good" : "warn"} sub="Bills with a member attached" emphasis />
         <Stat label="Members" value={(members + added).toLocaleString("en-IN")} sub={`+${newToday + added} new today`} />
         <Stat label="Repeat share" value={pct(repeatShare)} sub="Of this month's bills" />
-        <Stat label="Points liability" value={inr(pointsLiability, { compact: true })} sub="Outstanding, this store" />
-        <Stat label="To contact today" value={String(customers.length - contacted.length)} tone={customers.length - contacted.length > 0 ? "warn" : "good"} sub="Birthdays, lapsing, expiring points" />
+        <Stat label="New this session" value={String(added)} tone={added > 0 ? "good" : undefined} sub="Added by you" />
       </div>
-
-      {/* RFM segments — one-tap campaign to a whole segment */}
-      <Card>
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <span className="label">Segments</span>
-          {SEGMENTS.map((sg) => (
-            <span key={sg.name} className="inline-flex items-center gap-2 rounded-lg border border-line px-2.5 py-1.5">
-              <StatusDot tone={sg.tone} />
-              <span className="text-xs text-ink">{sg.name}</span>
-              <span className="text-2xs text-muted num">{Math.round((members + added) * sg.share).toLocaleString("en-IN")}</span>
-              <button
-                className="btn !py-0.5 !px-1.5 !text-2xs"
-                onClick={() => app.toastNow(`Campaign queued to ${sg.name} — ${Math.round((members + added) * sg.share).toLocaleString("en-IN")} members on WhatsApp`, "good")}
-              >
-                Campaign
-              </button>
-            </span>
-          ))}
-        </div>
-      </Card>
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          {tab === "outreach" ? (
+          {tab === "points" ? (
             <Card>
-              <SectionTitle title="Contact today" sub="List built and messages drafted by the Outreach Agent — review, then send." right={<Chip tone={contacted.length === customers.length ? "good" : "warn"}>{contacted.length}/{customers.length} done</Chip>} />
-              <Table>
-                <thead>
-                  <tr>
-                    <Th>Customer</Th><Th>Why today</Th><Th align="right">12-m spend</Th>
-                    <Th align="right">Points</Th><Th align="right">Last visit</Th><Th align="right" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {customers.map((c) => {
-                    const done = contacted.includes(c.phone);
-                    return (
+              <SectionTitle title="Check a member's points" />
+              <div className="flex gap-2 max-w-md">
+                <input
+                  data-points-phone
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/[^\d]/g, "").slice(0, 10))}
+                  onKeyDown={(e) => e.key === "Enter" && check()}
+                  inputMode="numeric"
+                  placeholder="Customer's mobile — 10 digits"
+                  className="flex-1 rounded-lg border border-line bg-raised px-3 py-3 text-base num"
+                />
+                <button data-points-check className="btn-primary !px-5" disabled={phone.length !== 10} onClick={() => check()}>
+                  Check
+                </button>
+              </div>
+
+              {looked && (
+                <div className="mt-4" data-points-result>
+                  {looked.member ? (
+                    <div className="border p-4" style={{ borderColor: "var(--brand)" }}>
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <div className="text-base font-semibold text-ink">{looked.member.name}</div>
+                          <div className="text-2xs text-muted num mt-0.5">{looked.member.phone} · <Chip tone={looked.member.tier === "Platinum" ? "brand" : "neutral"}>{looked.member.tier}</Chip></div>
+                        </div>
+                        <button className="btn !py-1.5 !text-xs" onClick={() => setProfile(looked.member)}>Full profile</button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                        <div className="border border-line p-3">
+                          <div className="text-2xl font-semibold num text-ink">{looked.member.points.toLocaleString("en-IN")}</div>
+                          <div className="text-2xs text-muted mt-0.5">points</div>
+                        </div>
+                        <div className="border border-line p-3">
+                          <div className="text-2xl font-semibold num" style={{ color: "var(--status-good)" }}>{inr(Math.round(looked.member.points * POINT_VALUE))}</div>
+                          <div className="text-2xs text-muted mt-0.5">worth at billing</div>
+                        </div>
+                        <div className="border border-line p-3">
+                          <div className="text-2xl font-semibold num" style={{ color: looked.member.expiring ? "var(--status-warning)" : "var(--text-primary)" }}>
+                            {looked.member.expiring.toLocaleString("en-IN")}
+                          </div>
+                          <div className="text-2xs text-muted mt-0.5">expiring this month</div>
+                        </div>
+                      </div>
+                      <button className="btn-primary w-full mt-3 !py-2.5" onClick={() => app.go("pos")}>
+                        Use points on a bill
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="border border-line p-4">
+                      <div className="text-sm font-medium text-ink">Not a member yet</div>
+                      <div className="text-xs text-ink2 mt-1">No membership on {looked.phone}. Add them in ten seconds — the welcome message goes out by SMS.</div>
+                      <button
+                        className="btn-primary mt-3"
+                        onClick={() => {
+                          setNewPhone(looked.phone);
+                          setTab("enrol");
+                        }}
+                      >
+                        Add as a member
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-5">
+                <div className="label mb-2">Members in the store recently</div>
+                <Table>
+                  <thead>
+                    <tr><Th>Member</Th><Th align="right">Points</Th><Th align="right">Expiring</Th><Th align="right">Last visit</Th><Th align="right" /></tr>
+                  </thead>
+                  <tbody>
+                    {customers.slice(0, 6).map((c) => (
                       <tr key={c.phone}>
                         <Td>
                           <button className="text-left" onClick={() => setProfile(c)}>
                             <div className="text-sm text-ink underline decoration-dotted underline-offset-2">{c.name}</div>
-                            <div className="text-2xs text-muted num">{c.phone} · <Chip tone={c.tier === "Platinum" ? "brand" : "neutral"}>{c.tier}</Chip></div>
+                            <div className="text-2xs text-muted num">{c.phone}</div>
                           </button>
                         </Td>
-                        <Td className="text-xs text-ink2">{c.reason}</Td>
-                        <Td align="right" className="num text-xs">{inr(c.spend12m, { compact: true })}</Td>
-                        <Td align="right" className="num text-xs">{c.points.toLocaleString("en-IN")}</Td>
+                        <Td align="right" className="num text-sm font-semibold text-ink">{c.points.toLocaleString("en-IN")}</Td>
+                        <Td align="right" className="num text-xs" style={{ color: c.expiring ? "var(--status-warning)" : "var(--text-muted)" }}>
+                          {c.expiring || "—"}
+                        </Td>
                         <Td align="right" className="num text-xs">{c.lastVisitDays}d ago</Td>
                         <Td align="right">
-                          {done ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-ink2"><StatusDot tone="good" />Sent</span>
-                          ) : (
-                            <button className="btn-primary !py-1.5 !text-xs" onClick={() => contact(c)}>Send offer</button>
-                          )}
+                          <button className="btn !py-1 !text-2xs" onClick={() => { setPhone(c.phone); check(c.phone); }}>Check</button>
                         </Td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
-              {customers.length === 0 && <Empty title="No outreach due today" />}
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
             </Card>
           ) : (
             <Card>
-              <SectionTitle title="Enrol a member" sub="At the till, ten seconds. Welcome offer goes out by SMS." />
+              <SectionTitle title="Add a member" />
               <div className="max-w-sm space-y-2.5">
                 <input
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="Customer name"
-                  className="w-full rounded-lg border border-line bg-raised px-3 py-2.5 text-sm"
+                  className="w-full rounded-lg border border-line bg-raised px-3 py-3 text-base"
                 />
                 <input
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value.replace(/[^\d]/g, "").slice(0, 10))}
                   placeholder="Mobile — 10 digits"
-                  className="w-full rounded-lg border border-line bg-raised px-3 py-2.5 text-sm num"
+                  className="w-full rounded-lg border border-line bg-raised px-3 py-3 text-base num"
                 />
-                <button className="btn-primary w-full" disabled={!newName.trim() || newPhone.length !== 10} onClick={addMember}>
-                  Enrol &amp; send welcome offer
+                <button className="btn-primary w-full !py-3" disabled={!newName.trim() || newPhone.length !== 10} onClick={addMember}>
+                  Add member
                 </button>
                 {added > 0 && (
-                  <div className="text-xs text-ink2 flex items-center gap-1.5"><StatusDot tone="good" />{added} enrolled this session</div>
+                  <div className="text-xs text-ink2 flex items-center gap-1.5"><StatusDot tone="good" />{added} added this session</div>
                 )}
+                <div className="text-2xs text-muted leading-relaxed pt-1">
+                  Offers and campaigns go out from the national marketing team — the store never has to write one.
+                </div>
               </div>
             </Card>
           )}
@@ -214,28 +272,20 @@ export default function Crm() {
           <SectionTitle title="Member base" />
           <BarChart data={tierMix} format={(n) => n.toLocaleString("en-IN")} />
           <div className="mt-4 pt-3 border-t border-line space-y-2 text-xs">
-            <div className="flex justify-between"><span className="text-muted">Avg member ATV vs walk-in</span><span className="num font-semibold text-ink">1.4×</span></div>
-            <div className="flex justify-between"><span className="text-muted">Redemption rate, 90 days</span><span className="num font-semibold text-ink">{pct(0.18 + r() * 0.2)}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Referrals this month</span><span className="num font-semibold text-ink">{3 + Math.floor(r() * 18)}</span></div>
+            <div className="flex justify-between"><span className="text-muted">Member bill vs walk-in bill</span><span className="num font-semibold text-ink">1.4×</span></div>
+            <div className="flex justify-between"><span className="text-muted">Points used, last 90 days</span><span className="num font-semibold text-ink">{pct(0.18 + r() * 0.2)}</span></div>
           </div>
         </Card>
       </div>
 
-      {profile && <Customer360 c={profile} onClose={() => setProfile(null)} onOffer={() => { contact(profile); setProfile(null); }} />}
+      {profile && <Customer360 c={profile} onClose={() => setProfile(null)} onBill={() => { setProfile(null); app.go("pos"); }} />}
     </div>
   );
 }
 
-const SEGMENTS: { name: string; share: number; tone: "good" | "warn" | "critical" | "neutral" }[] = [
-  { name: "Champions", share: 0.08, tone: "good" },
-  { name: "Loyal", share: 0.22, tone: "good" },
-  { name: "At risk", share: 0.14, tone: "critical" },
-  { name: "New", share: 0.11, tone: "neutral" },
-];
-
 // ── Customer 360 — one profile: history, sizes, value ────────────────────────
 
-function Customer360({ c, onClose, onOffer }: { c: Customer; onClose: () => void; onOffer: () => void }) {
+function Customer360({ c, onClose, onBill }: { c: Customer; onClose: () => void; onBill: () => void }) {
   const r = rng(hash("c360" + c.phone));
   const historyCount = 3 + Math.floor(r() * 3);
   const history = Array.from({ length: historyCount }, (_, i) => {
@@ -255,7 +305,7 @@ function Customer360({ c, onClose, onOffer }: { c: Customer; onClose: () => void
     <Modal open onClose={onClose} title={c.name} sub={`${c.phone} · ${c.tier} · member`} footer={
       <>
         <button className="btn" onClick={onClose}>Close</button>
-        <button className="btn-primary" onClick={onOffer}>Send offer now</button>
+        <button className="btn-primary" onClick={onBill}>Use points on a bill</button>
       </>
     }>
       <div className="space-y-3">
@@ -270,7 +320,7 @@ function Customer360({ c, onClose, onOffer }: { c: Customer; onClose: () => void
           <span className="label">Prefers</span>
           <Chip>size {favSize}</Chip>
           <Chip>{favCat}</Chip>
-          <Chip tone={c.reason === "Lapsing — 90+ days" ? "critical" : "brand"}>{c.reason}</Chip>
+          {c.expiring > 0 && <Chip tone="warn">{c.expiring} points expiring</Chip>}
         </div>
 
         <div>

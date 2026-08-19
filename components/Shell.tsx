@@ -22,7 +22,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     [groups]
   );
 
-  const isActive = (c: NavChild) => app.module === c.id && (c.focus === undefined || app.focus === c.focus || (app.focus === null && c.focus === "outreach"));
+  const isActive = (c: NavChild) => app.module === c.id && (c.focus === undefined || app.focus === c.focus || (app.focus === null && c.focus === "points"));
 
   // Where am I? — the breadcrumb above every screen.
   const crumb = useMemo(() => {
@@ -133,9 +133,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
             {role.label}
           </span>
           {app.role === "store" || app.role === "staff" ? (
-            <StorePicker />
+            // A store login belongs to one store — no switching from the floor.
+            <span className="text-xs text-ink font-medium shrink-0">
+              {(() => {
+                const s = STORES.find((x) => x.id === app.storeId)!;
+                return `${s.name} · ${s.brand} · ${s.city}`;
+              })()}
+            </span>
           ) : (
-            <span className="text-xs text-ink2 font-medium shrink-0">{STORES.length} stores · live</span>
+            <>
+              <span className="text-xs text-ink2 font-medium shrink-0">{STORES.length} stores · live</span>
+              <span className="text-muted text-xs shrink-0 hidden sm:inline">·</span>
+              <span className="label shrink-0">Focus store</span>
+              <StorePicker />
+            </>
           )}
           <span className="text-muted text-xs shrink-0 hidden sm:inline">·</span>
           <Freshness minutes={2} label="as of" />

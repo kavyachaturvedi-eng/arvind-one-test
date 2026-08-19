@@ -254,7 +254,7 @@ export default function Pos() {
       <div className="flex items-center gap-3 px-4 h-14 border-b border-line bg-raised shrink-0">
         <div className="w-8 h-8 grid place-items-center text-white text-sm font-medium" style={{ background: "var(--text-primary)" }}>1</div>
         <div className="leading-tight">
-          <h1 className="text-sm font-semibold text-ink">Till {store.code}-01</h1>
+          <h1 className="text-sm font-semibold text-ink">Billing · Counter {store.code}-01</h1>
           <div className="text-2xs text-muted">{store.name} · {app.actorName}</div>
         </div>
         <div className="flex-1" />
@@ -265,10 +265,10 @@ export default function Pos() {
         ))}
         <span className="text-2xs text-muted num hidden sm:inline">{inr(salesToday, { compact: true })} · {billCount} bills</span>
         <button className={`btn !py-1.5 !text-xs ${view === "day" ? "!border-[color:var(--brand)] !text-[color:var(--brand)]" : ""}`} onClick={() => setView(view === "till" ? "day" : "till")}>
-          {view === "till" ? "Day" : "Till"}
+          {view === "till" ? "Today's sales" : "Back to billing"}
         </button>
         <button data-exit-till className="btn !py-1.5 !text-xs" onClick={() => app.go(app.role === "staff" ? "storeday" : "home")}>
-          Exit till
+          Exit billing screen
         </button>
       </div>
 
@@ -342,7 +342,7 @@ export default function Pos() {
                   <button className="btn-primary !py-4 !text-base" disabled={cart.length === 0} onClick={() => setStage("pay")}>
                     Charge {inr(subtotal)}
                   </button>
-                  <button className="btn !py-4" disabled={cart.length === 0} onClick={hold}>Hold</button>
+                  <button className="btn !py-4" disabled={cart.length === 0} onClick={hold}>Hold bill</button>
                   <button className="btn !py-4" disabled={cart.length === 0} onClick={() => setCart([])}>Clear</button>
                 </div>
               )}

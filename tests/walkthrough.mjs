@@ -17,8 +17,8 @@ const ROLES = [
   ["leadership", "CEO"],
 ];
 const MODULES_BY_ROLE = {
-  store: ["pos", "storeday", "savesale", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "truth", "reports", "agents", "ask"],
-  staff: ["pos", "storeday", "savesale", "omni", "grn", "outward", "crm", "tickets"],
+  store: ["pos", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "truth", "reports", "agents", "ask"],
+  staff: ["pos", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift"],
   planner: ["live", "performance", "tickets", "allocate", "merch", "moves", "catchment", "trainings", "truth", "reports", "governance", "agents", "ask"],
   leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "agents", "ask"],
 };
@@ -276,53 +276,115 @@ async function expandNav(page) {
     }
   }
 
-  // ── 4c. Morning huddle — Arvi writes and dispatches the briefing ────────
-  console.log(`\n[Flow] Morning huddle`);
+  // ── 4c. Briefing is a one-tap mark — huddles happen in person ───────────
   const briefBtn = page.locator("[data-briefing]");
-  if ((await briefBtn.count()) === 0) fail("briefing button missing");
-  else {
+  if ((await briefBtn.count()) > 0) {
     await briefBtn.click();
-    await page.waitForTimeout(2400); // generation theatre
-    const play = page.locator("[data-brief-play]");
-    if ((await play.count()) === 0) fail("huddle did not generate");
-    else {
-      await play.click();
-      await page.waitForTimeout(1300);
-      await page.screenshot({ path: `${SHOTS}/briefing.png` });
-      const bodyText = await page.locator("body").innerText();
-      if (/0:00/.test(bodyText) && /The number/.test(bodyText)) pass("60-second huddle script rendered from live data");
-      else fail("huddle transcript missing");
-      await page.locator("[data-brief-dispatch]").click();
-      await page.waitForTimeout(400);
-      if (/Briefing done/.test(await page.locator("main").innerText())) pass("briefing dispatched to staff devices and logged");
-      else fail("briefing did not log after dispatch");
-    }
+    await page.waitForTimeout(240);
+    if (/Briefing done/.test(await page.locator("main").innerText())) pass("morning briefing marked done in one tap");
+    else fail("briefing mark did not stick");
+  } else fail("briefing button missing for the manager");
+
+  // ── 4d. Check stock — the whole estate and the warehouse in two taps ────
+  console.log(`\n[Flow] Check stock`);
+  await page.locator('nav [data-module="lookup"]').first().click();
+  await page.waitForTimeout(320);
+  await page.locator("[data-lookup-style]").first().click();
+  await page.waitForTimeout(260);
+  const sizeTile = page.locator("main button[title*='sellable']").first();
+  if ((await sizeTile.count()) === 0) fail("size grid missing in stock lookup");
+  else {
+    await sizeTile.click();
+    await page.waitForTimeout(300);
+    const lkText = await page.locator("main").innerText();
+    if ((await page.locator("[data-lookup-dc]").count()) > 0 && /elsewhere/i.test(lkText)) {
+      pass("network view rendered: this store, warehouse and every holder");
+    } else fail("stock lookup network view missing");
+    await page.screenshot({ path: `${SHOTS}/lookup.png`, fullPage: true });
   }
 
-  // ── 4d. Staff hears the huddle, manager sees the count ──────────────────
-  console.log(`\n[Flow] Huddle heard by staff`);
+  // ── 4d2. Receive stock — short receive against the PO ───────────────────
+  console.log(`\n[Flow] Receive stock`);
+  await page.locator('nav [data-module="grn"]').first().click();
+  await page.waitForTimeout(320);
+  const rcv = page.locator("[data-receive]").first();
+  if ((await rcv.count()) === 0) fail("no arrived shipment to receive");
+  else {
+    await rcv.click();
+    await page.waitForTimeout(280);
+    const qty = page.locator("[data-receive-qty]");
+    const expected = Number(await qty.inputValue());
+    await qty.fill(String(Math.max(1, expected - 2)));
+    await page.waitForTimeout(150);
+    await page.locator("[data-receive-confirm]").click();
+    await page.waitForTimeout(300);
+    const grnText = await page.locator("main").innerText();
+    if (/2 short/.test(grnText) && /PO-\d+/.test(grnText)) pass("short receive recorded against the PO");
+    else fail("short receive did not record");
+  }
+
+  // ── 4d3. Online orders — three stats, dropdown actions, past orders ─────
+  console.log(`\n[Flow] Online orders`);
+  await page.locator('nav [data-module="omni"]').first().click();
+  await page.waitForTimeout(320);
+  const omniText = await page.locator("main").innerText();
+  if (/PENDING/i.test(omniText) && /DISPATCHED/i.test(omniText) && /SLA BREACHED/i.test(omniText)) pass("three essential stats only");
+  else fail("omni stats not simplified");
+  if ((await page.locator("[data-omni-action]").count()) > 0) pass("actions offered as a dropdown per order");
+  else fail("action dropdown missing");
+  if (/Past orders/.test(omniText)) pass("past orders table in place of the ledger");
+  else fail("past orders table missing");
+  await page.screenshot({ path: `${SHOTS}/omni.png`, fullPage: true });
+
+  // ── 4d4. Points check + My Shift for staff ───────────────────────────────
+  console.log(`\n[Flow] Staff service & shift`);
   await page.locator('[data-role="staff"]').first().click();
   await page.waitForTimeout(260);
   await exitTillIfOpen(page);
   await expandNav(page);
-  await page.locator('nav [data-module="storeday"]').first().click();
+  await page.locator('nav [data-module="crm"]').first().click();
   await page.waitForTimeout(320);
-  const heardBtn = page.locator("[data-huddle-heard]");
-  if ((await heardBtn.count()) === 0) fail("staff listen card missing after dispatch");
-  else {
-    await heardBtn.click();
-    await page.waitForTimeout(260);
-    if (/● Heard/.test(await page.locator("main").innerText())) pass("staff marked the huddle as heard");
-    else fail("heard state did not stick");
-  }
+  await page.locator("[data-points-phone]").fill("9812345678");
+  await page.locator("[data-points-check]").click();
+  await page.waitForTimeout(280);
+  const crmText = await page.locator("main").innerText();
+  if (/worth at billing|Not a member yet/i.test(crmText)) pass("member points lookup answers in one tap");
+  else fail("points lookup produced nothing");
+  if (!/Points liability/i.test(crmText)) pass("points liability removed from the store view");
+  else fail("points liability still shown to the store");
+
+  await page.locator('nav [data-module="shift"]').first().click();
+  await page.waitForTimeout(320);
+  await page.locator("[data-day-report]").click();
+  await page.waitForTimeout(240);
+  await page.locator("[data-apply-leave]").click();
+  await page.waitForTimeout(240);
+  const shiftText = await page.locator("main").innerText();
+  if (/Day report sent/i.test(shiftText)) pass("staff day report sent");
+  else fail("day report did not send");
+  if (/waiting for manager/i.test(shiftText)) pass("leave request submitted");
+  else fail("leave request missing");
+  await page.locator("main input[type='checkbox']").first().check();
+  await page.locator("[data-end-shift]").click();
+  await page.waitForTimeout(260);
+  if (/Shift ended/i.test(await page.locator("main").innerText())) pass("shift ended with handover");
+  else fail("shift did not end");
+  await page.screenshot({ path: `${SHOTS}/myshift.png`, fullPage: true });
+
+  // Manager sees and approves the leave.
   await page.locator('[data-role="store"]').first().click();
   await page.waitForTimeout(260);
   await exitTillIfOpen(page);
   await expandNav(page);
-  await page.locator('nav [data-module="storeday"]').first().click();
+  await page.locator('nav [data-module="team"]').first().click();
   await page.waitForTimeout(320);
-  if (/heard by 5 of 7/.test(await page.locator("main").innerText())) pass("manager sees the heard count rise (5 of 7)");
-  else fail("manager heard-count did not update");
+  const approveLeave = page.locator("[data-leave-approve]").first();
+  if ((await approveLeave.count()) === 0) fail("no pending leave visible to the manager");
+  else {
+    await approveLeave.click();
+    await page.waitForTimeout(240);
+    pass("manager approved a leave request from Staff & Shifts");
+  }
 
   // ── 4e. Smart Moves — merchandising intelligence in plain words ─────────
   console.log(`\n[Flow] Smart Moves`);
@@ -437,7 +499,14 @@ async function expandNav(page) {
   }
 
   // ── 7. Store switching across the whole estate ─────────────────────────
+  // Store roles are locked to their store; the focus-store picker lives with
+  // Planning and Admin. Switch to Planning to sweep the estate.
   console.log(`\n[Flow] Store switching`);
+  if ((await page.locator("header select").count()) === 0) pass("store roles have no store switcher — locked to their store");
+  else fail("store role can still switch stores from the header");
+  await page.locator('[data-role="planner"]').first().click();
+  await page.waitForTimeout(300);
+  await exitTillIfOpen(page);
   const storeSel = page.locator("header select").first();
   const storeCount = await storeSel.locator("option").count();
   let storeOk = 0;

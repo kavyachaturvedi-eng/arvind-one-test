@@ -160,8 +160,8 @@ export default function Outward() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Outward &amp; RTV</h1>
-          <p className="text-sm text-ink2 mt-1 max-w-2xl">Raise a pullback or RTV, pack against evidence, and dispatch.</p>
+          <h1 className="text-xl font-semibold text-ink">Send stock out</h1>
+          <p className="text-sm text-ink2 mt-1 max-w-2xl">Planning decides what goes back. You pack it and hand it to the transporter.</p>
         </div>
       </div>
 
@@ -172,7 +172,9 @@ export default function Outward() {
         <Stat label="Value in the outward queue" value={inr(queueValue, { compact: true })} sub={`${stagedUnits.toLocaleString("en-IN")} units at ₹${AVG_MRP.toLocaleString("en-IN")} average MRP`} />
       </div>
 
-      {/* ── Batch builder ─────────────────────────────────────────────────── */}
+      {/* ── Batch builder — planning raises these; the store does not decide
+             what to return. Shown only outside store roles. ─────────────── */}
+      {app.role !== "store" && app.role !== "staff" ? (
       <Card>
         <SectionTitle
           title="Build a batch"
@@ -236,6 +238,14 @@ export default function Outward() {
           </div>
         )}
       </Card>
+      ) : (
+        <Card>
+          <div className="flex items-center gap-2.5 text-xs text-ink2">
+            <StatusDot tone="neutral" />
+            New return requests from Planning appear below on their own — pack the codes, attach the video, and dispatch.
+          </div>
+        </Card>
+      )}
 
       {/* ── Batch list + working surface ──────────────────────────────────── */}
       <div className="grid gap-4 lg:grid-cols-[280px_1fr] items-start">

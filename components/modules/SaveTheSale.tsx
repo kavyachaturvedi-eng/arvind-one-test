@@ -181,8 +181,8 @@ export default function SaveTheSale() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Save the Sale</h1>
-          <p className="text-sm text-ink2 mt-1 max-w-2xl">Bring a size in from another store for a customer at the till.</p>
+          <h1 className="text-xl font-semibold text-ink">Inter-store Transfer</h1>
+          <p className="text-sm text-ink2 mt-1 max-w-2xl">Bring a size in from another store. The best source is recommended for you.</p>
         </div>
       </div>
 

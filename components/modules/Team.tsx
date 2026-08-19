@@ -182,6 +182,51 @@ export default function Team() {
         )}
       </Card>
 
+      {/* ── Leave requests ── */}
+      <Card>
+        <SectionTitle title="Leave requests" right={<Chip tone={app.leaves.some((l) => l.status === "pending") ? "warn" : "good"}>{app.leaves.filter((l) => l.status === "pending").length} waiting</Chip>} />
+        {app.leaves.length === 0 ? (
+          <div className="text-xs text-muted py-2">No requests. Staff ask from their My Shift screen.</div>
+        ) : (
+          <div className="space-y-1.5">
+            {app.leaves.map((l) => (
+              <div key={l.id} className="flex items-center gap-3 border border-line px-3 py-2.5 flex-wrap" data-leave-row>
+                <StatusDot tone={l.status === "approved" ? "good" : l.status === "declined" ? "critical" : "warn"} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm text-ink font-medium">{l.who}</div>
+                  <div className="text-2xs text-muted">{l.date} · {l.reason}</div>
+                </div>
+                {l.status === "pending" ? (
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      data-leave-approve
+                      className="btn-primary !py-1.5 !text-xs"
+                      onClick={() => {
+                        app.dispatch({ type: "leave:decide", id: l.id, status: "approved", by: app.actorName });
+                        app.toastNow(`${l.who}'s leave approved — the shift grid needs one change for ${l.date.split(" ")[0]}`, "good");
+                      }}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="btn !py-1.5 !text-xs"
+                      onClick={() => {
+                        app.dispatch({ type: "leave:decide", id: l.id, status: "declined", by: app.actorName });
+                        app.toastNow(`${l.who}'s leave declined — tell them why in person`, "warn");
+                      }}
+                    >
+                      Decline
+                    </button>
+                  </div>
+                ) : (
+                  <Chip tone={l.status === "approved" ? "good" : "critical"}>{l.status}</Chip>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       {/* ── Add a person ── */}
       <Card>
         <SectionTitle title="Add someone to the team" sub="They get an SMS with the app link and appear in the shift grid straight away." />
