@@ -451,6 +451,22 @@ export const METRICS: MetricDef[] = [
     version: "v1.1",
   },
   {
+    id: "style_margin_bleed",
+    label: "Margin bleed by style",
+    definition:
+      "Margin lost on a style at a store: realised discount on units already sold, plus residual units past their cover window valued at the expected clearance depth. Ranks where a style is quietly giving margin away.",
+    formula: "SUM((mrp - realised_price) × units_sold) + residual_units × mrp × expected_depth",
+    unit: "INR",
+    grain: "store × style",
+    owner: "Finance & Planning",
+    sources: ["POS", "SAP Finance", "Arvind One"],
+    freshness: "hourly",
+    ageMinutes: 18,
+    replaces: 2,
+    verified: true,
+    version: "v1.3",
+  },
+  {
     id: "markdown_exposure",
     label: "Markdown exposure",
     definition:

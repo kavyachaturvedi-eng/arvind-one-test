@@ -237,6 +237,34 @@ tbody tr:hover {
   animation: fadeIn 0.22s ease-out backwards;
 }
 
+/* Arvi Vision — the scan pass over a captured photo */
+@keyframes scanY {
+  from { top: 0; }
+  to { top: calc(100% - 2px); }
+}
+.scanline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--brand);
+  box-shadow: 0 0 14px 2px rgba(30, 111, 255, 0.7);
+  animation: scanY 1.15s linear infinite alternate;
+  pointer-events: none;
+}
+
+/* Audio waveform — bars breathe while the briefing plays */
+@keyframes eqPulse {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+.eq-bar {
+  transform-origin: bottom;
+}
+.playing .eq-bar {
+  animation: eqPulse 0.9s ease-in-out infinite;
+}
+
 @keyframes pulseRing {
   0% { box-shadow: 0 0 0 0 rgba(30, 111, 255, 0.3); }
   70% { box-shadow: 0 0 0 8px rgba(30, 111, 255, 0); }

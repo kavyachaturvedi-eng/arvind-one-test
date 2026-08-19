@@ -8,6 +8,8 @@ import { HOUR, NOW, rng, storeById } from "@/lib/seed";
 import { slaState } from "@/lib/rules";
 import { useApp } from "@/lib/state";
 import { Card, Chip, Empty, Meter, SectionTitle, SlaBar, Stat, StatusDot, Table, Td, Th, inr } from "@/components/ui";
+import { BriefingModal } from "./Briefing";
+import { VmAuditModal } from "./VmAudit";
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
 
@@ -82,6 +84,8 @@ export default function StoreDay() {
   const [hqDone, setHqDone] = useState<string[]>([]);
   const [choresDone, setChoresDone] = useState<string[]>(["C-1", "C-2", "C-3"]);
   const [briefed, setBriefed] = useState(false);
+  const [briefingOpen, setBriefingOpen] = useState(false);
+  const [auditTask, setAuditTask] = useState<HqTask | null>(null);
 
   const systemTasks = app.tasks
     .filter((t) => t.storeId === app.storeId && t.status !== "done")
@@ -92,8 +96,23 @@ export default function StoreDay() {
   const openChores = CHORES.filter((c) => !choresDone.includes(c.id));
 
   function completeHq(t: HqTask) {
+    if (t.needsPhoto) {
+      // Photo close-outs go through Arvi Vision — capture, check, auto-approve.
+      setAuditTask(t);
+      return;
+    }
     setHqDone((d) => [...d, t.id]);
-    app.toastNow(t.needsPhoto ? `${t.id} closed with photo` : `${t.id} closed`, "good");
+    app.toastNow(`${t.id} closed`, "good");
+  }
+
+  function vmApproved(t: HqTask, score: number) {
+    setHqDone((d) => [...d, t.id]);
+    setAuditTask(null);
+    app.dispatch({
+      type: "audit",
+      entry: { at: NOW, actor: app.actorName, action: `${t.id} closed with photo — ${score}% VM compliance, auto-approved by Arvi Vision`, object: t.id, system: "Arvi" },
+    });
+    app.toastNow(`${t.id} closed · ${score}% VM compliance — HQ SLA resolved`, "good");
   }
   function completeChore(c: Chore) {
     setChoresDone((d) => [...d, c.id]);
@@ -108,14 +127,8 @@ export default function StoreDay() {
           <p className="text-sm text-ink2 mt-1">{store.name} · everything due today, with an owner.</p>
         </div>
         {!briefed ? (
-          <button
-            className="btn-primary"
-            onClick={() => {
-              setBriefed(true);
-              app.toastNow("Morning briefing logged — visible on Live Execution", "good");
-            }}
-          >
-            Log morning briefing
+          <button data-briefing className="btn-primary" onClick={() => setBriefingOpen(true)}>
+            ▶ Generate morning huddle
           </button>
         ) : (
           <Chip tone="good">● Briefing done · 11:41</Chip>
@@ -256,6 +269,24 @@ export default function StoreDay() {
           </div>
         </Card>
       </div>
+
+      <BriefingModal
+        open={briefingOpen}
+        onClose={() => setBriefingOpen(false)}
+        onLogged={() => {
+          setBriefed(true);
+          setBriefingOpen(false);
+        }}
+      />
+      {auditTask && (
+        <VmAuditModal
+          open={!!auditTask}
+          taskId={auditTask.id}
+          taskTitle={auditTask.title}
+          onClose={() => setAuditTask(null)}
+          onApproved={(score) => vmApproved(auditTask, score)}
+        />
+      )}
     </div>
   );
 }

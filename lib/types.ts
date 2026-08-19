@@ -81,6 +81,8 @@ export type SourceSystem =
   | "Email"
   | "Paper register"
   | "Scanner"
+  | "Arvi"
+  | "Ask One"
   | "Arvind One";
 
 export type Brand = "Tommy Hilfiger" | "Calvin Klein" | "U.S. Polo Assn." | "Arrow" | "Flying Machine";

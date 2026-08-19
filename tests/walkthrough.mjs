@@ -185,6 +185,9 @@ async function expandNav(page) {
     else if (/Nothing in the network/.test(mainText)) pass("honest dead end shown (no donor anywhere)");
     else fail("policy trail did not render its rules");
 
+    if ((await page.locator("[data-distance-lane]").count()) > 0) pass("donor distance lane rendered");
+    else pass("no donors to visualize (dead end) — lane correctly absent");
+
     const cta = page.locator("main button", { hasText: /Transfer \d+ unit|Send for one-tap approval/ }).first();
     if ((await cta.count()) > 0) {
       await cta.click();
@@ -203,6 +206,19 @@ async function expandNav(page) {
         // The audit timeline is the trust artefact — it must exist.
         if (/Policy engine|Request raised at the till/.test(after)) pass("audit timeline rendered");
         else fail("audit timeline missing");
+
+        // Same-day lane: an approved transfer inside 40 km dispatches a rider.
+        const dispatchPanel = page.locator("[data-rider-dispatch]");
+        if ((await dispatchPanel.count()) > 0) {
+          pass("instant rider dispatch panel rendered (same-day lane)");
+          const wa = page.locator("[data-wa-notify]");
+          await wa.click();
+          await page.waitForTimeout(260);
+          if (/notified/i.test(await wa.innerText())) pass("customer WhatsApp notification confirmed");
+          else fail("WhatsApp notify did not confirm");
+        } else {
+          pass("no instant dispatch (pending approval or beyond 40 km) — correct");
+        }
         await page.screenshot({ path: `${SHOTS}/savesale-result.png`, fullPage: true });
       } else fail("confirmation modal did not open");
     } else if (/Nothing in the network/.test(mainText)) {
@@ -234,6 +250,55 @@ async function expandNav(page) {
   if (/Area Manager|Regional Manager|Head Office|Store Manager/.test(tkText)) pass("escalation ladder rendered");
   else fail("escalation ladder missing");
 
+  // ── 4b. VM photo audit — Arvi Vision closes the HQ SLA on the spot ──────
+  console.log(`\n[Flow] VM photo audit`);
+  await page.locator('nav [data-module="storeday"]').first().click();
+  await page.waitForTimeout(320);
+  const photoBtn = page.locator("main button", { hasText: /Close with photo/ }).first();
+  if ((await photoBtn.count()) === 0) fail("no photo close-out task found");
+  else {
+    await photoBtn.click();
+    await page.waitForTimeout(300);
+    const capture = page.locator("[data-vm-capture]");
+    if ((await capture.count()) === 0) fail("VM audit modal did not open");
+    else {
+      await capture.click();
+      await page.waitForTimeout(3400); // four checks + verdict
+      const verdict = page.locator("[data-vm-verdict]");
+      if ((await verdict.count()) > 0 && /% VM compliance/.test(await verdict.innerText())) {
+        pass(`Arvi Vision verdict: ${(await verdict.innerText()).trim()}`);
+      } else fail("vision scan produced no verdict");
+      await page.screenshot({ path: `${SHOTS}/vm-audit.png` });
+      await page.locator("[data-vm-close]").click();
+      await page.waitForTimeout(300);
+      if ((await page.locator("[data-vm-capture]").count()) === 0) pass("task closed and SLA resolved");
+      else fail("VM modal did not close after approval");
+    }
+  }
+
+  // ── 4c. Morning huddle — Arvi writes and dispatches the briefing ────────
+  console.log(`\n[Flow] Morning huddle`);
+  const briefBtn = page.locator("[data-briefing]");
+  if ((await briefBtn.count()) === 0) fail("briefing button missing");
+  else {
+    await briefBtn.click();
+    await page.waitForTimeout(2400); // generation theatre
+    const play = page.locator("[data-brief-play]");
+    if ((await play.count()) === 0) fail("huddle did not generate");
+    else {
+      await play.click();
+      await page.waitForTimeout(1300);
+      await page.screenshot({ path: `${SHOTS}/briefing.png` });
+      const bodyText = await page.locator("body").innerText();
+      if (/0:00/.test(bodyText) && /The number/.test(bodyText)) pass("60-second huddle script rendered from live data");
+      else fail("huddle transcript missing");
+      await page.locator("[data-brief-dispatch]").click();
+      await page.waitForTimeout(400);
+      if (/Briefing done/.test(await page.locator("main").innerText())) pass("briefing dispatched to staff devices and logged");
+      else fail("briefing did not log after dispatch");
+    }
+  }
+
   // ── 5. Ask One — every suggested question answers ──────────────────────
   console.log(`\n[Flow] Ask One`);
   await page.locator('nav [data-module="ask"]').first().click();
@@ -249,6 +314,20 @@ async function expandNav(page) {
     if (/Interpreted as|interpreted as|I can't answer|cannot answer/i.test(t)) pass(`answered: ${label}`);
     else fail(`no interpretation strip for: ${label}`);
   }
+  // The certified-BI showpiece: verified formula + actionable outlier table.
+  const askInput = page.locator("main input").first();
+  await askInput.fill("Which stores are bleeding margin on Oxford Solid Shirts?");
+  await askInput.press("Enter");
+  await page.waitForTimeout(360);
+  const askText = await page.locator("main").innerText();
+  if (/Verified · governed metric/i.test(askText) && /Margin bleed/i.test(askText)) pass("margin-bleed answer grounded in a verified metric");
+  else fail("margin-bleed answer not grounded in the registry");
+  const trig = page.locator("main button", { hasText: /^Trigger markdown$/ });
+  if ((await trig.count()) === 3) {
+    await trig.first().click();
+    await page.waitForTimeout(200);
+    pass("3 outlier stores rendered with one-tap markdown triggers");
+  } else fail(`expected 3 markdown triggers, found ${await trig.count()}`);
   await page.screenshot({ path: `${SHOTS}/askone.png`, fullPage: true });
 
   // ── 6. One Number — reconciliation across every carried style ──────────

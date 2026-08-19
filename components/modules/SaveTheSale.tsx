@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useMemo, useState } from "react";
-import { STYLES, storeById, styleById } from "@/lib/seed";
+import { NOW, STYLES, storeById, styleById } from "@/lib/seed";
 import { evaluateIstPolicy, type IstPolicyInput } from "@/lib/rules";
 import { findDonors, sellable, skuRow, stockForStyleAtStore, styleTrueRos } from "@/lib/engine";
 import { useApp } from "@/lib/state";
@@ -36,6 +36,34 @@ const AUTO_APPROVE_MAX_QTY = 3;
 /** Local hour at the demo clock — 11:42 IST, so the 11:00 cut-off has just passed. */
 const HOUR_OF_DAY = 11;
 
+const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
+const RIDERS = ["Imran S.", "Vikas P.", "Sagar M.", "Farhan A."];
+
+/** Rider ETA in minutes: 35 for pick/pack + city travel at ~22 km/h. */
+const riderEtaMin = (km: number) => 35 + Math.round((km / 22) * 60);
+const fmtEta = (min: number) => (min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")} m` : `${min} m`);
+
+interface RiderDispatch {
+  taskId: string;
+  rider: string;
+  distanceKm: number;
+  fromName: string;
+  pickupBy: number;
+  arriveBy: number;
+}
+
+function buildDispatch(reqId: string, fromName: string, distanceKm: number): RiderDispatch {
+  const eta = riderEtaMin(distanceKm);
+  return {
+    taskId: `RD-${1200 + (hash(reqId) % 800)}`,
+    rider: RIDERS[hash(reqId) % RIDERS.length],
+    distanceKm,
+    fromName,
+    pickupBy: 35,
+    arriveBy: eta,
+  };
+}
+
 export default function SaveTheSale() {
   const app = useApp();
   const [styleId, setStyleId] = useState<string>("");
@@ -46,6 +74,8 @@ export default function SaveTheSale() {
   const [donorId, setDonorId] = useState<string>("");
   const [confirm, setConfirm] = useState(false);
   const [created, setCreated] = useState<ISTRequest | null>(null);
+  const [rider, setRider] = useState<RiderDispatch | null>(null);
+  const [waNotified, setWaNotified] = useState(false);
   const [query, setQuery] = useState("");
 
   const store = storeById(app.storeId);
@@ -110,6 +140,8 @@ export default function SaveTheSale() {
     setCustomerName("");
     setCustomerPhone("");
     setConfirm(false);
+    setRider(null);
+    setWaNotified(false);
   }
 
   function submit() {
@@ -127,6 +159,10 @@ export default function SaveTheSale() {
       policy: policyInput,
     });
     setCreated(req);
+    // Inside the 40 km same-day lane, an approved transfer dispatches a rider
+    // on its own — pickup task, ETA, customer message, no phone calls.
+    setRider(donor.distanceKm <= 40 && donor.saleable ? buildDispatch(req.id, donor.store.name, donor.distanceKm) : null);
+    setWaNotified(false);
     setConfirm(false);
     app.toastNow(
       req.status === "approved"
@@ -246,6 +282,14 @@ export default function SaveTheSale() {
                     </Callout>
                   ) : (
                     <div className="space-y-2">
+                      <DistanceLane
+                        donors={donors.slice(0, 5)}
+                        activeId={donorId || donors[0].store.id}
+                        onPick={(id) => {
+                          setDonorId(id);
+                          setCreated(null);
+                        }}
+                      />
                       {donors.slice(0, 5).map((d) => {
                         const active = (donorId || donors[0].store.id) === d.store.id;
                         return (
@@ -269,6 +313,9 @@ export default function SaveTheSale() {
                                 <div className="text-2xs text-muted mt-0.5">
                                   {d.store.city} · {d.distanceKm} km · {d.sellable} sellable · {d.excess} above a week's cover ·
                                   fill {pct(d.fillRate)}
+                                  {d.distanceKm <= 40 && d.saleable && (
+                                    <span style={{ color: "var(--status-good)" }}> · rider ETA ≈ {fmtEta(riderEtaMin(d.distanceKm))}</span>
+                                  )}
                                 </div>
                               </div>
                               <div className="text-right shrink-0">
@@ -356,6 +403,72 @@ export default function SaveTheSale() {
                 }
               />
               <Timeline events={created.events} />
+
+              {/* ── Instant hyperlocal dispatch — the same-day lane in motion ── */}
+              {created.status === "approved" && rider && (
+                <div className="mt-3 border border-line" data-rider-dispatch>
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-line" style={{ background: "var(--brand-soft)" }}>
+                    <span className="label" style={{ color: "var(--brand)" }}>Instant dispatch · same-day lane</span>
+                    <Chip tone="brand">{rider.taskId}</Chip>
+                  </div>
+                  <div className="p-3 space-y-3">
+                    <div className="text-xs text-ink2 leading-relaxed">
+                      Inside the 40 km lane the run books itself: pick task live at {rider.fromName}, rider{" "}
+                      <span className="font-medium text-ink">{rider.rider}</span> assigned, pickup by{" "}
+                      {fmtTime(NOW + rider.pickupBy * 60_000)}.
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[
+                        { label: "Pick", time: "now", done: true },
+                        { label: "Rider pickup", time: fmtTime(NOW + rider.pickupBy * 60_000), done: false },
+                        { label: "In transit", time: `${rider.distanceKm} km`, done: false },
+                        { label: "Handover", time: fmtTime(NOW + rider.arriveBy * 60_000), done: false },
+                      ].map((s, i) => (
+                        <div key={s.label} className="border border-line px-2 py-1.5 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <StatusDot tone={s.done ? "good" : i === 1 ? "warn" : "neutral"} />
+                            <span className="text-2xs font-medium text-ink">{s.label}</span>
+                          </div>
+                          <div className="text-2xs text-muted num mt-0.5">{s.time}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <div className="label">Arriving by</div>
+                        <div className="text-lg font-semibold text-ink num leading-tight">
+                          {fmtTime(NOW + rider.arriveBy * 60_000)}
+                        </div>
+                      </div>
+                      <button
+                        data-wa-notify
+                        className="btn-primary !py-2 !text-xs"
+                        disabled={waNotified}
+                        onClick={() => {
+                          setWaNotified(true);
+                          app.dispatch({
+                            type: "audit",
+                            entry: {
+                              at: NOW,
+                              actor: app.actorName,
+                              action: `WhatsApp sent to ${created.customerName || "the customer"} — ${styleById(created.styleId).name} (${created.size}) arriving by ${fmtTime(NOW + rider.arriveBy * 60_000)}`,
+                              object: created.id,
+                              system: "Arvi",
+                            },
+                          });
+                          app.toastNow(
+                            `WhatsApp sent${created.customerName ? ` to ${created.customerName}` : ""}: "Your size is on its way — arriving by ${fmtTime(NOW + rider.arriveBy * 60_000)}."`,
+                            "good"
+                          );
+                        }}
+                      >
+                        {waNotified ? "✓ Customer notified" : "WhatsApp the customer"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {created.customerName && (
                 <div className="mt-3 text-xs text-ink2">
                   {created.customerName} will get the pickup date by SMS, and an update if it changes.
@@ -517,6 +630,67 @@ function PolicyTrail({ policy }: { policy: ReturnType<typeof evaluateIstPolicy> 
           ))}
         </tbody>
       </Table>
+    </div>
+  );
+}
+
+// ── Distance lane — where each donor sits against the 40 km same-day radius ──
+
+function DistanceLane({
+  donors,
+  activeId,
+  onPick,
+}: {
+  donors: ReturnType<typeof findDonors>;
+  activeId: string;
+  onPick: (id: string) => void;
+}) {
+  const max = Math.max(60, ...donors.map((d) => d.distanceKm + 8));
+  const pos = (km: number) => `${Math.min(97, (km / max) * 100)}%`;
+  return (
+    <div className="border border-line bg-[color:var(--plane)] px-3 pt-2 pb-5" data-distance-lane>
+      <div className="flex items-center justify-between mb-3">
+        <span className="label">Distance from you</span>
+        <span className="text-2xs text-muted">inside 40 km, a rider runs it today</span>
+      </div>
+      <div className="relative h-9">
+        {/* Track */}
+        <div className="absolute left-0 right-0 top-[13px] h-px" style={{ background: "var(--baseline)" }} />
+        {/* Same-day shading + boundary */}
+        <div className="absolute top-[9px] h-[9px] left-0" style={{ width: pos(40), background: "var(--ok-soft)" }} />
+        <div className="absolute top-0 bottom-3 w-px" style={{ left: pos(40), background: "var(--status-warning)" }} />
+        <span className="absolute text-2xs num" style={{ left: pos(40), transform: "translateX(-50%)", bottom: -8, color: "var(--status-warning)" }}>
+          40 km
+        </span>
+        {/* You */}
+        <span className="absolute w-3 h-3 rounded-full border-2 border-[color:var(--surface-2)]" style={{ left: 0, top: "8px", background: "var(--text-primary)" }} />
+        <span className="absolute text-2xs font-semibold text-ink" style={{ left: 0, top: -4 }}>You</span>
+        {/* Donors */}
+        {donors.map((d, i) => {
+          const active = d.store.id === activeId;
+          return (
+            <button
+              key={d.store.id}
+              onClick={() => onPick(d.store.id)}
+              title={`${d.store.name} · ${d.distanceKm} km`}
+              className="absolute -translate-x-1/2 group"
+              style={{ left: pos(d.distanceKm), top: i % 2 === 0 ? "4px" : "10px" }}
+              aria-label={`${d.store.name}, ${d.distanceKm} km`}
+            >
+              <span
+                className="block w-3 h-3 rounded-full border-2 border-[color:var(--surface-2)] transition-transform group-hover:scale-125"
+                style={{ background: active ? "var(--brand)" : d.distanceKm <= 40 ? "var(--status-good)" : "var(--text-muted)" }}
+              />
+              <span
+                className={`absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-2xs num ${active ? "font-semibold" : ""}`}
+                style={{ top: i % 2 === 0 ? "-14px" : "14px", color: active ? "var(--brand)" : "var(--text-muted)" }}
+              >
+                {d.distanceKm} km
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

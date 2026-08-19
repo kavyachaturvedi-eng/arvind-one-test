@@ -12,7 +12,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useMemo, useState } from "react";
-import { METRICS, NOW, STAFF, storeById } from "@/lib/seed";
+import { METRICS, NOW, STAFF, STYLES, rng, storeById } from "@/lib/seed";
+
+const hashQ = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
 import {
   allVitals,
   brandRollups,
@@ -54,13 +56,14 @@ interface Answer {
 const STARTERS: Record<RoleId, string[]> = {
   store: ["Which of my styles have a broken size set?", "Where is my best seller under-stocked?", "Which staff member has the lowest UPT?"],
   staff: ["Which of my styles have a broken size set?", "Where is my best seller under-stocked?"],
-  planner: ["Which of my styles have a broken size set?", "Which stores are below 90% fill rate?", "Why did order OM-55019 cancel?"],
+  planner: ["Which stores are bleeding margin on Oxford Solid Shirts?", "Which stores are below 90% fill rate?", "Why did order OM-55019 cancel?"],
   leadership: ["What is my markdown exposure by brand?", "How does this month compare with last year?", "What is full-price sell-through by brand?"],
 };
 
 const ALL_STARTERS = [
   "Which of my styles have a broken size set?",
   "How does this month compare with last year?",
+  "Which stores are bleeding margin on Oxford Solid Shirts?",
   "Which stores are below 90% fill rate?",
   "What is my markdown exposure by brand?",
   "Where is my best seller under-stocked?",
@@ -325,6 +328,92 @@ function resolve(q: string, app: ReturnType<typeof useApp>): Answer {
             </tbody>
           </Table>
         </>
+      ),
+    };
+  }
+
+  // 2b — margin bleed on a named style, across stores. The certified-BI showpiece:
+  // a diagnostic sentence, a verified formula, and the exact outliers with a
+  // one-tap action — not a dashboard to go hunting in.
+  if (t.includes("margin") && (t.includes("bleed") || t.includes("bleeding") || t.includes("losing") || t.includes("oxford"))) {
+    const target = STYLES.find((s) => s.name.toLowerCase().includes("oxford solid")) ?? STYLES[0];
+    const rows = allVitals()
+      .map((v) => {
+        const r = rng(hashQ("bleed" + v.store.id + target.id));
+        const unitsSold = 14 + Math.floor(r() * 46);
+        const discountShare = 0.06 + r() * 0.26; // share of units billed below MRP
+        const avgDepth = 0.12 + r() * 0.2; // realised discount on those units
+        const residual = Math.floor(r() * 26);
+        const bleed = Math.round(unitsSold * discountShare * target.mrp * avgDepth + residual * target.mrp * 0.25 * r());
+        return { v, unitsSold, discountShare, avgDepth, residual, bleed };
+      })
+      .sort((a, b) => b.bleed - a.bleed);
+    const top = rows.slice(0, 3);
+    const total = rows.reduce((a, x) => a + x.bleed, 0);
+    const topShare = top.reduce((a, x) => a + x.bleed, 0) / Math.max(1, total);
+
+    return {
+      metric: metric("style_margin_bleed"),
+      filters: `style = ${target.name} (${target.id}); all stores carrying it`,
+      grain: "store × style",
+      timeRange: "Season to date, hourly refresh",
+      ageMinutes: 18,
+      body: (
+        <div className="space-y-3">
+          <p className="text-sm text-ink leading-relaxed">
+            <span className="font-semibold">{top.length} stores account for {pct(topShare)} of the margin bleed</span> on{" "}
+            {target.name} — {top.map((x) => x.v.store.name).join(", ")}. The dominant cause is unmanaged floor
+            discounting: {pct(top[0].discountShare)} of units at {top[0].v.store.name} billed below MRP at an average
+            depth of {pct(top[0].avgDepth)}, against a chain median near 11%. Residual stock past its window adds the
+            rest. A structured markdown at these three protects more margin than it costs.
+          </p>
+          <Table>
+            <thead>
+              <tr>
+                <Th>Store</Th><Th align="right">Units sold</Th><Th align="right">Sold below MRP</Th>
+                <Th align="right">Avg depth</Th><Th align="right">Residual</Th><Th align="right">Margin bleed</Th><Th align="right" />
+              </tr>
+            </thead>
+            <tbody>
+              {top.map((x) => (
+                <tr key={x.v.store.id}>
+                  <Td>
+                    <div className="text-ink">{x.v.store.name}</div>
+                    <div className="text-2xs text-muted">{x.v.store.brand} · {x.v.store.city}</div>
+                  </Td>
+                  <Td align="right" className="num">{x.unitsSold}</Td>
+                  <Td align="right" className="num"><span className="inline-flex items-center gap-1.5"><StatusDot tone="critical" />{pct(x.discountShare)}</span></Td>
+                  <Td align="right" className="num">{pct(x.avgDepth)}</Td>
+                  <Td align="right" className="num">{x.residual}</Td>
+                  <Td align="right" className="num font-semibold" style={{ color: "var(--status-critical)" }}>{inr(x.bleed, { compact: true })}</Td>
+                  <Td align="right">
+                    <button
+                      className="btn-primary !py-1.5 !text-xs"
+                      onClick={() => {
+                        app.dispatch({
+                          type: "audit",
+                          entry: {
+                            at: NOW,
+                            actor: app.actorName,
+                            action: `Triggered a markdown review: ${target.name} at ${x.v.store.name} (${inr(x.bleed, { compact: true })} bleed)`,
+                            object: target.id,
+                            system: "Ask One",
+                          },
+                        });
+                        app.toastNow(`Markdown review queued for ${x.v.store.name} — routed to the Markdown Agent with this evidence attached`, "good");
+                      }}
+                    >
+                      Trigger markdown
+                    </button>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+          <div className="text-2xs text-muted">
+            Remaining {rows.length - top.length} stores sit inside the normal band; the full ranking is one click away in Reports.
+          </div>
+        </div>
       ),
     };
   }
