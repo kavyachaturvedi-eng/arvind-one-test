@@ -58,6 +58,8 @@ export type ModuleId =
   | "exec"
   | "trainings"
   | "agents"
+  | "team"
+  | "merch"
 ;
 
 interface AppState {
@@ -75,6 +77,9 @@ interface AppState {
   tasks: Task[];
   trainings: TrainingItem[];
   cash: CashException[];
+  /** Morning huddle: the manager dispatches it, staff confirm they heard it. */
+  huddleDispatched: boolean;
+  huddleHeardBy: string[];
   audit: AuditEntry[];
   toast: { id: number; message: string; tone: "good" | "warn" | "info" } | null;
   clockOffsetMinutes: number;
@@ -97,6 +102,8 @@ type Action =
   | { type: "task:create"; task: Task }
   | { type: "training:create"; training: TrainingItem }
   | { type: "cash:update"; id: string; patch: Partial<CashException> }
+  | { type: "huddle:dispatch" }
+  | { type: "huddle:heard"; who: string }
   | { type: "audit"; entry: AuditEntry }
   | { type: "toast"; message: string; tone?: "good" | "warn" | "info" }
   | { type: "toast:clear" }
@@ -224,6 +231,8 @@ const initial: AppState = {
   tasks: initialTasks(),
   trainings: [],
   cash: CASH_EXCEPTIONS,
+  huddleDispatched: false,
+  huddleHeardBy: [],
   audit: [
     { at: NOW - 64 * 60_000, actor: "Commercial", action: "Price revision published", object: "11 styles", system: "Arvind One" },
     { at: NOW - 63 * 60_000, actor: "Arvind One", action: "Created reprint job TK-8803", object: "41 units", system: "Arvind One" },
@@ -255,6 +264,17 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, storeId: action.storeId };
     case "module":
       return { ...state, module: action.module, focus: action.focus ?? null };
+
+    case "huddle:dispatch":
+      return {
+        ...state,
+        huddleDispatched: true,
+        audit: [{ at: NOW, actor: "Store Manager", action: "Morning huddle dispatched to staff devices", object: "huddle", system: "Arvi" }, ...state.audit],
+      };
+    case "huddle:heard":
+      return state.huddleHeardBy.includes(action.who)
+        ? state
+        : { ...state, huddleHeardBy: [...state.huddleHeardBy, action.who] };
 
     case "ist:create":
       return {

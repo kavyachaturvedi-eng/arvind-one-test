@@ -56,6 +56,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
     window.scrollTo({ top: 0 });
   }, [app.module, app.focus]);
 
+  // Store roles run on floor tablets, used by people who are not desk workers:
+  // everything a step bigger — text, buttons, touch targets — via the rem base.
+  useEffect(() => {
+    const simple = app.role === "store" || app.role === "staff";
+    document.documentElement.style.fontSize = simple ? "17px" : "16px";
+    return () => {
+      document.documentElement.style.fontSize = "16px";
+    };
+  }, [app.role]);
+
   // ⌘K / Ctrl-K opens the palette from anywhere.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

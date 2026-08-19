@@ -30,6 +30,8 @@ import Reports from "@/components/modules/Reports";
 import CeoHome from "@/components/modules/CeoHome";
 import Trainings from "@/components/modules/Trainings";
 import Agents from "@/components/modules/Agents";
+import Team from "@/components/modules/Team";
+import MerchMoves from "@/components/modules/MerchMoves";
 
 function Router() {
   const { module } = useApp();
@@ -82,6 +84,10 @@ function Router() {
       return <Trainings />;
     case "agents":
       return <Agents />;
+    case "team":
+      return <Team />;
+    case "merch":
+      return <MerchMoves />;
     default:
       return <Home />;
   }

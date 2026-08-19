@@ -37,15 +37,15 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     key: "movement", label: "Movement", glyph: "⇅", roles: ["staff", "store"], section: "Operations",
     children: [
-      { id: "grn", label: "Inward (GRN)" },
-      { id: "outward", label: "Outward & RTV" },
+      { id: "grn", label: "Receive stock" },
+      { id: "outward", label: "Send stock out" },
       { id: "savesale", label: "Save the Sale" },
     ],
   },
   {
     key: "customers", label: "Customers", glyph: "◐", roles: ["staff", "store"], section: "Operations",
     children: [
-      { id: "crm", label: "Enrol member", focus: "enrol" },
+      { id: "crm", label: "Add a member", focus: "enrol" },
       { id: "crm", label: "Send offers", focus: "outreach" },
     ],
   },
@@ -53,15 +53,19 @@ export const NAV_GROUPS: NavGroup[] = [
     key: "work", label: "My Work", glyph: "☰", roles: ["staff", "store"], section: "Operations",
     children: [
       { id: "storeday", label: "Tasks & Chores" },
-      { id: "tickets", label: "Raise an Issue" },
+      { id: "tickets", label: "Report a problem" },
     ],
+  },
+  {
+    key: "teamg", label: "Team", glyph: "◔", roles: ["store"], section: "Operations",
+    children: [{ id: "team", label: "Staff & Shifts" }],
   },
 
   // ── Insights — manager only ──
   {
     key: "performance", label: "Performance", glyph: "◧", roles: ["store"], section: "Insights",
     children: [
-      { id: "home", label: "Overview" },
+      { id: "home", label: "My store today" },
       { id: "reports", label: "Reports" },
     ],
   },
@@ -75,6 +79,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     key: "stock", label: "Stock Control", glyph: "▤", roles: ["store"], section: "Operations",
     children: [
+      { id: "merch", label: "Smart Moves" },
       { id: "sizeset", label: "Size & Stock" },
       { id: "replenish", label: "Replenishment" },
       { id: "truth", label: "Stock Position" },
@@ -98,6 +103,7 @@ export const NAV_GROUPS: NavGroup[] = [
     children: [
       { id: "tickets", label: "Issues & SLA" },
       { id: "allocate", label: "Reallocation" },
+      { id: "merch", label: "Smart Moves" },
       { id: "moves", label: "Strategic Moves" },
       { id: "catchment", label: "Catchment" },
       { id: "trainings", label: "Trainings" },
@@ -169,6 +175,8 @@ export const NAV_ACTIONS: NavAction[] = [
   { label: "Send offers to a segment", hint: "CRM · outreach", id: "crm", focus: "outreach", roles: ["staff", "store"] },
   { label: "Raise an issue", hint: "Opens tickets", id: "tickets", roles: ["staff", "store"] },
   { label: "Pull stock from the warehouse", hint: "Replenishment", id: "replenish", roles: ["store"] },
+  { label: "Plan next week's shifts", hint: "Staff & Shifts", id: "team", roles: ["store"] },
+  { label: "Review smart stock moves", hint: "Festival & swap suggestions", id: "merch", roles: ["store", "planner"] },
   { label: "Review agent approvals", hint: "AI agents waiting on you", id: "agents", roles: ["store", "planner", "leadership"] },
   { label: "Create a training", hint: "Publishes to every store", id: "trainings", roles: ["planner"] },
   { label: "Open live execution", hint: "The estate right now", id: "live", roles: ["planner", "leadership"] },

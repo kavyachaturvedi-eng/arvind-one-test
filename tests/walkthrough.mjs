@@ -17,9 +17,9 @@ const ROLES = [
   ["leadership", "CEO"],
 ];
 const MODULES_BY_ROLE = {
-  store: ["pos", "storeday", "savesale", "omni", "grn", "outward", "crm", "tickets", "home", "sizeset", "replenish", "cash", "truth", "reports", "agents", "ask"],
+  store: ["pos", "storeday", "savesale", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "truth", "reports", "agents", "ask"],
   staff: ["pos", "storeday", "savesale", "omni", "grn", "outward", "crm", "tickets"],
-  planner: ["live", "performance", "tickets", "allocate", "moves", "catchment", "trainings", "truth", "reports", "governance", "agents", "ask"],
+  planner: ["live", "performance", "tickets", "allocate", "merch", "moves", "catchment", "trainings", "truth", "reports", "governance", "agents", "ask"],
   leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "agents", "ask"],
 };
 
@@ -298,6 +298,72 @@ async function expandNav(page) {
       else fail("briefing did not log after dispatch");
     }
   }
+
+  // ── 4d. Staff hears the huddle, manager sees the count ──────────────────
+  console.log(`\n[Flow] Huddle heard by staff`);
+  await page.locator('[data-role="staff"]').first().click();
+  await page.waitForTimeout(260);
+  await exitTillIfOpen(page);
+  await expandNav(page);
+  await page.locator('nav [data-module="storeday"]').first().click();
+  await page.waitForTimeout(320);
+  const heardBtn = page.locator("[data-huddle-heard]");
+  if ((await heardBtn.count()) === 0) fail("staff listen card missing after dispatch");
+  else {
+    await heardBtn.click();
+    await page.waitForTimeout(260);
+    if (/● Heard/.test(await page.locator("main").innerText())) pass("staff marked the huddle as heard");
+    else fail("heard state did not stick");
+  }
+  await page.locator('[data-role="store"]').first().click();
+  await page.waitForTimeout(260);
+  await exitTillIfOpen(page);
+  await expandNav(page);
+  await page.locator('nav [data-module="storeday"]').first().click();
+  await page.waitForTimeout(320);
+  if (/heard by 5 of 7/.test(await page.locator("main").innerText())) pass("manager sees the heard count rise (5 of 7)");
+  else fail("manager heard-count did not update");
+
+  // ── 4e. Smart Moves — merchandising intelligence in plain words ─────────
+  console.log(`\n[Flow] Smart Moves`);
+  await page.locator('nav [data-module="merch"]').first().click();
+  await page.waitForTimeout(340);
+  const moveCards = await page.locator("[data-merch-move]").count();
+  if (moveCards >= 4) pass(`${moveCards} plain-language move cards rendered`);
+  else fail(`expected 4+ move cards, found ${moveCards}`);
+  const merchText = await page.locator("main").innerText();
+  if (/Onam/.test(merchText) && /last year/i.test(merchText)) pass("festival + last-year evidence shown");
+  else fail("festival evidence missing from move cards");
+  await page.locator("[data-merch-approve]").first().click();
+  await page.waitForTimeout(260);
+  if (/Approved — transfer raised/.test(await page.locator("main").innerText())) pass("move approved, transfer raised");
+  else fail("approving a move did not confirm");
+  await page.screenshot({ path: `${SHOTS}/merch.png`, fullPage: true });
+
+  // ── 4f. Staff & Shifts — the manager's people screen ────────────────────
+  console.log(`\n[Flow] Staff & Shifts`);
+  await page.locator('nav [data-module="team"]').first().click();
+  await page.waitForTimeout(340);
+  const cells = await page.locator("[data-shift-cell]").count();
+  if (cells >= 35) pass(`shift grid rendered (${cells} tappable cells)`);
+  else fail(`shift grid too small (${cells} cells)`);
+  const firstCell = page.locator("[data-shift-cell]").first();
+  const before = (await firstCell.innerText()).trim();
+  await firstCell.click();
+  await page.waitForTimeout(160);
+  const afterCell = (await firstCell.innerText()).trim();
+  if (before !== afterCell) pass(`shift cell cycles on tap (${before} → ${afterCell})`);
+  else fail("shift cell did not change on tap");
+  await page.locator("[data-staff-name]").fill("Priya Nair");
+  await page.locator("[data-staff-add]").click();
+  await page.waitForTimeout(260);
+  if (/Priya Nair/.test(await page.locator("main").innerText())) pass("new team member added to the grid");
+  else fail("added staff member did not appear");
+  await page.locator("[data-publish-week]").click();
+  await page.waitForTimeout(260);
+  if (/Week published/.test(await page.locator("main").innerText())) pass("week published to staff phones");
+  else fail("publish did not confirm");
+  await page.screenshot({ path: `${SHOTS}/team.png`, fullPage: true });
 
   // ── 5. Ask One — every suggested question answers ──────────────────────
   console.log(`\n[Flow] Ask One`);

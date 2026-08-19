@@ -8,7 +8,7 @@ import { HOUR, NOW, rng, storeById } from "@/lib/seed";
 import { slaState } from "@/lib/rules";
 import { useApp } from "@/lib/state";
 import { Card, Chip, Empty, Meter, SectionTitle, SlaBar, Stat, StatusDot, Table, Td, Th, inr } from "@/components/ui";
-import { BriefingModal } from "./Briefing";
+import { BriefingModal, HuddleListenCard, huddleHeardCount } from "./Briefing";
 import { VmAuditModal } from "./VmAudit";
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
@@ -83,9 +83,11 @@ export default function StoreDay() {
   );
   const [hqDone, setHqDone] = useState<string[]>([]);
   const [choresDone, setChoresDone] = useState<string[]>(["C-1", "C-2", "C-3"]);
-  const [briefed, setBriefed] = useState(false);
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [auditTask, setAuditTask] = useState<HqTask | null>(null);
+
+  const manager = app.role === "store";
+  const heardStats = huddleHeardCount(app.huddleHeardBy);
 
   const systemTasks = app.tasks
     .filter((t) => t.storeId === app.storeId && t.status !== "done")
@@ -126,14 +128,18 @@ export default function StoreDay() {
           <h1 className="text-xl font-semibold text-ink">Briefing &amp; Tasks</h1>
           <p className="text-sm text-ink2 mt-1">{store.name} · everything due today, with an owner.</p>
         </div>
-        {!briefed ? (
-          <button data-briefing className="btn-primary" onClick={() => setBriefingOpen(true)}>
-            ▶ Generate morning huddle
-          </button>
-        ) : (
-          <Chip tone="good">● Briefing done · 11:41</Chip>
-        )}
+        {manager &&
+          (!app.huddleDispatched ? (
+            <button data-briefing className="btn-primary" onClick={() => setBriefingOpen(true)}>
+              ▶ Generate morning huddle
+            </button>
+          ) : (
+            <Chip tone="good">● Briefing done · heard by {heardStats.heard} of {heardStats.total}</Chip>
+          ))}
       </div>
+
+      {/* Staff hear the huddle here; the manager sends it from the button above. */}
+      {!manager && <HuddleListenCard />}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="From HQ" value={String(openHq.length)} tone={openHq.length ? "warn" : "good"} sub="Open, with an SLA" emphasis />
@@ -270,14 +276,7 @@ export default function StoreDay() {
         </Card>
       </div>
 
-      <BriefingModal
-        open={briefingOpen}
-        onClose={() => setBriefingOpen(false)}
-        onLogged={() => {
-          setBriefed(true);
-          setBriefingOpen(false);
-        }}
-      />
+      <BriefingModal open={briefingOpen} onClose={() => setBriefingOpen(false)} onLogged={() => setBriefingOpen(false)} />
       {auditTask && (
         <VmAuditModal
           open={!!auditTask}
