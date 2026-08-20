@@ -7,7 +7,7 @@
 // is selling, what is broken, and the two things planning can do about it —
 // send units, or change the norm.
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Card, Chip, Meter, Modal, SectionTitle, SortTh, Stat, StatusDot, Swatch, Table, Tabs, Td, Th, relTime, useSort } from "@/components/ui";
 import {
   PERIOD_LABEL,
@@ -41,6 +41,16 @@ export default function StoreView() {
   const graded = useMemo(() => gradedStyles(storeId, 60), [storeId]);
   const mix = useMemo(() => mixForStore(storeId), [storeId]);
   const spark = useMemo(() => estateTrend([store]), [store]);
+
+  // A brief "opening" beat so arriving at a store reads as going somewhere,
+  // rather than the whole page swapping under you. Client-only, so it never
+  // affects what the server rendered.
+  const [opening, setOpening] = useState(true);
+  useEffect(() => {
+    setOpening(true);
+    const t = setTimeout(() => setOpening(false), 520);
+    return () => clearTimeout(t);
+  }, [storeId]);
 
   const [cut, setCut] = useState<Cut>("all");
   const [assign, setAssign] = useState(false);
@@ -83,7 +93,23 @@ export default function StoreView() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {opening && (
+        <div
+          className="absolute inset-0 z-30 grid place-items-center"
+          style={{ background: "var(--surface-1)", animation: "storeOpen 520ms ease-out forwards" }}
+          data-store-opening
+          aria-live="polite"
+        >
+          <div className="text-center">
+            <div className="label mb-2">Opening Store 360</div>
+            <div className="text-xl font-semibold text-ink">{store.name}</div>
+            <div className="mx-auto mt-3 h-0.5 w-28 overflow-hidden" style={{ background: "var(--line)" }}>
+              <div className="h-full" style={{ background: "var(--brand)", animation: "storeOpenBar 520ms ease-out forwards" }} />
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           {/* Where you are, and every level of it is a way back. */}

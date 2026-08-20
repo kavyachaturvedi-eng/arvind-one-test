@@ -40,6 +40,9 @@ import BillHistory from "@/components/modules/BillHistory";
 import Store360 from "@/components/modules/Store360";
 import Inventory from "@/components/modules/Inventory";
 import StoreView from "@/components/modules/StoreDetail";
+import HqTasks from "@/components/modules/HqTasks";
+import ActivityLog from "@/components/modules/ActivityLog";
+import Stores from "@/components/modules/Stores";
 import ReplenRunView from "@/components/modules/ReplenRun";
 import Allocation from "@/components/modules/Allocation";
 import Otb from "@/components/modules/Otb";
@@ -68,6 +71,12 @@ function Router() {
       return <Asks />;
     case "planset":
       return <PlanningSettings />;
+    case "hqtask":
+      return <HqTasks />;
+    case "log":
+      return <ActivityLog />;
+    case "stores":
+      return <Stores />;
 
     case "live":
       return <LiveExecution />;

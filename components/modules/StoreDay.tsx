@@ -70,7 +70,17 @@ export default function StoreDay() {
   const app = useApp();
   const store = storeById(app.storeId);
 
-  const hq = useMemo(() => buildHq(app.storeId), [app.storeId]);
+  const seededHq = useMemo(() => buildHq(app.storeId), [app.storeId]);
+  // Tasks head office assigned land here instantly, above the seeded ones.
+  const hq = useMemo<HqTask[]>(
+    () => [
+      ...app.hqTasks
+        .filter((t) => t.storeIds.includes(app.storeId))
+        .map((t) => ({ id: t.id, title: t.title, from: t.from, due: t.dueAt, slaHours: t.slaHours, needsPhoto: t.needsPhoto })),
+      ...seededHq,
+    ],
+    [app.hqTasks, app.storeId, seededHq],
+  );
   const seededTrainings = useMemo(() => buildTrainings(app.storeId), [app.storeId]);
   // Modules published by Planning land here instantly, on top of the seeded ones.
   const trainings = useMemo<Training[]>(

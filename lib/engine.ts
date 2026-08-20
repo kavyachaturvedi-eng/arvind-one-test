@@ -16,6 +16,7 @@ import {
   STORES,
   STYLES,
   clusterById,
+  onStoreAdded,
   rng,
   storeById,
   styleById,
@@ -68,7 +69,17 @@ const byStore = new Map<string, StockRow[]>();
 const byStyle = new Map<string, StockRow[]>();
 const bySku = new Map<string, StockRow>();
 
-for (const row of STOCK) {
+
+// A store opened at runtime has to land in these indexes, and every cache built
+// over them has to be dropped, or the new door reads as empty everywhere.
+for (const row of STOCK) indexRow(row);
+
+onStoreAdded((_store, rows) => {
+  for (const row of rows) indexRow(row);
+  vitalsCache = null;
+});
+
+function indexRow(row: StockRow) {
   if (!byStore.has(row.storeId)) byStore.set(row.storeId, []);
   byStore.get(row.storeId)!.push(row);
   const styleKey = `${row.storeId}|${row.styleId}`;

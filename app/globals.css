@@ -277,3 +277,16 @@ tbody tr:hover {
 @media print {
   .no-print { display: none !important; }
 }
+
+/* Arriving at a store: a short beat that names where you are going, then clears.
+   Opacity only — a transform here would become the containing block for any
+   fixed-position child, which is the Safari bug that ate the till once. */
+@keyframes storeOpen {
+  0%   { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+@keyframes storeOpenBar {
+  0%   { width: 0%; }
+  100% { width: 100%; }
+}

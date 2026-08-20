@@ -315,9 +315,14 @@ export const styleById = (id: string) => STYLES.find((s) => s.id === id)!;
 // meaningfully different number from naive ROS — which is the whole point of
 // the metric.
 
-export const STOCK: StockRow[] = (() => {
+/**
+ * Stock for one store, generated deterministically from its index. Extracted so
+ * a store added at runtime (Admin → Stores) gets an assortment built exactly the
+ * same way the seeded ones did, rather than appearing with an empty floor.
+ */
+export function generateStockForStore(store: Store, si: number): StockRow[] {
   const rows: StockRow[] = [];
-  STORES.forEach((store, si) => {
+  {
     STYLES.forEach((style, yi) => {
       // Not every style is carried by every store — assortment is clustered by
       // grade and region, exactly as the buying team described it.
@@ -367,9 +372,11 @@ export const STOCK: StockRow[] = (() => {
         });
       });
     });
-  });
+  }
   return rows;
-})();
+}
+
+export const STOCK: StockRow[] = STORES.flatMap((store, si) => generateStockForStore(store, si));
 
 // ── Norm calibration ─────────────────────────────────────────────────────────
 //
@@ -982,3 +989,84 @@ export const OTB: OtbLine[] = (() => {
 })();
 
 export const otbForBrand = (brand: Brand) => OTB.filter((l) => l.brand === brand);
+
+// ── Stores added at runtime ──────────────────────────────────────────────────
+//
+// Admin can open a store while the app is running. A store is only real once it
+// has an assortment, a norm and a cluster, so this builds all three and then
+// tells the engine to index it — which is what makes it appear in Store 360,
+// the run, allocation and the OTB store counts without any further wiring.
+
+export interface NewStoreInput {
+  name: string;
+  city: string;
+  brand: Brand;
+  region: Region;
+  format: Store["format"];
+  model: Store["model"];
+  grade: Store["grade"];
+  clusterId: string;
+  pincode: string;
+  headcount: number;
+  managerName: string;
+}
+
+type StoreAddedListener = (store: Store, rows: StockRow[]) => void;
+let storeAddedListener: StoreAddedListener | null = null;
+
+/** The engine registers here so its indexes and caches learn about new stores. */
+export function onStoreAdded(fn: StoreAddedListener) {
+  storeAddedListener = fn;
+}
+
+/** Every store opened this session, in the order they were opened. */
+export const ADDED_STORES: Store[] = [];
+
+export function createStore(input: NewStoreInput): Store {
+  const index = STORES.length;
+  const r = rng(1000 + index);
+  const gradeMult = input.grade === "A" ? 1 : input.grade === "B" ? 0.62 : 0.38;
+
+  const store: Store = {
+    id: `${input.brand.split(" ")[0].slice(0, 2).toUpperCase()}-${input.city.slice(0, 3).toUpperCase()}-${String(index + 1).padStart(3, "0")}`,
+    code: `S${String(index + 1).padStart(3, "0")}`,
+    name: input.name,
+    brand: input.brand,
+    city: input.city,
+    region: input.region,
+    format: input.format,
+    model: input.model,
+    grade: input.grade,
+    clusterId: input.clusterId,
+    norm: Math.round((2600 + r() * 1400) * gradeMult),
+    targetMonth: Math.round((4_200_000 + r() * 2_400_000) * gradeMult),
+    x: Math.round(r() * 70),
+    y: Math.round(r() * 95),
+    managerName: input.managerName,
+    headcount: input.headcount,
+    pincode: input.pincode,
+    replenShare: REPLEN_SHARE[input.grade],
+  };
+
+  STORES.push(store);
+  ADDED_STORES.push(store);
+
+  // A brand-new door opens thin: it gets the generated assortment, but the
+  // sales history is zeroed, because it has not traded yet. That is why a new
+  // store shows up in the run on day one — its fill rate is real, its rate of
+  // sale is not.
+  const rows = generateStockForStore(store, index).map((row) => ({
+    ...row,
+    sold28: 0,
+    soldOnMarkdown28: 0,
+    inStockDays: 1,
+  }));
+  STOCK.push(...rows);
+
+  // A cluster's cities list is what maps a store to it, so keep it consistent.
+  const cluster = CLUSTERS.find((c) => c.id === input.clusterId);
+  if (cluster && !cluster.cities.includes(input.city)) cluster.cities.push(input.city);
+
+  storeAddedListener?.(store, rows);
+  return store;
+}

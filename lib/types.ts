@@ -575,3 +575,20 @@ export interface NormChange {
   to: number;
   reason: string;
 }
+
+/**
+ * A task head office assigns to stores. The store sees these under "From HQ" in
+ * Tasks & Chores; this is the other half of that — HQ raising and assigning one.
+ */
+export interface HqAssignment {
+  id: string;
+  title: string;
+  /** The desk it comes from: VM, Retail Ops, Commercial, Planning… */
+  from: string;
+  storeIds: string[];
+  dueAt: number;
+  slaHours: number;
+  needsPhoto: boolean;
+  raisedBy: string;
+  raisedAt: number;
+}

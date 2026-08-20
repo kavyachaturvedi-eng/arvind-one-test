@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { rng } from "./seed";
+import type { Brand, Category, Style } from "./types";
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
 
@@ -18,6 +19,50 @@ export interface Offer {
   kind: "Bundle" | "Brand" | "Loyalty" | "Bank" | "Clearance";
   /** Cashier note: the one thing people get wrong about this offer. */
   note?: string;
+  /**
+   * What the offer actually applies to, in a form the app can check against a
+   * style — so a cashier can be told which discount lands on the item in their
+   * hand instead of reading five offer descriptions and guessing.
+   */
+  eligibility: {
+    brands?: Brand[];
+    categories?: Category[];
+    /** Minimum MRP of the item itself. */
+    minMrp?: number;
+    /** True when the offer is decided by the bill or the member, not the item. */
+    notItemLevel?: boolean;
+    /** Only styles past their full-price window. */
+    eossOnly?: boolean;
+  };
+}
+
+/** What comes off a given style under a given offer, and whether it applies. */
+export function offerForStyle(offer: Offer, style: Style, isEoss: boolean): { applies: boolean; takesOff: string } {
+  const e = offer.eligibility;
+  if (e.notItemLevel) return { applies: false, takesOff: "Decided by the bill, not the item" };
+  if (e.eossOnly && !isEoss) return { applies: false, takesOff: "" };
+  if (!e.eossOnly && isEoss) return { applies: false, takesOff: "" };
+  if (e.brands && !e.brands.includes(style.brand)) return { applies: false, takesOff: "" };
+  if (e.categories && !e.categories.includes(style.category)) return { applies: false, takesOff: "" };
+  if (e.minMrp && style.mrp < e.minMrp) return { applies: false, takesOff: `Needs MRP ₹${e.minMrp.toLocaleString("en-IN")} or more` };
+
+  switch (offer.id) {
+    case "OF-1":
+      return { applies: true, takesOff: `₹${Math.round(style.mrp * 0.2).toLocaleString("en-IN")} off the second shirt` };
+    case "OF-2":
+      return { applies: true, takesOff: "₹1,000 off" };
+    case "OF-5":
+      return { applies: true, takesOff: "Ticket price on the rack" };
+    default:
+      return { applies: true, takesOff: offer.says };
+  }
+}
+
+/** Every offer that lands on this style right now. */
+export function offersForStyle(style: Style, isEoss: boolean): Array<{ offer: Offer; takesOff: string }> {
+  return OFFERS.map((offer) => ({ offer, ...offerForStyle(offer, style, isEoss) }))
+    .filter((r) => r.applies)
+    .map(({ offer, takesOff }) => ({ offer, takesOff }));
 }
 
 export const OFFERS: Offer[] = [
@@ -29,6 +74,7 @@ export const OFFERS: Offer[] = [
     endsIn: "6 days left",
     kind: "Bundle",
     note: "Does not stack with a coupon. The till picks whichever saves more.",
+    eligibility: { brands: ["Arrow", "U.S. Polo Assn."], categories: ["Shirts"] },
   },
   {
     id: "OF-2",
@@ -37,6 +83,7 @@ export const OFFERS: Offer[] = [
     applies: "Flying Machine and Tommy denim",
     endsIn: "Ends Sunday",
     kind: "Brand",
+    eligibility: { brands: ["Flying Machine", "Tommy Hilfiger"], categories: ["Denim"], minMrp: 4999 },
   },
   {
     id: "OF-3",
@@ -46,6 +93,7 @@ export const OFFERS: Offer[] = [
     endsIn: "3 days left",
     kind: "Loyalty",
     note: "Applies automatically once the member is on the bill.",
+    eligibility: { notItemLevel: true },
   },
   {
     id: "OF-4",
@@ -55,6 +103,7 @@ export const OFFERS: Offer[] = [
     endsIn: "Till month end",
     kind: "Bank",
     note: "The terminal applies it. Do not discount at the till as well.",
+    eligibility: { notItemLevel: true },
   },
   {
     id: "OF-5",
@@ -64,6 +113,7 @@ export const OFFERS: Offer[] = [
     endsIn: "Ongoing",
     kind: "Clearance",
     note: "EOSS items do not earn points and cannot be exchanged after 7 days.",
+    eligibility: { eossOnly: true },
   },
 ];
 

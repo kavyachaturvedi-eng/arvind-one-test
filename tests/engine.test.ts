@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLUSTERS, CURRENT_SEASON, METRICS, NOW, OTB, ROLES, STOCK, STORES, STYLES, dropsForSeason, rng } from "../lib/seed";
+import { CLUSTERS, CURRENT_SEASON, METRICS, NOW, OTB, ROLES, STOCK, STORES, STYLES, createStore, dropsForSeason, rng } from "../lib/seed";
 import { dayOfWeekIST, fillBand, lastRunAt, mixVerdict, otbRemaining, qualifiesForRun } from "../lib/rules";
 import {
   allVitals,
@@ -1117,5 +1117,73 @@ describe("own-brand assortment", () => {
       .forEach((l) => {
         expect(STYLES.find((s) => s.id === l.styleId)!.brand).toBe(PLANNING_BRAND);
       });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Opening a store at runtime
+//
+// Runs last on purpose: it mutates the shared dataset, exactly as the app does.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("adding a store", () => {
+  it("appears everywhere planning looks, with a real assortment", () => {
+    const beforeStores = planningStores().length;
+    const beforeUnits = estateSummary(planningStores(), "week").sellableUnits;
+
+    const store = createStore({
+      name: "Test Door Andheri",
+      city: "Mumbai",
+      brand: "Tommy Hilfiger",
+      region: "West",
+      format: "Mall",
+      model: "COCO",
+      grade: "B",
+      clusterId: "CL-MUM",
+      pincode: "400053",
+      headcount: 9,
+      managerName: "Test Manager",
+    });
+
+    // In the estate list…
+    expect(planningStores().length).toBe(beforeStores + 1);
+    expect(planningStores().some((s) => s.id === store.id)).toBe(true);
+    // …behind the filters it belongs to…
+    expect(filterStores({ ...NO_FILTERS, cluster: "CL-MUM" }).some((s) => s.id === store.id)).toBe(true);
+    expect(filterStores({ ...NO_FILTERS, grade: "B" }).some((s) => s.id === store.id)).toBe(true);
+    // …with stock indexed, so it is not an empty shell…
+    expect(stockForStore(store.id).length).toBeGreaterThan(0);
+    expect(stylesAtStore(store.id).length).toBeGreaterThan(0);
+    // …counted in the estate totals…
+    expect(estateSummary(planningStores(), "week").sellableUnits).toBeGreaterThan(beforeUnits);
+    // …and in the buy's cut across stores.
+    expect(dropAllocation("AW26-D1", "Tommy Hilfiger").some((r) => r.store.id === store.id)).toBe(true);
+  });
+
+  it("gives the new door a norm, a cluster and a replenish share", () => {
+    const store = STORES[STORES.length - 1];
+    expect(store.norm).toBeGreaterThan(0);
+    expect(CLUSTERS.some((c) => c.id === store.clusterId)).toBe(true);
+    expect(store.replenShare).toBeGreaterThan(0);
+    expect(store.replenShare).toBeLessThanOrEqual(1);
+  });
+
+  it("opens with no trading history, so its rate of sale is honestly zero", () => {
+    const store = STORES[STORES.length - 1];
+    const rows = stockForStore(store.id);
+    expect(rows.every((r) => r.sold28 === 0)).toBe(true);
+    const v = vitalsFor(store.id);
+    expect(Number.isFinite(v.fillRate)).toBe(true);
+    expect(v.fillRate).toBeGreaterThan(0);
+    expect(Number.isFinite(v.sellThrough)).toBe(true);
+  });
+
+  it("produces finite figures on every planning surface for the new door", () => {
+    const store = STORES[STORES.length - 1];
+    const s = estateSummary([store], "week");
+    [s.sales, s.fillRate, s.sellableUnits, s.valueAtRisk, s.corePct].forEach((n) => expect(Number.isFinite(n)).toBe(true));
+    const rows = storeRows([store], "week");
+    expect(rows).toHaveLength(1);
+    expect(Number.isFinite(rows[0].achievement)).toBe(true);
   });
 });

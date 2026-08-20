@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as planning from "../lib/rules";
-import { NOW } from "../lib/seed";
+import { NOW, STYLES } from "../lib/seed";
+import { OFFERS, offerForStyle, offersForStyle } from "../lib/offers";
 import {
   CARTON_MIN_UNITS,
   OUTWARD_CODE_LIMIT,
@@ -812,5 +813,66 @@ describe("column sorting", () => {
 
   it("keeps zeroes in place rather than treating them as missing", () => {
     expect(sortBy(rows, (r) => r.risk, "asc").map((r) => r.risk)).toEqual([0, 900, 4000]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Which offer lands on which item
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("offers against an item", () => {
+  const styleOf = (over: Partial<(typeof STYLES)[number]>) => ({ ...STYLES[0], ...over });
+
+  it("matches on brand and category together, not either", () => {
+    const denimOffer = OFFERS.find((o) => o.id === "OF-2")!;
+    const tommyDenim = styleOf({ brand: "Tommy Hilfiger", category: "Denim", mrp: 6499 });
+    const tommyShirt = styleOf({ brand: "Tommy Hilfiger", category: "Shirts", mrp: 6499 });
+    const arrowDenim = styleOf({ brand: "Arrow", category: "Denim", mrp: 6499 });
+    expect(offerForStyle(denimOffer, tommyDenim, false).applies).toBe(true);
+    expect(offerForStyle(denimOffer, tommyShirt, false).applies).toBe(false);
+    expect(offerForStyle(denimOffer, arrowDenim, false).applies).toBe(false);
+  });
+
+  it("refuses an item under the offer's MRP floor, and says why", () => {
+    const denimOffer = OFFERS.find((o) => o.id === "OF-2")!;
+    const cheap = styleOf({ brand: "Tommy Hilfiger", category: "Denim", mrp: 3999 });
+    const r = offerForStyle(denimOffer, cheap, false);
+    expect(r.applies).toBe(false);
+    expect(r.takesOff).toContain("4,999");
+  });
+
+  it("keeps bill-level and member-level offers off an item", () => {
+    const bank = OFFERS.find((o) => o.id === "OF-4")!;
+    const loyalty = OFFERS.find((o) => o.id === "OF-3")!;
+    [bank, loyalty].forEach((o) => {
+      const r = offerForStyle(o, styleOf({}), false);
+      expect(r.applies).toBe(false);
+      expect(r.takesOff).toContain("bill");
+    });
+  });
+
+  it("separates EOSS from full price in both directions", () => {
+    const eoss = OFFERS.find((o) => o.id === "OF-5")!;
+    const bundle = OFFERS.find((o) => o.id === "OF-1")!;
+    const shirt = styleOf({ brand: "Arrow", category: "Shirts" });
+    expect(offerForStyle(eoss, shirt, true).applies).toBe(true);
+    expect(offerForStyle(eoss, shirt, false).applies).toBe(false);
+    // A full-price bundle must not fire on a marked-down rack.
+    expect(offerForStyle(bundle, shirt, false).applies).toBe(true);
+    expect(offerForStyle(bundle, shirt, true).applies).toBe(false);
+  });
+
+  it("quotes what actually comes off, in rupees where it can", () => {
+    const bundle = OFFERS.find((o) => o.id === "OF-1")!;
+    const r = offerForStyle(bundle, styleOf({ brand: "Arrow", category: "Shirts", mrp: 2500 }), false);
+    expect(r.takesOff).toContain("500");
+  });
+
+  it("returns every offer that lands on an item, and nothing that does not", () => {
+    const shirt = styleOf({ brand: "Arrow", category: "Shirts", mrp: 2999 });
+    const hits = offersForStyle(shirt, false);
+    expect(hits.length).toBeGreaterThan(0);
+    hits.forEach((h) => expect(h.takesOff.length).toBeGreaterThan(0));
+    expect(hits.some((h) => h.offer.id === "OF-4")).toBe(false);
   });
 });

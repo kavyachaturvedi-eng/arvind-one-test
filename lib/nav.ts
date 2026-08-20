@@ -140,6 +140,7 @@ export const NAV_GROUPS: NavGroup[] = [
     key: "pdecide", label: "Decide", glyph: "⇉", roles: ["planner"], section: "Planning",
     children: [
       { id: "asks", label: "Store asks" },
+      { id: "hqtask", label: "Store tasks" },
       { id: "tickets", label: "Issues & SLA" },
     ],
   },
@@ -147,6 +148,7 @@ export const NAV_GROUPS: NavGroup[] = [
     key: "pdata", label: "Data", glyph: "▤", roles: ["planner", "catplan"], section: "Planning",
     children: [
       { id: "reports", label: "Reports" },
+      { id: "log", label: "Activity log" },
       { id: "governance", label: "Metric Registry" },
       { id: "planset", label: "Settings" },
     ],
@@ -180,8 +182,13 @@ export const NAV_GROUPS: NavGroup[] = [
     key: "adata", label: "Data", glyph: "◎", roles: ["leadership"], section: "Super Admin",
     children: [
       { id: "truth", label: "Stock Position" },
+      { id: "log", label: "Activity log" },
       { id: "governance", label: "Metric Registry" },
     ],
+  },
+  {
+    key: "aest", label: "Estate", glyph: "▦", roles: ["leadership"], section: "Super Admin",
+    children: [{ id: "stores", label: "Stores" }],
   },
   {
     key: "aai", label: "AI", glyph: "✳", roles: ["leadership"], section: "Super Admin",

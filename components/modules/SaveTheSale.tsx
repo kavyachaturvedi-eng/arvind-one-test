@@ -183,12 +183,6 @@ export default function SaveTheSale() {
         <h1 className="text-xl font-semibold text-ink">Inter-store Transfer</h1>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <Stat label="Raised today" value={String(openRequests)} sub={`${autoApproved} auto-approved`} />
-        <Stat label="Self-approve up to" value={`${AUTO_APPROVE_MAX_QTY} units`} />
-        <Stat label="Same-day lane" value="40 km" />
-      </div>
-
       <div className="grid lg:grid-cols-5 gap-4">
         {/* ── Left: the flow ────────────────────────────────────────────── */}
         <Card className="lg:col-span-3">

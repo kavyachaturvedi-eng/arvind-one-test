@@ -4,10 +4,11 @@
 // counter, plus every coupon code and whether it will actually work.
 // Published by Commercial and the campaign team; the store only reads it.
 
-import React, { useState } from "react";
-import { COUPONS, OFFERS, applyCoupon } from "@/lib/offers";
+import React, { useMemo, useState } from "react";
+import { COUPONS, OFFERS, applyCoupon, offersForStyle } from "@/lib/offers";
 import { useApp } from "@/lib/state";
-import { Card, Chip, SectionTitle, Stat, StatusDot, Table, Td, Th, inr } from "@/components/ui";
+import { Card, Chip, SectionTitle, Stat, StatusDot, Swatch, Table, Td, Th, inr } from "@/components/ui";
+import { daysLeftInWindow, stylesAtStore } from "@/lib/engine";
 
 export default function Offers() {
   const app = useApp();
@@ -23,12 +24,82 @@ export default function Offers() {
     setChecked({ code: c, ok: res.ok, message: res.message, amount: res.amount });
   }
 
+  // Which discount lands on the item in the customer's hand. The question a
+  // cashier actually asks, which reading five offer descriptions does not answer.
+  const carried = useMemo(() => stylesAtStore(app.storeId), [app.storeId]);
+  const [q, setQ] = useState("");
+  const matches = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return carried
+      .map((style) => {
+        const isEoss = daysLeftInWindow(style) <= 0;
+        return { style, isEoss, offers: offersForStyle(style, isEoss) };
+      })
+      .filter((r) => !needle || r.style.name.toLowerCase().includes(needle) || r.style.id.toLowerCase().includes(needle) || r.style.category.toLowerCase().includes(needle))
+      .sort((a, b) => b.offers.length - a.offers.length);
+  }, [carried, q]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <h1 className="text-xl font-semibold text-ink">Offers</h1>
         <Chip tone="neutral">Published by Commercial</Chip>
       </div>
+
+      <Card>
+        <SectionTitle title="What comes off which item" />
+        <div className="flex items-center gap-2 mb-3">
+          <input
+            value={q}
+            data-offer-item-search
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Scan the tag, or type a name like polo"
+            className="flex-1 rounded-lg border border-line bg-raised px-3 py-2.5 text-sm text-ink placeholder:text-muted"
+          />
+        </div>
+        <Table>
+          <thead>
+            <tr>
+              <Th>SKU</Th>
+              <Th>Item</Th>
+              <Th>Colour</Th>
+              <Th align="right">MRP</Th>
+              <Th>Offer that applies</Th>
+              <Th align="right">Comes off</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {matches.slice(0, 14).map((r) =>
+              r.offers.length === 0 ? (
+                <tr key={r.style.id} data-offer-item="none">
+                  <Td className="num text-xs text-ink2">{r.style.id}</Td>
+                  <Td className="text-ink">{r.style.name}</Td>
+                  <Td>
+                    <Swatch hex={r.style.colourHex} label={r.style.colour} />
+                  </Td>
+                  <Td align="right" className="num">{inr(r.style.mrp)}</Td>
+                  <Td className="text-ink2">Full price — no offer on this item</Td>
+                  <Td align="right" className="text-ink2">—</Td>
+                </tr>
+              ) : (
+                r.offers.map((o, i) => (
+                  <tr key={`${r.style.id}-${o.offer.id}`} data-offer-item="yes">
+                    <Td className="num text-xs text-ink2">{i === 0 ? r.style.id : ""}</Td>
+                    <Td className="text-ink">{i === 0 ? r.style.name : ""}</Td>
+                    <Td>{i === 0 ? <Swatch hex={r.style.colourHex} label={r.style.colour} /> : null}</Td>
+                    <Td align="right" className="num">{i === 0 ? inr(r.style.mrp) : ""}</Td>
+                    <Td>
+                      <span className="text-ink">{o.offer.name}</span>
+                      {o.offer.note && <div className="text-2xs text-muted mt-0.5">{o.offer.note}</div>}
+                    </Td>
+                    <Td align="right" className="num">{o.takesOff}</Td>
+                  </tr>
+                ))
+              ),
+            )}
+          </tbody>
+        </Table>
+      </Card>
 
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Running now" value={String(OFFERS.length)} emphasis />

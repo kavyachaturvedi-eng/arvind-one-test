@@ -29,6 +29,7 @@ import type {
   AuditEntry,
   TrainingItem,
   CashException,
+  HqAssignment,
   ISTRequest,
   ISTStatus,
   NormChange,
@@ -39,6 +40,7 @@ import type {
   RequestEvidence,
   RoleId,
   Size,
+  Store,
   Task,
   Ticket,
 } from "./types";
@@ -84,6 +86,9 @@ export type ModuleId =
   | "otb"
   | "asks"
   | "planset"
+  | "hqtask"
+  | "log"
+  | "stores"
 ;
 
 interface AppState {
@@ -135,6 +140,8 @@ interface AppState {
   /** Norm overrides planning has set, by store id. Falls back to the seed norm. */
   norms: Record<string, number>;
   normLog: NormChange[];
+  /** Tasks head office has assigned to stores this session. */
+  hqTasks: HqAssignment[];
   /** Units planning has pushed to a store outside the run. */
   pushes: AllocationPush[];
 }
@@ -228,6 +235,8 @@ type Action =
   | { type: "run:release"; lineIds: string[]; by: string; label: string }
   | { type: "run:drop"; lineIds: string[]; by: string; label: string }
   | { type: "norm:set"; storeId: string; to: number; by: string; reason: string }
+  | { type: "hq:assign"; task: HqAssignment }
+  | { type: "store:add"; store: Store }
   | { type: "alloc:push"; pushes: AllocationPush[]; by: string; label: string }
   | { type: "reset" };
 
@@ -449,6 +458,7 @@ const initial: AppState = {
   dropped: [],
   norms: {},
   normLog: [],
+  hqTasks: [],
   pushes: [],
   audit: [
     { at: NOW - 64 * 60_000, actor: "Commercial", action: "Price revision published", object: "11 styles", system: "Arvind One" },
@@ -779,6 +789,37 @@ function reducer(state: AppState, action: Action): AppState {
         audit: [{ at: NOW, actor: action.by, action: "Norm changed", object: `${store.name} · ${from} → ${action.to} units`, system: "Arvind One" }, ...state.audit],
       };
     }
+
+    case "hq:assign":
+      return {
+        ...state,
+        hqTasks: [action.task, ...state.hqTasks],
+        audit: [
+          {
+            at: action.task.raisedAt,
+            actor: action.task.raisedBy,
+            action: "Task assigned to stores",
+            object: `${action.task.title} · ${action.task.storeIds.length} ${action.task.storeIds.length === 1 ? "store" : "stores"}`,
+            system: "Arvind One",
+          },
+          ...state.audit,
+        ],
+      };
+
+    case "store:add":
+      return {
+        ...state,
+        audit: [
+          {
+            at: NOW,
+            actor: "Super Admin",
+            action: "Store opened",
+            object: `${action.store.name} · ${action.store.code} · ${action.store.brand}`,
+            system: "Arvind One",
+          },
+          ...state.audit,
+        ],
+      };
 
     case "alloc:push":
       return {
