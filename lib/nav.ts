@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Information architecture — the single source of truth for navigation.
-// Two levels: a SECTION (Operations / Insights / Planning / Admin) contains
+// Two levels: a SECTION (Operations / Insights / Planning / Super Admin) contains
 // function GROUPS (Movement, Customers, …), each holding selectable items.
 // The sidebar and the command palette both read from here, so they can
 // never disagree about what a role can reach.
@@ -142,9 +142,9 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
 
-  // ── Admin ──
+  // ── Super Admin ──
   {
-    key: "aover", label: "Overview", glyph: "◆", roles: ["leadership"], section: "Admin",
+    key: "aover", label: "Overview", glyph: "◆", roles: ["leadership"], section: "Super Admin",
     children: [
       { id: "exec", label: "Executive View" },
       { id: "live", label: "Live Execution" },
@@ -152,7 +152,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    key: "aact", label: "Act", glyph: "⇉", roles: ["leadership"], section: "Admin",
+    key: "aact", label: "Act", glyph: "⇉", roles: ["leadership"], section: "Super Admin",
     children: [
       { id: "allocate", label: "Reallocation" },
       { id: "moves", label: "Strategic Moves" },
@@ -160,14 +160,14 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    key: "adata", label: "Data", glyph: "◎", roles: ["leadership"], section: "Admin",
+    key: "adata", label: "Data", glyph: "◎", roles: ["leadership"], section: "Super Admin",
     children: [
       { id: "truth", label: "Stock Position" },
       { id: "governance", label: "Metric Registry" },
     ],
   },
   {
-    key: "aai", label: "AI", glyph: "✳", roles: ["leadership"], section: "Admin",
+    key: "aai", label: "AI", glyph: "✳", roles: ["leadership"], section: "Super Admin",
     children: [
       { id: "agents", label: "AI Agents" },
       { id: "ask", label: "Ask One" },
@@ -175,7 +175,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-export const SECTION_ORDER = ["Operations", "Insights", "Planning", "Admin"];
+export const SECTION_ORDER = ["Operations", "Insights", "Planning", "Super Admin"];
 
 /** Quick actions the command palette offers on top of plain navigation. */
 export interface NavAction {

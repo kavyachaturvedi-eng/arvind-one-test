@@ -297,7 +297,7 @@ function LiveDot() {
   return <span className="w-2 h-2 rounded-full pulse-crit" style={{ background: "var(--status-good)" }} aria-label="live" />;
 }
 
-// ── Role hierarchy: Store (Manager | Staff) · Planning · Admin ───────────────
+// ── Role hierarchy: Store (Manager | Staff) · Planning · Super Admin ─────────
 
 function RoleSwitcher() {
   const app = useApp();
@@ -327,7 +327,7 @@ function RoleSwitcher() {
         Planning
       </button>
       <button data-role="leadership" onClick={() => app.setRole("leadership")} title="Leadership view" className={pill(app.role === "leadership")}>
-        Admin
+        Super Admin
       </button>
     </div>
   );

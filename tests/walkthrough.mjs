@@ -766,7 +766,7 @@ async function expandNav(page) {
 
   // ── 7. Store switching across the whole estate ─────────────────────────
   // Store roles are locked to their store; the focus-store picker lives with
-  // Planning and Admin. Switch to Planning to sweep the estate.
+  // Planning and Super Admin. Switch to Planning to sweep the estate.
   console.log(`\n[Flow] Store switching`);
   if ((await page.locator("header select").count()) === 0) pass("store roles have no store switcher — locked to their store");
   else fail("store role can still switch stores from the header");

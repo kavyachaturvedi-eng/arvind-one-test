@@ -83,8 +83,8 @@ export const ROLES: Role[] = [
   },
   {
     id: "leadership",
-    label: "Admin",
-    person: "Admin",
+    label: "Super Admin",
+    person: "Super Admin",
     title: "Leadership view",
     scope: "Enterprise",
     initials: "S",

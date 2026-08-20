@@ -592,7 +592,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       case "planner":
         return "Planning";
       case "leadership":
-        return "Admin";
+        return "Super Admin";
     }
   }, [state.role, state.userName]);
 

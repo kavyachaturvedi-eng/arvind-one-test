@@ -164,7 +164,7 @@ export function agentActivity(agentId: AgentId, storeId: string): AgentAction[] 
       return [
         { at: min(28), label: "Flagged UB City: conversion 38% below its Thursday pattern since 10:30", kind: "flagged" },
         { at: min(75), label: "Flagged Quest Kolkata: 3 SLA breaches building in one morning", kind: "flagged" },
-        { at: min(222), label: "Delivered the 08:00 estate brief to Planning and Admin", kind: "did" },
+        { at: min(222), label: "Delivered the 08:00 estate brief to Planning and Super Admin", kind: "did" },
       ];
   }
 }

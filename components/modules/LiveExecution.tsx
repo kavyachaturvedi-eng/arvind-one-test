@@ -16,7 +16,7 @@ export default function LiveExecution() {
   const app = useApp();
   const e = estateExecution();
   const statuses = useMemo(() => allExecutionStatus(), []);
-  // Admin sees the short version: only stores needing a look, no approval queue.
+  // Super Admin sees the short version: only stores needing a look, no approval queue.
   const admin = app.role === "leadership";
   const [filter, setFilter] = useState<"all" | "attention" | "behind">(admin ? "attention" : "all");
 

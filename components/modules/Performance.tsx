@@ -51,7 +51,7 @@ type SortKey = "achievement" | "sellThrough" | "fillRate" | "conversion" | "atv"
 
 export default function Performance() {
   const app = useApp();
-  // Admin gets the short version: KPIs, the causal chain, and the rollups —
+  // Super Admin gets the short version: KPIs, the causal chain, and the rollups —
   // no model sliders, no store league.
   const admin = app.role === "leadership";
   const e = useMemo(() => enterprise(), []);
