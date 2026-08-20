@@ -33,6 +33,17 @@ import {
   warehouseHeld,
   dropAllocation,
   dropUnitsFor,
+  NO_FILTERS,
+  PLANNING_BRAND,
+  estateSummary,
+  filterStores,
+  filtersActive,
+  inventoryByCategory,
+  inventoryByCluster,
+  inventoryByType,
+  planningStores,
+  storeRows,
+  styleInventory,
 } from "../lib/engine";
 
 const finite = (n: number) => Number.isFinite(n) && !Number.isNaN(n);
@@ -907,5 +918,184 @@ describe("style-level grading feeds the run", () => {
     const run = replenRun(NOW);
     expect(run.triggered.length).toBeLessThan(STORES.length);
     expect(run.triggered.length).toBeGreaterThan(2);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The flat estate model — one brand, filters instead of a drill-down
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("one brand", () => {
+  it("scopes the planning estate to a single brand", () => {
+    const stores = planningStores();
+    expect(stores.length).toBeGreaterThan(2);
+    stores.forEach((s) => expect(s.brand).toBe(PLANNING_BRAND));
+    expect(stores.length).toBeLessThan(STORES.length);
+  });
+
+  it("runs replenishment over that estate only", () => {
+    const ids = new Set(planningStores().map((s) => s.id));
+    const run = replenRun(NOW);
+    run.triggered.forEach((t) => expect(ids.has(t.storeId)).toBe(true));
+    run.lines.forEach((l) => expect(ids.has(l.storeId)).toBe(true));
+  });
+});
+
+describe("estate filters", () => {
+  it("returns the whole estate with nothing applied", () => {
+    expect(filterStores(NO_FILTERS).length).toBe(planningStores().length);
+    expect(filtersActive(NO_FILTERS)).toBe(0);
+  });
+
+  it("narrows by region, cluster, grade and band, and counts what is on", () => {
+    const region = planningStores()[0].region;
+    const byRegion = filterStores({ ...NO_FILTERS, region });
+    expect(byRegion.length).toBeGreaterThan(0);
+    byRegion.forEach((s) => expect(s.region).toBe(region));
+
+    const cluster = planningStores()[0].clusterId;
+    filterStores({ ...NO_FILTERS, cluster }).forEach((s) => expect(s.clusterId).toBe(cluster));
+
+    filterStores({ ...NO_FILTERS, grade: "A" }).forEach((s) => expect(s.grade).toBe("A"));
+    filterStores({ ...NO_FILTERS, band: "thin" }).forEach((s) => expect(fillBand(vitalsFor(s.id).fillRate)).toBe("thin"));
+
+    expect(filtersActive({ ...NO_FILTERS, region, grade: "A" })).toBe(2);
+  });
+
+  it("combines filters rather than replacing them", () => {
+    const s = planningStores()[0];
+    const both = filterStores({ ...NO_FILTERS, region: s.region, grade: s.grade });
+    both.forEach((x) => {
+      expect(x.region).toBe(s.region);
+      expect(x.grade).toBe(s.grade);
+    });
+    expect(both.length).toBeLessThanOrEqual(filterStores({ ...NO_FILTERS, region: s.region }).length);
+  });
+
+  it("can filter down to nothing without throwing", () => {
+    const impossible = filterStores({ region: "North", cluster: "CL-EST", grade: "all", band: "all" });
+    expect(impossible).toEqual([]);
+    const summary = estateSummary(impossible, "week");
+    expect(summary.storeCount).toBe(0);
+    expect(Number.isFinite(summary.fillRate)).toBe(true);
+    expect(summary.asp).toBe(0);
+  });
+});
+
+describe("periods", () => {
+  it("grows with the window and never shrinks", () => {
+    const stores = planningStores();
+    const today = estateSummary(stores, "today");
+    const week = estateSummary(stores, "week");
+    const mtd = estateSummary(stores, "mtd");
+    expect(week.sales).toBeGreaterThan(today.sales);
+    expect(mtd.sales).toBeGreaterThan(week.sales);
+  });
+
+  it("keeps a single store's per-bill ratios identical across periods", () => {
+    const store = planningStores()[0];
+    const today = estateSummary([store], "today");
+    const week = estateSummary([store], "week");
+    // Sales and bills scale by the same multiple, so the rate cannot move.
+    expect(week.atv).toBeCloseTo(today.atv, 6);
+    expect(week.upt).toBeCloseTo(today.upt, 6);
+    expect(week.asp).toBeCloseTo(today.asp, 6);
+  });
+
+  it("lets the estate's blended ATV drift only slightly, from the store mix", () => {
+    const stores = planningStores();
+    const today = estateSummary(stores, "today");
+    const week = estateSummary(stores, "week");
+    // Doors grow at different rates over a week, so the blend shifts — but a
+    // big move would mean the period maths is wrong, not that the mix changed.
+    expect(Math.abs(week.atv - today.atv) / today.atv).toBeLessThan(0.05);
+    expect(Math.abs(week.upt - today.upt) / today.upt).toBeLessThan(0.05);
+  });
+
+  it("leaves stock figures alone — inventory is a position, not a flow", () => {
+    const stores = planningStores();
+    const today = estateSummary(stores, "today");
+    const mtd = estateSummary(stores, "mtd");
+    expect(mtd.sellableUnits).toBe(today.sellableUnits);
+    expect(mtd.fillRate).toBeCloseTo(today.fillRate, 6);
+    expect(mtd.valueAtRisk).toBe(today.valueAtRisk);
+  });
+
+  it("is deterministic — the same period twice gives the same number", () => {
+    expect(estateSummary(planningStores(), "week").sales).toBe(estateSummary(planningStores(), "week").sales);
+  });
+});
+
+describe("store rows", () => {
+  it("gives one row per store in scope, worst value at risk first", () => {
+    const stores = planningStores();
+    const rows = storeRows(stores, "week");
+    expect(rows).toHaveLength(stores.length);
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i - 1].valueAtRisk).toBeGreaterThanOrEqual(rows[i].valueAtRisk);
+    }
+  });
+
+  it("adds up to the estate summary it sits under", () => {
+    const stores = planningStores();
+    const rows = storeRows(stores, "week");
+    const summary = estateSummary(stores, "week");
+    expect(rows.reduce((a, r) => a + r.sales, 0)).toBeCloseTo(summary.sales, 4);
+    expect(rows.reduce((a, r) => a + r.valueAtRisk, 0)).toBeCloseTo(summary.valueAtRisk, 4);
+  });
+
+  it("counts each store's open asks and ignores decided ones", () => {
+    const store = planningStores()[0];
+    const rows = storeRows([store], "week", [
+      { storeId: store.id, status: "open" },
+      { storeId: store.id, status: "approved" },
+      { storeId: "somewhere-else", status: "open" },
+    ]);
+    expect(rows[0].openAsks).toBe(1);
+  });
+});
+
+describe("inventory", () => {
+  it("cuts the same units three ways and agrees with the estate on all of them", () => {
+    const stores = planningStores();
+    const sellableTotal = estateSummary(stores, "week").sellableUnits;
+    expect(inventoryByType(stores).reduce((a, l) => a + l.sellable, 0)).toBe(sellableTotal);
+    expect(inventoryByCluster(stores).reduce((a, l) => a + l.sellable, 0)).toBe(sellableTotal);
+    expect(inventoryByCategory(stores).reduce((a, l) => a + l.sellable, 0)).toBe(sellableTotal);
+  });
+
+  it("produces finite, non-negative lines with a label on every cut", () => {
+    const stores = planningStores();
+    [...inventoryByCategory(stores), ...inventoryByCluster(stores), ...inventoryByType(stores)].forEach((l) => {
+      expect(l.label.length).toBeGreaterThan(0);
+      [l.sellable, l.reserved, l.inTransit, l.warehouse, l.floorValue, l.valueAtRisk].forEach((n) => {
+        expect(Number.isFinite(n)).toBe(true);
+        expect(n).toBeGreaterThanOrEqual(0);
+      });
+      expect(l.sellThrough).toBeGreaterThanOrEqual(0);
+      expect(l.sellThrough).toBeLessThanOrEqual(1);
+    });
+  });
+
+  it("lists every style carried, with the stores that carry it", () => {
+    const stores = planningStores();
+    const rows = styleInventory(stores);
+    expect(rows.length).toBeGreaterThan(5);
+    rows.forEach((r) => {
+      expect(r.storesCarrying).toBeGreaterThan(0);
+      expect(r.storesCarrying).toBeLessThanOrEqual(stores.length);
+      expect(r.unhealthyStores).toBeLessThanOrEqual(r.storesCarrying);
+      expect(r.style.brand).toBe(PLANNING_BRAND);
+    });
+    for (let i = 1; i < rows.length; i++) expect(rows[i - 1].valueAtRisk).toBeGreaterThanOrEqual(rows[i].valueAtRisk);
+  });
+
+  it("accounts for nearly all estate units, the remainder being cross-brand stock", () => {
+    const stores = planningStores();
+    const viaStyles = styleInventory(stores).reduce((a, r) => a + r.sellable, 0);
+    const estate = estateSummary(stores, "week").sellableUnits;
+    // Own-brand styles only, so this must be a subset — but a large one.
+    expect(viaStyles).toBeLessThanOrEqual(estate);
+    expect(viaStyles / estate).toBeGreaterThan(0.6);
   });
 });

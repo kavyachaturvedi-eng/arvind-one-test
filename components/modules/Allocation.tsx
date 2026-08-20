@@ -9,21 +9,20 @@
 import React, { useMemo, useState } from "react";
 import { Callout, Card, Chip, SectionTitle, Stat, StatusDot, Table, Td, Th } from "@/components/ui";
 import { fmtRunDate } from "@/components/ui";
-import { dropAllocation, dropUnitsFor } from "@/lib/engine";
-import { BRANDS, CURRENT_SEASON, DROPS, NOW, clusterById } from "@/lib/seed";
+import { PLANNING_BRAND, dropAllocation, dropUnitsFor } from "@/lib/engine";
+import { CURRENT_SEASON, DROPS, NOW, clusterById } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import { HOLDBACK_SHARE, inr, pct } from "@/lib/rules";
-import type { Brand } from "@/lib/types";
 
 export default function Allocation() {
   const app = useApp();
   const [dropId, setDropId] = useState(DROPS[0].id);
-  const [brand, setBrand] = useState<Brand | "all">("all");
   const [applied, setApplied] = useState<string[]>([]);
 
-  const rows = useMemo(() => dropAllocation(dropId, brand === "all" ? undefined : brand), [dropId, brand]);
+  // One brand: planning owns Tommy, so there is nothing to switch between.
+  const rows = useMemo(() => dropAllocation(dropId, PLANNING_BRAND), [dropId]);
   const drop = DROPS.find((d) => d.id === dropId)!;
-  const units = dropUnitsFor(dropId, brand === "all" ? undefined : brand);
+  const units = dropUnitsFor(dropId, PLANNING_BRAND);
 
   const moved = rows.filter((r) => r.delta > 0).reduce((a, r) => a + r.delta, 0);
   const daysOut = Math.round((drop.landsAt - NOW) / 86_400_000);
@@ -86,26 +85,12 @@ export default function Allocation() {
             {d.label} · {pct(d.pctOfBuy)}
           </button>
         ))}
-        <span className="w-px h-5 bg-[color:var(--line)] mx-1" />
-        <select
-          value={brand}
-          data-alloc-brand
-          onChange={(e) => setBrand(e.target.value as Brand | "all")}
-          className="border border-line bg-raised px-2 py-1.5 text-xs text-ink"
-        >
-          <option value="all">All brands</option>
-          {BRANDS.map((b) => (
-            <option key={b} value={b}>
-              {b}
-            </option>
-          ))}
-        </select>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Units in this drop" value={units.toLocaleString("en-IN")} sub={`${pct(drop.pctOfBuy)} of the season buy`} emphasis />
         <Stat label="Units moved by the re-cut" value={moved.toLocaleString("en-IN")} sub={`${rows.filter((r) => r.delta !== 0).length} stores change`} tone="warn" />
-        <Stat label="Stores in scope" value={String(rows.length)} sub={brand === "all" ? "Whole estate" : brand} />
+        <Stat label="Stores in scope" value={String(rows.length)} sub={PLANNING_BRAND} />
         <Stat label="Held at warehouse" value={pct(HOLDBACK_SHARE)} sub="Funds the Tue/Fri run" />
       </div>
 
@@ -183,7 +168,7 @@ export default function Allocation() {
                 <Td>{d.label}</Td>
                 <Td>{fmtRunDate(d.landsAt)}</Td>
                 <Td align="right" className="num">{pct(d.pctOfBuy)}</Td>
-                <Td align="right" className="num">{dropUnitsFor(d.id, brand === "all" ? undefined : brand).toLocaleString("en-IN")}</Td>
+                <Td align="right" className="num">{dropUnitsFor(d.id, PLANNING_BRAND).toLocaleString("en-IN")}</Td>
               </tr>
             ))}
             <tr>
@@ -191,7 +176,7 @@ export default function Allocation() {
               <Td className="text-ink2">—</Td>
               <Td align="right" className="num text-ink2">{pct(HOLDBACK_SHARE)}</Td>
               <Td align="right" className="num text-ink2">
-                {Math.round((dropUnitsFor("AW26-D1", brand === "all" ? undefined : brand) / 0.45) * HOLDBACK_SHARE).toLocaleString("en-IN")}
+                {Math.round((dropUnitsFor("AW26-D1", PLANNING_BRAND) / 0.45) * HOLDBACK_SHARE).toLocaleString("en-IN")}
               </Td>
             </tr>
           </tbody>

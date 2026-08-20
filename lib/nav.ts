@@ -117,7 +117,7 @@ export const NAV_GROUPS: NavGroup[] = [
     key: "pest", label: "Estate", glyph: "◎", roles: ["planner", "catplan"], section: "Planning",
     children: [
       { id: "store360", label: "Store 360" },
-      { id: "truth", label: "Stock Position" },
+      { id: "inv", label: "Inventory" },
     ],
   },
   {

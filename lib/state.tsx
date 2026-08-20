@@ -23,6 +23,7 @@ import {
   styleById,
 } from "./seed";
 import { classifyCancellation, evaluateIstPolicy, splitOutward, type IstPolicyInput } from "./rules";
+import { NO_FILTERS, type EstateFilters, type Period } from "./engine";
 import type {
   AllocationPush,
   AuditEntry,
@@ -37,7 +38,6 @@ import type {
   PlanningRequestKind,
   RequestEvidence,
   RoleId,
-  Scope,
   Size,
   Task,
   Ticket,
@@ -77,6 +77,7 @@ export type ModuleId =
   | "health"
   // ── Retail planning ──
   | "store360"
+  | "inv"
   | "run"
   | "alloc"
   | "otb"
@@ -119,8 +120,11 @@ interface AppState {
   clockOffsetMinutes: number;
 
   // ── Retail planning ──
-  /** Where the planner is standing in Brand → Region → Cluster → Store. */
-  scope: Scope;
+  /**
+   * The estate view. Flat by design: every store, plus filters that narrow it.
+   * `storeId` is set when a planner has opened one store; null is the list.
+   */
+  estate: { filters: EstateFilters; period: Period; storeId: string | null };
   /** Store asks waiting on planning. Store proposes, planning decides. */
   requests: PlanningRequest[];
   /** Run lines planning has released to the warehouse. */
@@ -214,7 +218,10 @@ type Action =
   | { type: "toast"; message: string; tone?: "good" | "warn" | "info" }
   | { type: "toast:clear" }
   // ── Retail planning ──
-  | { type: "scope"; scope: Scope }
+  | { type: "estate:filter"; patch: Partial<EstateFilters> }
+  | { type: "estate:period"; period: Period }
+  | { type: "estate:open"; storeId: string | null }
+  | { type: "url"; params: URLSearchParams }
   | { type: "request:create"; request: PlanningRequest }
   | { type: "request:decide"; id: string; status: "approved" | "rejected"; by: string; note?: string }
   | { type: "run:release"; lineIds: string[]; by: string; label: string }
@@ -355,10 +362,10 @@ function seedRequests(): PlanningRequest[] {
     {
       id: "REQ-3302",
       kind: "renew",
-      storeId: STORES[4].id,
+      storeId: STORES[5].id,
       styleId: STYLES[7].id,
       units: 30,
-      raisedBy: "Karan Mehta",
+      raisedBy: "Ritu Bansal",
       raisedAt: NOW - 2 * DAY - 3 * HOUR,
       note: "This one is done. Same wall since launch — needs something new before the festive weekend.",
       evidence: { fillRate: 1.06, sellable: 88, ros: 0.2, coverDays: 340, sizeSetStatus: "at_risk", valueAtRisk: 42_000 },
@@ -435,7 +442,7 @@ const initial: AppState = {
   ],
   printerRoutedTo: null,
   cardBatched: false,
-  scope: { level: "brand", id: "all", label: "All brands" },
+  estate: { filters: NO_FILTERS, period: "week", storeId: null },
   requests: seedRequests(),
   released: [],
   dropped: [],
@@ -670,8 +677,40 @@ function reducer(state: AppState, action: Action): AppState {
     // Every planning decision is auditable for the same reason store mutations
     // are: a store has to be able to see who decided its ask, and when.
 
-    case "scope":
-      return { ...state, scope: action.scope };
+    case "estate:filter":
+      // Narrowing the list always returns to the list — a filter applied while
+      // inside one store would silently change what the numbers describe.
+      return { ...state, estate: { ...state.estate, filters: { ...state.estate.filters, ...action.patch }, storeId: null } };
+
+    case "estate:period":
+      return { ...state, estate: { ...state.estate, period: action.period } };
+
+    case "estate:open":
+      return { ...state, estate: { ...state.estate, storeId: action.storeId } };
+
+    case "url": {
+      // Restoring from the address bar (a link, or the back button).
+      const p = action.params;
+      const one = (k: string, fallback: string) => p.get(k) ?? fallback;
+      const module = (p.get("m") as ModuleId | null) ?? state.module;
+      const period = (p.get("p") as Period | null) ?? state.estate.period;
+      return {
+        ...state,
+        role: (p.get("role") as RoleId | null) ?? state.role,
+        module,
+        focus: p.get("f"),
+        estate: {
+          filters: {
+            region: one("region", "all"),
+            cluster: one("cluster", "all"),
+            grade: one("grade", "all"),
+            band: one("band", "all"),
+          },
+          period,
+          storeId: p.get("store"),
+        },
+      };
+    }
 
     case "request:create":
       return {
@@ -763,7 +802,9 @@ interface Ctx extends AppState {
   createIst: (input: CreateIstInput) => ISTRequest;
   actorName: string;
   // ── Retail planning ──
-  setScope: (s: Scope) => void;
+  setFilter: (patch: Partial<EstateFilters>) => void;
+  setPeriod: (p: Period) => void;
+  openStore: (storeId: string | null) => void;
   /** The store's norm, honouring any change planning has made this session. */
   normFor: (storeId: string) => number;
   /** Raise a store ask. Store proposes; the decision belongs to planning. */
@@ -885,6 +926,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return request;
   }, []);
 
+  // ── The address bar is state too ─────────────────────────────────────────
+  //
+  // Without this, the browser back button throws you out of the app instead of
+  // back a screen. Every screen a planner can be on is addressable, so a link
+  // to "Phoenix Palladium, this week" is a link.
+  const fromUrl = React.useRef(false);
+
+  React.useEffect(() => {
+    const apply = () => {
+      fromUrl.current = true;
+      dispatch({ type: "url", params: new URLSearchParams(window.location.search) });
+    };
+    if (window.location.search) apply();
+    window.addEventListener("popstate", apply);
+    return () => window.removeEventListener("popstate", apply);
+  }, []);
+
+  React.useEffect(() => {
+    if (!state.authed) return;
+    const p = new URLSearchParams();
+    p.set("role", state.role);
+    p.set("m", state.module);
+    if (state.focus) p.set("f", state.focus);
+    if (state.estate.storeId) p.set("store", state.estate.storeId);
+    if (state.estate.period !== "week") p.set("p", state.estate.period);
+    (["region", "cluster", "grade", "band"] as const).forEach((k) => {
+      if (state.estate.filters[k] !== "all") p.set(k, state.estate.filters[k]);
+    });
+    const next = `${window.location.pathname}?${p.toString()}`;
+    if (fromUrl.current) {
+      fromUrl.current = false;
+      window.history.replaceState(null, "", next);
+      return;
+    }
+    if (window.location.search !== `?${p.toString()}`) window.history.pushState(null, "", next);
+  }, [state.authed, state.role, state.module, state.focus, state.estate]);
+
   const raiseRequest = useCallback(
     (input: RaiseRequestInput): PlanningRequest => {
       const request: PlanningRequest = {
@@ -915,7 +993,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     go: (m, focus) => dispatch({ type: "module", module: m, focus: focus ?? null }),
     toastNow: (m, tone) => dispatch({ type: "toast", message: m, tone }),
     createIst,
-    setScope: (sc) => dispatch({ type: "scope", scope: sc }),
+    setFilter: (patch) => dispatch({ type: "estate:filter", patch }),
+    setPeriod: (p) => dispatch({ type: "estate:period", period: p }),
+    openStore: (storeId) => dispatch({ type: "estate:open", storeId }),
     normFor: (storeId) => state.norms[storeId] ?? storeById(storeId).norm,
     raiseRequest,
   };

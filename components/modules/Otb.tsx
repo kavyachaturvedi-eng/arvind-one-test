@@ -6,19 +6,17 @@
 // left to spend. The full season-planning workbench is out of scope; this is
 // the consumption view a category planner needs before backing a winner deeper.
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Card, Chip, Meter, SectionTitle, Stat, StatusDot, Table, Td, Th } from "@/components/ui";
 import { CURRENT_SEASON, OTB, STYLES } from "@/lib/seed";
+import { PLANNING_BRAND } from "@/lib/engine";
 import { useApp } from "@/lib/state";
 import { HOLDBACK_SHARE, inr, otbRemaining, pct } from "@/lib/rules";
-import type { Brand } from "@/lib/types";
 
 export default function Otb() {
   const app = useApp();
-  const [brand, setBrand] = useState<Brand | "all">("all");
-
-  const lines = useMemo(() => (brand === "all" ? OTB : OTB.filter((l) => l.brand === brand)), [brand]);
-  const brands = useMemo(() => [...new Set(OTB.map((l) => l.brand))], []);
+  // One brand: planning owns Tommy.
+  const lines = useMemo(() => OTB.filter((l) => l.brand === PLANNING_BRAND), []);
 
   const budget = lines.reduce((a, l) => a + l.budgetUnits, 0);
   const committed = lines.reduce((a, l) => a + l.committedUnits, 0);
@@ -28,30 +26,17 @@ export default function Otb() {
 
   // Core carries across seasons and is never discounted, so its share of the
   // buy is the part of the budget that is not exposed to markdown.
-  const coreUnits = STYLES.filter((s) => s.productType === "core" && (brand === "all" || s.brand === brand)).reduce((a, s) => a + s.bought, 0);
-  const allUnits = STYLES.filter((s) => brand === "all" || s.brand === brand).reduce((a, s) => a + s.bought, 0);
+  const coreUnits = STYLES.filter((s) => s.productType === "core" && s.brand === PLANNING_BRAND).reduce((a, s) => a + s.bought, 0);
+  const allUnits = STYLES.filter((s) => s.brand === PLANNING_BRAND).reduce((a, s) => a + s.bought, 0);
 
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Open To Buy</h1>
-          <p className="text-xs text-ink2 mt-1">{CURRENT_SEASON.name}</p>
+          <p className="text-xs text-ink2 mt-1">{PLANNING_BRAND} · {CURRENT_SEASON.name}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <select
-            value={brand}
-            data-otb-brand
-            onChange={(e) => setBrand(e.target.value as Brand | "all")}
-            className="border border-line bg-raised px-2 py-1.5 text-xs text-ink"
-          >
-            <option value="all">All brands</option>
-            {brands.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
           <button className="btn" data-otb-alloc onClick={() => app.go("alloc")}>
             Cut it across stores
           </button>
@@ -73,13 +58,12 @@ export default function Otb() {
 
       <Card>
         <SectionTitle
-          title="By brand and category"
+          title="By category"
           right={<Chip tone="brand">{pct(HOLDBACK_SHARE)} held at warehouse</Chip>}
         />
         <Table>
           <thead>
             <tr>
-              <Th>Brand</Th>
               <Th>Category</Th>
               <Th align="right">Budget</Th>
               <Th align="right">Committed</Th>
@@ -94,7 +78,6 @@ export default function Otb() {
               const tight = r.pctConsumed > 0.92;
               return (
                 <tr key={`${line.brand}-${line.category}`} data-otb-row>
-                  <Td>{line.brand}</Td>
                   <Td>
                     <div className="flex items-center gap-2">
                       <StatusDot tone={tight ? "warn" : "good"} />
@@ -128,7 +111,7 @@ export default function Otb() {
           </thead>
           <tbody>
             {(["core", "fashion"] as const).map((type) => {
-              const styles = STYLES.filter((s) => s.productType === type && (brand === "all" || s.brand === brand));
+              const styles = STYLES.filter((s) => s.productType === type && s.brand === PLANNING_BRAND);
               const units = styles.reduce((a, s) => a + s.bought, 0);
               return (
                 <tr key={type} data-otb-type={type}>

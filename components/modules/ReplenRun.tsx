@@ -9,7 +9,7 @@
 
 import React, { useMemo, useState } from "react";
 import { Callout, Card, Chip, SectionTitle, Stat, StatusDot, Table, Tabs, Td, Th, fmtRunDate } from "@/components/ui";
-import { replenRun, warehouseHeld } from "@/lib/engine";
+import { PLANNING_BRAND, planningStores, replenRun, warehouseHeld } from "@/lib/engine";
 import { NOW, storeById, styleById } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import { BROKEN_TRIGGER, FILL_TRIGGER, HOLDBACK_GOAL, inr, lastRunAt, nextRunAt, pct, splitReplenRenew } from "@/lib/rules";
@@ -62,7 +62,7 @@ export default function ReplenRunView() {
         <div>
           <h1 className="text-xl font-semibold text-ink">Replenishment &amp; renewal</h1>
           <p className="text-xs text-ink2 mt-1">
-            Ran {fmtRunDate(lastRunAt(NOW))} · next {fmtRunDate(nextRunAt(NOW))}
+            {PLANNING_BRAND} · ran {fmtRunDate(lastRunAt(NOW))} · next {fmtRunDate(nextRunAt(NOW))}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -101,7 +101,7 @@ export default function ReplenRunView() {
       <Card>
         <SectionTitle
           title="Why these stores qualified"
-          right={<Chip>{run.triggered.length} of 24</Chip>}
+          right={<Chip>{run.triggered.length} of {planningStores().length}</Chip>}
         />
         <div className="space-y-1.5">
           {run.triggered.map((t) => (

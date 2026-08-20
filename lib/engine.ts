@@ -15,6 +15,7 @@ import {
   STOCK,
   STORES,
   STYLES,
+  clusterById,
   rng,
   storeById,
   styleById,
@@ -1125,7 +1126,8 @@ export function replenRun(at: number): ReplenRun {
   const triggered: ReplenRun["triggered"] = [];
   const lines: ReplenLine[] = [];
 
-  STORES.forEach((store) => {
+  // The run covers the brand planning owns, not the whole company.
+  planningStores().forEach((store) => {
     const v = vitalsFor(store.id);
     const carried = stylesAtStore(store.id).length;
     const brokenShare = carried > 0 ? (v.brokenStyles + v.atRiskStyles) / carried : 0;
@@ -1281,4 +1283,359 @@ export function dropUnitsFor(dropId: string, brand?: Brand): number {
   if (!drop) return 0;
   const bought = STYLES.filter((s) => !brand || s.brand === brand).reduce((a, s) => a + s.bought, 0);
   return Math.round(bought * drop.pctOfBuy);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The estate, as retail planning reads it
+//
+// One brand. Planning does not switch brands mid-thought — a category planner
+// owns Tommy, and a different person owns Arrow — so there is no brand filter
+// anywhere in the planning screens.
+//
+// The information architecture is flat on purpose: every store, and filters
+// that narrow it. The earlier drill-down replaced the numbers above you as you
+// went, which made it impossible to tell what you were looking at.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const PLANNING_BRAND: Brand = "Tommy Hilfiger";
+
+export function planningStores(): Store[] {
+  return STORES.filter((s) => s.brand === PLANNING_BRAND);
+}
+
+export type Period = "today" | "week" | "mtd";
+
+export const PERIOD_LABEL: Record<Period, string> = {
+  today: "Today",
+  week: "This week",
+  mtd: "Month to date",
+};
+
+export interface EstateFilters {
+  region: string;   // "all" | Region
+  cluster: string;  // "all" | cluster id
+  grade: string;    // "all" | "A" | "B" | "C"
+  band: string;     // "all" | "thin" | "healthy" | "heavy"
+}
+
+export const NO_FILTERS: EstateFilters = { region: "all", cluster: "all", grade: "all", band: "all" };
+
+export function filterStores(filters: EstateFilters): Store[] {
+  return planningStores().filter((s) => {
+    if (filters.region !== "all" && s.region !== filters.region) return false;
+    if (filters.cluster !== "all" && s.clusterId !== filters.cluster) return false;
+    if (filters.grade !== "all" && s.grade !== filters.grade) return false;
+    if (filters.band !== "all" && fillBand(vitalsFor(s.id).fillRate) !== filters.band) return false;
+    return true;
+  });
+}
+
+export function filtersActive(f: EstateFilters): number {
+  return [f.region, f.cluster, f.grade, f.band].filter((v) => v !== "all").length;
+}
+
+/**
+ * How much bigger the period is than today, per store. Deterministic: a seeded
+ * seven-day series whose last point is today, so "this week" and "today" can
+ * never contradict each other.
+ */
+function periodMultiple(storeId: string, period: Period): number {
+  const v = vitalsFor(storeId);
+  if (period === "today") return 1;
+  if (period === "mtd") return v.todaySales > 0 ? v.mtdSales / v.todaySales : 1;
+  const series = trend(`wk-${storeId}`, 7, Math.max(1, v.todaySales), 0.03);
+  const week = series.slice(0, 6).reduce((a, n) => a + n, 0) + v.todaySales;
+  return v.todaySales > 0 ? week / v.todaySales : 1;
+}
+
+export interface EstateSummary {
+  storeCount: number;
+  period: Period;
+
+  // Trading — AFL's own daily KPI set, for the chosen period
+  sales: number;
+  bills: number;
+  qty: number;
+  atv: number;
+  upt: number;
+  asp: number;
+  conversion: number;
+  footfall: number;
+  target: number;
+  achievement: number;
+
+  // Inventory
+  sellableUnits: number;
+  inTransit: number;
+  norm: number;
+  fillRate: number;
+  band: FillBand;
+  sellThrough: number;
+
+  // Mix
+  coreUnits: number;
+  fashionUnits: number;
+  corePct: number;
+  coreTarget: number;
+  mix: MixVerdict;
+
+  // Health
+  sizeSetScore: number;
+  brokenStyles: number;
+  atRiskStyles: number;
+  valueAtRisk: number;
+}
+
+export function estateSummary(stores: Store[], period: Period): EstateSummary {
+  const vitals = stores.map((s) => vitalsFor(s.id));
+  const mult = new Map(stores.map((s) => [s.id, periodMultiple(s.id, period)]));
+
+  const sales = vitals.reduce((a, v) => a + v.todaySales * (mult.get(v.store.id) ?? 1), 0);
+  const bills = vitals.reduce((a, v) => a + v.bills * (mult.get(v.store.id) ?? 1), 0);
+  const qty = vitals.reduce((a, v) => a + v.bills * v.upt * (mult.get(v.store.id) ?? 1), 0);
+  const footfall = vitals.reduce((a, v) => a + v.footfall * (mult.get(v.store.id) ?? 1), 0);
+  // Target scales the same way, so achievement means the same thing in every period.
+  const target = vitals.reduce((a, v) => a + v.mtdTargetToDate * (period === "mtd" ? 1 : (mult.get(v.store.id) ?? 1) / Math.max(0.001, periodMultiple(v.store.id, "mtd"))), 0);
+
+  const sellableUnits = vitals.reduce((a, v) => a + v.sellableUnits, 0);
+  const norm = stores.reduce((a, s) => a + s.norm, 0);
+  const fillRate = norm > 0 ? sellableUnits / norm : 0;
+
+  const mixes = stores.map((s) => mixForStore(s.id));
+  const coreUnits = mixes.reduce((a, m) => a + m.core, 0);
+  const fashionUnits = mixes.reduce((a, m) => a + m.fashion, 0);
+  const mixTotal = coreUnits + fashionUnits;
+  const corePct = mixTotal > 0 ? coreUnits / mixTotal : 0;
+  const coreTarget = norm > 0 ? stores.reduce((a, s) => a + coreShareTarget(s.grade) * s.norm, 0) / norm : 0;
+
+  const sellThrough = norm > 0 ? vitals.reduce((a, v) => a + v.sellThrough * v.store.norm, 0) / norm : 0;
+
+  return {
+    storeCount: stores.length,
+    period,
+    sales,
+    bills,
+    qty,
+    atv: bills > 0 ? sales / bills : 0,
+    upt: bills > 0 ? qty / bills : 0,
+    asp: asp(sales, qty),
+    conversion: footfall > 0 ? bills / footfall : 0,
+    footfall,
+    target,
+    achievement: target > 0 ? sales / target : 0,
+    sellableUnits,
+    inTransit: vitals.reduce((a, v) => a + v.inTransit, 0),
+    norm,
+    fillRate,
+    band: fillBand(fillRate),
+    sellThrough,
+    coreUnits,
+    fashionUnits,
+    corePct,
+    coreTarget,
+    mix: mixVerdict(corePct, coreTarget),
+    sizeSetScore: stores.length ? vitals.reduce((a, v) => a + v.sizeSetScore, 0) / stores.length : 0,
+    brokenStyles: vitals.reduce((a, v) => a + v.brokenStyles, 0),
+    atRiskStyles: vitals.reduce((a, v) => a + v.atRiskStyles, 0),
+    valueAtRisk: vitals.reduce((a, v) => a + v.valueAtRisk, 0),
+  };
+}
+
+export interface StoreRow {
+  store: Store;
+  cluster: Cluster;
+  sales: number;
+  achievement: number;
+  fillRate: number;
+  band: FillBand;
+  sellThrough: number;
+  corePct: number;
+  valueAtRisk: number;
+  brokenStyles: number;
+  openAsks: number;
+}
+
+export function storeRows(stores: Store[], period: Period, requests: { storeId: string; status: string }[] = []): StoreRow[] {
+  return stores
+    .map((store) => {
+      const v = vitalsFor(store.id);
+      const m = periodMultiple(store.id, period);
+      const mix = mixForStore(store.id);
+      const total = mix.core + mix.fashion;
+      const mtdMult = periodMultiple(store.id, "mtd");
+      return {
+        store,
+        cluster: clusterById(store.clusterId),
+        sales: v.todaySales * m,
+        achievement: v.mtdTargetToDate > 0 ? (v.todaySales * m) / (v.mtdTargetToDate * (period === "mtd" ? 1 : m / Math.max(0.001, mtdMult))) : 0,
+        fillRate: v.fillRate,
+        band: fillBand(v.fillRate),
+        sellThrough: v.sellThrough,
+        corePct: total > 0 ? mix.core / total : 0,
+        valueAtRisk: v.valueAtRisk,
+        brokenStyles: v.brokenStyles,
+        openAsks: requests.filter((r) => r.storeId === store.id && r.status === "open").length,
+      };
+    })
+    .sort((a, b) => b.valueAtRisk - a.valueAtRisk);
+}
+
+/** Sparkline series for a store or the filtered estate, for the header tiles. */
+export function estateTrend(stores: Store[], points = 14): number[] {
+  const base = Math.max(1, stores.reduce((a, s) => a + vitalsFor(s.id).todaySales, 0));
+  return trend(`estate-${stores.length}-${stores[0]?.id ?? "none"}`, points, base, 0.025);
+}
+
+// ── Inventory, for the planning Inventory tab ────────────────────────────────
+
+export interface InventoryLine {
+  key: string;
+  label: string;
+  sellable: number;
+  reserved: number;
+  inTransit: number;
+  warehouse: number;
+  sold28: number;
+  ros: number;
+  cover: number;
+  sellThrough: number;
+  unhealthyStyles: number;
+  valueAtRisk: number;
+  /** Units at MRP sitting on the floor — what is tied up here. */
+  floorValue: number;
+}
+
+function lineFor(key: string, label: string, rows: StockRow[], styleIds: Set<string>): InventoryLine {
+  const sellableUnits = rows.reduce((a, r) => a + sellable(r), 0);
+  const sold28 = rows.reduce((a, r) => a + r.sold28, 0);
+  const fullPrice = rows.reduce((a, r) => a + Math.max(0, r.sold28 - r.soldOnMarkdown28), 0);
+  const ros = rows.reduce((a, r) => a + trueRos(r), 0);
+  const warehouse = [...styleIds].reduce(
+    (a, id) => a + styleById(id).sizes.reduce((b, size) => b + dcAvailable(id, size), 0),
+    0,
+  );
+  const floorValue = rows.reduce((a, r) => a + sellable(r) * styleById(r.styleId).mrp, 0);
+  return {
+    key,
+    label,
+    sellable: sellableUnits,
+    reserved: rows.reduce((a, r) => a + r.reserved, 0),
+    inTransit: rows.reduce((a, r) => a + r.inTransit, 0),
+    warehouse,
+    sold28,
+    ros,
+    cover: coverDays(sellableUnits, ros),
+    sellThrough: sellThrough(fullPrice, Math.max(1, fullPrice + sellableUnits)),
+    unhealthyStyles: 0,
+    valueAtRisk: 0,
+    floorValue,
+  };
+}
+
+/** Inventory cut by product category across the given stores. */
+export function inventoryByCategory(stores: Store[]): InventoryLine[] {
+  const ids = new Set(stores.map((s) => s.id));
+  const rows = STOCK.filter((r) => ids.has(r.storeId));
+  return CATEGORIES.map((category) => {
+    const styleIds = new Set(STYLES.filter((s) => s.category === category).map((s) => s.id));
+    const mine = rows.filter((r) => styleIds.has(r.styleId));
+    if (mine.length === 0) return null;
+    const line = lineFor(category, category, mine, new Set(mine.map((r) => r.styleId)));
+    // Style health has to be counted per store, since a set is broken in a door.
+    let unhealthy = 0;
+    let risk = 0;
+    stores.forEach((store) => {
+      stylesAtStore(store.id)
+        .filter((st) => st.category === category)
+        .forEach((st) => {
+          const sig = styleSignal(store.id, st.id);
+          if (sig.health.status !== "healthy") {
+            unhealthy++;
+            risk += sig.valueAtRisk;
+          }
+        });
+    });
+    return { ...line, unhealthyStyles: unhealthy, valueAtRisk: risk };
+  })
+    .filter((l): l is InventoryLine => l !== null)
+    .sort((a, b) => b.floorValue - a.floorValue);
+}
+
+/** Inventory cut by core vs fashion. */
+export function inventoryByType(stores: Store[]): InventoryLine[] {
+  const ids = new Set(stores.map((s) => s.id));
+  const rows = STOCK.filter((r) => ids.has(r.storeId));
+  return (["core", "fashion"] as ProductType[]).map((type) => {
+    const styleIds = new Set(STYLES.filter((s) => s.productType === type).map((s) => s.id));
+    const mine = rows.filter((r) => styleIds.has(r.styleId));
+    return lineFor(type, type === "core" ? "Core" : "Fashion", mine, new Set(mine.map((r) => r.styleId)));
+  });
+}
+
+/** Inventory cut by cluster, so a planner can see where units are sitting. */
+export function inventoryByCluster(stores: Store[]): InventoryLine[] {
+  const clusterIds = [...new Set(stores.map((s) => s.clusterId))];
+  return clusterIds
+    .map((cid) => {
+      const mineStores = stores.filter((s) => s.clusterId === cid);
+      const ids = new Set(mineStores.map((s) => s.id));
+      const rows = STOCK.filter((r) => ids.has(r.storeId));
+      const line = lineFor(cid, clusterById(cid).name, rows, new Set(rows.map((r) => r.styleId)));
+      const risk = mineStores.reduce((a, s) => a + vitalsFor(s.id).valueAtRisk, 0);
+      const unhealthy = mineStores.reduce((a, s) => a + vitalsFor(s.id).brokenStyles + vitalsFor(s.id).atRiskStyles, 0);
+      return { ...line, valueAtRisk: risk, unhealthyStyles: unhealthy };
+    })
+    .sort((a, b) => b.floorValue - a.floorValue);
+}
+
+/** Every style the given stores carry, aggregated — the deep inventory list. */
+export interface StyleInventoryRow {
+  style: Style;
+  storesCarrying: number;
+  sellable: number;
+  warehouse: number;
+  ros: number;
+  cover: number;
+  sellThrough: number;
+  unhealthyStores: number;
+  valueAtRisk: number;
+}
+
+export function styleInventory(stores: Store[]): StyleInventoryRow[] {
+  const out: StyleInventoryRow[] = [];
+  const carried = new Map<string, Store[]>();
+  stores.forEach((store) => {
+    // The seed lets a door hold a little cross-brand stock (outlets do). A
+    // planner who owns one brand should not have another brand's styles in
+    // their list, so this is the brand's own assortment only.
+    stylesAtStore(store.id)
+      .filter((st) => st.brand === store.brand)
+      .forEach((st) => {
+        carried.set(st.id, [...(carried.get(st.id) ?? []), store]);
+      });
+  });
+
+  carried.forEach((inStores, styleId) => {
+    const style = styleById(styleId);
+    const signals = inStores.map((s) => styleSignal(s.id, styleId));
+    const sellableUnits = signals.reduce((a, sg) => a + sg.sellable, 0);
+    const ros = signals.reduce((a, sg) => a + sg.ros, 0);
+    const fullPrice = inStores.reduce(
+      (a, s) => a + stockForStyleAtStore(s.id, styleId).reduce((b, r) => b + Math.max(0, r.sold28 - r.soldOnMarkdown28), 0),
+      0,
+    );
+    out.push({
+      style,
+      storesCarrying: inStores.length,
+      sellable: sellableUnits,
+      warehouse: style.sizes.reduce((a, size) => a + dcAvailable(styleId, size), 0),
+      ros,
+      cover: coverDays(sellableUnits, ros),
+      sellThrough: sellThrough(fullPrice, Math.max(1, fullPrice + sellableUnits)),
+      unhealthyStores: signals.filter((sg) => sg.health.status !== "healthy").length,
+      valueAtRisk: signals.reduce((a, sg) => a + sg.valueAtRisk, 0),
+    });
+  });
+
+  return out.sort((a, b) => b.valueAtRisk - a.valueAtRisk);
 }

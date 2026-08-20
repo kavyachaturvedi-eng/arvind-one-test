@@ -135,10 +135,9 @@ export function Stat({
       onClick={onClick}
       className={`card p-3.5 text-left w-full ${border} ${onClick ? "hover:shadow-pop transition-shadow cursor-pointer" : ""}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="label">{label}</div>
-        {tone && <StatusDot tone={tone} />}
-      </div>
+      {/* No status dot: the tile border already carries the tone, and a second
+          mark for the same signal was noise. */}
+      <div className="label">{label}</div>
       <div className={`${emphasis ? "text-[32px]" : "text-[26px]"} font-semibold text-ink leading-none mt-2 num`}>{value}</div>
       {sub && <div className="text-xs text-ink2 mt-1.5 leading-snug">{sub}</div>}
       {spark && (

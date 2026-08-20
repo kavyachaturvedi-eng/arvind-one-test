@@ -98,11 +98,33 @@ one season and is never discounted; fashion is seasonal and drives freshness.
 | Target core share, grade B | **50%** | Invented |
 | Target core share, grade C | **58%** | Invented |
 
-## 7 · Hierarchy
+## 7 · One brand, and a flat information architecture
 
-**Brand → Region → Cluster → Store.** "Area" and "cluster" are the same thing
-(confirmed by Pushpal); we use *cluster* throughout. Cluster managers report to
-regional managers, per the Newme org description.
+Planning screens cover **Tommy Hilfiger only** (confirmed by Pushpal, 20 Aug).
+A category planner owns one brand, so there is no brand filter anywhere in the
+planning IA. That is **7 of the 24 demo stores**, across 5 clusters — if the
+planning estate needs to be bigger for a demo, the fix is to add Tommy doors to
+the seed, not to add a brand switch.
+
+"Area" and "cluster" are the same thing (confirmed); we use *cluster*. Cluster
+managers report to regional managers, per the Newme org description.
+
+The hierarchy is still Region → Cluster → Store in the data, but the screens are
+**flat**: one list of every store, plus filters (region, cluster, grade, fill
+band) that narrow it. The earlier version drilled brand → region → cluster →
+store and replaced the numbers above you at each step, so it was impossible to
+tell what the figures on screen described. Filters say plainly what has been
+narrowed and to what.
+
+Every screen is addressable: `?m=store360&store=TO-MUM-001&cluster=CL-MUM`. The
+browser back button moves back a screen instead of leaving the app.
+
+## 7a · Periods
+
+The KPI block runs on **today / this week / month to date**, not against last
+year. This-week figures come from a deterministic seven-day series whose last
+point is today, so the two can never contradict each other. Same-day-last-year
+was removed on 20 Aug — a period filter carries more than a single LY column.
 
 ## 8 · Two planning personas
 

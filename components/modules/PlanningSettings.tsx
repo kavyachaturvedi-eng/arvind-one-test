@@ -9,12 +9,14 @@
 
 import React from "react";
 import { Callout, Card, Chip, SectionTitle, Stat, StatusDot, Table, Td, Th } from "@/components/ui";
-import { CLUSTERS, CURRENT_SEASON, STORES } from "@/lib/seed";
+import { CLUSTERS, CURRENT_SEASON } from "@/lib/seed";
+import { PLANNING_BRAND, planningStores } from "@/lib/engine";
 import { useApp } from "@/lib/state";
 import { ASSUMPTIONS, coreShareTarget, pct } from "@/lib/rules";
 
 export default function PlanningSettings() {
   const app = useApp();
+  const stores = planningStores();
   const invented = ASSUMPTIONS.filter((a) => a.basis === "invented");
   const confirmed = ASSUMPTIONS.filter((a) => a.basis === "confirmed");
 
@@ -23,7 +25,7 @@ export default function PlanningSettings() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Settings</h1>
-          <p className="text-xs text-ink2 mt-1">{CURRENT_SEASON.name}</p>
+          <p className="text-xs text-ink2 mt-1">{PLANNING_BRAND} · {CURRENT_SEASON.name}</p>
         </div>
         <Chip tone={invented.length > 0 ? "warn" : "good"}>{invented.length} still invented</Chip>
       </div>
@@ -31,7 +33,7 @@ export default function PlanningSettings() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Confirmed by AFL" value={String(confirmed.length)} sub="Told to us on a call" tone="good" emphasis />
         <Stat label="Invented by us" value={String(invented.length)} sub="Waiting on Vector documentation" tone="warn" />
-        <Stat label="Clusters" value={String(CLUSTERS.length)} sub={`${STORES.length} stores`} />
+        <Stat label="Clusters" value={String(CLUSTERS.filter((c) => stores.some((s) => s.clusterId === c.id)).length)} sub={`${stores.length} stores`} />
         <Stat label="Run days" value="Tue · Fri" sub="Confirmed cadence" />
       </div>
 
@@ -88,7 +90,7 @@ export default function PlanningSettings() {
             </tr>
           </thead>
           <tbody>
-            {STORES.map((s) => {
+            {stores.map((s) => {
               const changed = app.norms[s.id] !== undefined;
               return (
                 <tr key={s.id} data-store-setting>
@@ -121,13 +123,13 @@ export default function PlanningSettings() {
             </tr>
           </thead>
           <tbody>
-            {CLUSTERS.map((c) => (
+            {CLUSTERS.filter((c) => stores.some((s) => s.clusterId === c.id)).map((c) => (
               <tr key={c.id} data-cluster-row>
                 <Td>{c.name}</Td>
                 <Td>{c.region}</Td>
                 <Td className="text-ink2">{c.managerName}</Td>
                 <Td className="text-ink2">{c.cities.join(", ")}</Td>
-                <Td align="right" className="num">{STORES.filter((s) => s.clusterId === c.id).length}</Td>
+                <Td align="right" className="num">{stores.filter((s) => s.clusterId === c.id).length}</Td>
               </tr>
             ))}
           </tbody>
