@@ -9,9 +9,9 @@
 import React, { useMemo, useState } from "react";
 import { BarChart, Card, SectionTitle, SortTh, Stat, StatusDot, Swatch, Table, Tabs, Td, Th, useSort } from "@/components/ui";
 import {
-  PLANNING_BRAND,
   estateSummary,
   filterStores,
+  planningStores,
   inventoryByCategory,
   inventoryByCluster,
   inventoryByType,
@@ -21,6 +21,7 @@ import {
   type InventoryLine,
 } from "@/lib/engine";
 import { useApp } from "@/lib/state";
+import EstateFilterBar from "@/components/EstateFilterBar";
 import { HOLDBACK_GOAL, inr, pct } from "@/lib/rules";
 
 type Cut = "category" | "cluster" | "type";
@@ -82,10 +83,12 @@ export default function Inventory() {
         <div>
           <h1 className="text-xl font-semibold text-ink">Inventory</h1>
           <p className="text-xs text-ink2 mt-1">
-            {stores.length} stores · {styles.length} styles
+            {stores.length} of {planningStores().length} stores · {styles.length} styles
           </p>
         </div>
       </div>
+
+      <EstateFilterBar />
 
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <Stat

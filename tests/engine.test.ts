@@ -33,6 +33,9 @@ import {
   warehouseHeld,
   dropAllocation,
   dropUnitsFor,
+  applyMove,
+  unitsAt,
+  validateMove,
   NO_FILTERS,
   PLANNING_BRAND,
   estateSummary,
@@ -1185,5 +1188,119 @@ describe("adding a store", () => {
     const rows = storeRows([store], "week");
     expect(rows).toHaveLength(1);
     expect(Number.isFinite(rows[0].achievement)).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pausing a store, and moving stock by hand
+//
+// Also runs late: applyMove mutates the live rows, exactly as the app does.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("pausing replenishment", () => {
+  it("leaves a paused store out of the run entirely", () => {
+    const full = replenRun(NOW);
+    const target = full.triggered[0].storeId;
+    const paused = replenRun(NOW, [target]);
+    expect(paused.triggered.some((t) => t.storeId === target)).toBe(false);
+    expect(paused.lines.some((l) => l.storeId === target)).toBe(false);
+    // Everyone else is untouched.
+    expect(paused.triggered.length).toBe(full.triggered.length - 1);
+  });
+
+  it("still runs for every store that is not paused", () => {
+    const full = replenRun(NOW);
+    const paused = replenRun(NOW, [full.triggered[0].storeId]);
+    full.triggered.slice(1).forEach((t) => {
+      expect(paused.triggered.some((p) => p.storeId === t.storeId)).toBe(true);
+    });
+  });
+
+  it("produces an empty run when every store is paused", () => {
+    const all = planningStores().map((s) => s.id);
+    const none = replenRun(NOW, all);
+    expect(none.triggered).toEqual([]);
+    expect(none.lines).toEqual([]);
+  });
+});
+
+describe("moving stock by hand", () => {
+  const store = () => planningStores()[0];
+
+  it("refuses more units than the source holds, and says how many there are", () => {
+    const st = store();
+    const style = stylesAtStore(st.id).find((x) => x.brand === st.brand)!;
+    const size = style.coreSizes[0];
+    const errs = validateMove({ from: "warehouse", toStoreId: st.id, styleId: style.id, size, units: 99_999 });
+    expect(errs.length).toBeGreaterThan(0);
+    expect(errs[0]).toMatch(/holds \d+/);
+  });
+
+  it("refuses a move to the store it came from, and a move of nothing", () => {
+    const st = store();
+    const style = stylesAtStore(st.id)[0];
+    const size = style.coreSizes[0];
+    expect(validateMove({ from: st.id, toStoreId: st.id, styleId: style.id, size, units: 1 })).toContain(
+      "Source and destination are the same store.",
+    );
+    expect(validateMove({ from: "warehouse", toStoreId: st.id, styleId: style.id, size, units: 0 })).toContain("Nothing to move.");
+  });
+
+  it("moves units off the warehouse and onto the floor, and both numbers change", () => {
+    const st = store();
+    const style = stylesAtStore(st.id).find((x) => x.brand === st.brand && dcAvailable(x.id, x.coreSizes[0]) > 4)!;
+    const size = style.coreSizes[0];
+    const whBefore = dcAvailable(style.id, size);
+    const floorBefore = unitsAt(st.id, style.id, size);
+
+    expect(applyMove({ from: "warehouse", toStoreId: st.id, styleId: style.id, size, units: 3 })).toBe(true);
+
+    expect(dcAvailable(style.id, size)).toBe(whBefore - 3);
+    expect(unitsAt(st.id, style.id, size)).toBe(floorBefore + 3);
+  });
+
+  it("conserves units on a store-to-store move — nothing is created or lost", () => {
+    const [a, b] = planningStores();
+    const style = stylesAtStore(a.id).find((x) => x.brand === a.brand && unitsAt(a.id, x.id, x.coreSizes[0]) > 2)!;
+    const size = style.coreSizes[0];
+    const before = unitsAt(a.id, style.id, size) + unitsAt(b.id, style.id, size);
+
+    expect(applyMove({ from: a.id, toStoreId: b.id, styleId: style.id, size, units: 2 })).toBe(true);
+
+    expect(unitsAt(a.id, style.id, size) + unitsAt(b.id, style.id, size)).toBe(before);
+  });
+
+  it("puts a SKU on a floor that never carried it — which is what a renewal is", () => {
+    const st = planningStores()[1];
+    const notCarried = STYLES.find(
+      (x) => x.brand === st.brand && !stylesAtStore(st.id).some((c) => c.id === x.id) && dcAvailable(x.id, x.coreSizes[0]) > 2,
+    );
+    if (!notCarried) return; // the demo assortment is small; skip rather than assert nothing
+    const size = notCarried.coreSizes[0];
+    expect(unitsAt(st.id, notCarried.id, size)).toBe(0);
+    expect(applyMove({ from: "warehouse", toStoreId: st.id, styleId: notCarried.id, size, units: 2 })).toBe(true);
+    expect(unitsAt(st.id, notCarried.id, size)).toBe(2);
+    expect(stylesAtStore(st.id).some((c) => c.id === notCarried.id)).toBe(true);
+  });
+
+  it("shows the estate the new units immediately, cache and all", () => {
+    const st = store();
+    const style = stylesAtStore(st.id).find((x) => x.brand === st.brand && dcAvailable(x.id, x.coreSizes[0]) > 6)!;
+    const size = style.coreSizes[0];
+    const before = estateSummary([st], "week").sellableUnits;
+    applyMove({ from: "warehouse", toStoreId: st.id, styleId: style.id, size, units: 5 });
+    expect(estateSummary([st], "week").sellableUnits).toBe(before + 5);
+  });
+
+  it("never lets the warehouse go negative", () => {
+    const st = store();
+    const style = stylesAtStore(st.id).find((x) => x.brand === st.brand)!;
+    const size = style.coreSizes[0];
+    const wh = dcAvailable(style.id, size);
+    // Asking for everything is fine; asking for more than everything is refused.
+    if (wh > 0) expect(applyMove({ from: "warehouse", toStoreId: st.id, styleId: style.id, size, units: wh })).toBe(true);
+    expect(dcAvailable(style.id, size)).toBe(0);
+    expect(applyMove({ from: "warehouse", toStoreId: st.id, styleId: style.id, size, units: 1 })).toBe(false);
+    expect(dcAvailable(style.id, size)).toBe(0);
   });
 });

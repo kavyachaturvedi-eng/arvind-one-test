@@ -123,7 +123,9 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     key: "pflow", label: "Stock flow", glyph: "⇅", roles: ["planner"], section: "Planning",
     children: [
-      { id: "run", label: "Replenishment & renewal" },
+      { id: "run", label: "Replenishment" },
+      { id: "renew", label: "Renewal" },
+      { id: "move", label: "Move stock" },
       { id: "alloc", label: "Allocation" },
       { id: "moves", label: "Strategic IST" },
     ],

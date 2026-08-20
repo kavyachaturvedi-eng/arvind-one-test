@@ -43,7 +43,9 @@ import StoreView from "@/components/modules/StoreDetail";
 import HqTasks from "@/components/modules/HqTasks";
 import ActivityLog from "@/components/modules/ActivityLog";
 import Stores from "@/components/modules/Stores";
-import ReplenRunView from "@/components/modules/ReplenRun";
+import Replen from "@/components/modules/Replen";
+import Renewal from "@/components/modules/Renewal";
+import MoveStock from "@/components/modules/MoveStock";
 import Allocation from "@/components/modules/Allocation";
 import Otb from "@/components/modules/Otb";
 import Asks from "@/components/modules/Asks";
@@ -62,7 +64,11 @@ function Router() {
     case "inv":
       return <Inventory />;
     case "run":
-      return <ReplenRunView />;
+      return <Replen />;
+    case "renew":
+      return <Renewal />;
+    case "move":
+      return <MoveStock />;
     case "alloc":
       return <Allocation />;
     case "otb":

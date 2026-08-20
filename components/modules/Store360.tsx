@@ -11,19 +11,17 @@
 
 import React, { useMemo } from "react";
 import { Card, Chip, Meter, SectionTitle, SortTh, Stat, StatusDot, Table, Tabs, Td, Th, useSort } from "@/components/ui";
+import EstateFilterBar from "@/components/EstateFilterBar";
 import {
-  NO_FILTERS,
   PERIOD_LABEL,
   PLANNING_BRAND,
   estateSummary,
   estateTrend,
   filterStores,
-  filtersActive,
   planningStores,
   storeRows,
   type Period,
 } from "@/lib/engine";
-import { CLUSTERS } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import { inr, pct } from "@/lib/rules";
 
@@ -38,7 +36,6 @@ export default function Store360() {
   const rows = useMemo(() => storeRows(stores, period, app.requests), [stores, period, app.requests]);
   const spark = useMemo(() => (stores.length ? estateTrend(stores) : []), [stores]);
 
-  const narrowed = filtersActive(filters);
 
   const sorter = useSort<StoreSort>("risk");
   const sorted = sorter.sort(rows, (r, key) => {
@@ -56,8 +53,6 @@ export default function Store360() {
     }
   });
   const bandTone = summary.band === "healthy" ? "good" : summary.band === "thin" ? "critical" : "warn";
-  const clusters = CLUSTERS.filter((c) => planningStores().some((s) => s.clusterId === c.id));
-  const regions = [...new Set(planningStores().map((s) => s.region))].sort();
 
   return (
     <div className="space-y-4">
@@ -79,25 +74,7 @@ export default function Store360() {
         />
       </div>
 
-      <Card pad={false}>
-        <div className="p-3 flex items-end gap-3 flex-wrap">
-          <Filter label="Region" value={filters.region} onChange={(v) => app.setFilter({ region: v })} options={regions.map((r) => [r, r])} name="region" />
-          <Filter label="Cluster" value={filters.cluster} onChange={(v) => app.setFilter({ cluster: v })} options={clusters.map((c) => [c.id, c.name])} name="cluster" />
-          <Filter label="Grade" value={filters.grade} onChange={(v) => app.setFilter({ grade: v })} options={[["A", "A"], ["B", "B"], ["C", "C"]]} name="grade" />
-          <Filter
-            label="Fill rate"
-            value={filters.band}
-            onChange={(v) => app.setFilter({ band: v })}
-            options={[["thin", "Below band"], ["healthy", "In band"], ["heavy", "Above band"]]}
-            name="band"
-          />
-          {narrowed > 0 && (
-            <button className="btn !py-1.5 !text-xs" data-clear-filters onClick={() => app.setFilter(NO_FILTERS)}>
-              Clear filters
-            </button>
-          )}
-        </div>
-      </Card>
+      <EstateFilterBar />
 
       {stores.length === 0 ? (
         <Card>
@@ -242,37 +219,3 @@ export default function Store360() {
   );
 }
 
-function Filter({
-  label,
-  value,
-  onChange,
-  options,
-  name,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: [string, string][];
-  name: string;
-}) {
-  return (
-    <div>
-      <div className="label mb-1">{label}</div>
-      <select
-        value={value}
-        data-filter={name}
-        onChange={(e) => onChange(e.target.value)}
-        className={`border bg-raised px-2 py-1.5 text-xs text-ink ${
-          value === "all" ? "border-line" : "border-[color:var(--brand)] text-[color:var(--brand)]"
-        }`}
-      >
-        <option value="all">All</option>
-        {options.map(([v, l]) => (
-          <option key={v} value={v}>
-            {l}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}

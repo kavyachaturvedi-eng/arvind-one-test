@@ -592,3 +592,62 @@ export interface HqAssignment {
   raisedBy: string;
   raisedAt: number;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cycles and stock movement
+//
+// Three things move stock, and they are not the same shape:
+//   · Replenishment runs on its own every few days. Planning's control is
+//     pausing a store, not approving each line.
+//   · Renewal is per SKU per store, so it is created (or suggested) and needs
+//     someone to say yes before anything ships.
+//   · An allocation is one unit spread across stores, at planning's discretion.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type CycleKind = "replenishment" | "renewal" | "allocation";
+
+export type CycleStatus =
+  | "running"             // replenishment: fired on its own
+  | "awaiting_approval"   // renewal and allocation wait for a person
+  | "approved"
+  | "rejected"
+  | "applied";            // stock actually moved
+
+export interface CycleLine {
+  id: string;
+  storeId: string;
+  styleId: string;
+  size?: Size;
+  units: number;
+  reason?: string;
+}
+
+export interface Cycle {
+  id: string;
+  kind: CycleKind;
+  status: CycleStatus;
+  createdAt: number;
+  createdBy: string;
+  /** "warehouse", or a store id for a store-to-store move. */
+  source: string;
+  lines: CycleLine[];
+  note?: string;
+  decidedBy?: string;
+  decidedAt?: number;
+  decisionNote?: string;
+  appliedAt?: number;
+}
+
+/** One unit movement that actually happened, for the movement log. */
+export interface StockMove {
+  id: string;
+  at: number;
+  by: string;
+  from: string;          // "warehouse" or a store id
+  toStoreId: string;
+  styleId: string;
+  size: Size;
+  units: number;
+  reason: string;
+  cycleId?: string;
+}

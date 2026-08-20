@@ -30,7 +30,7 @@ export default function ActivityLog() {
   // The run does not write to the audit trail when it fires — nobody is sitting
   // at a keyboard at 06:00 on a Tuesday — so it is reconstructed from the run.
   const runRows = useMemo<LogRow[]>(() => {
-    const run = replenRun(NOW);
+    const run = replenRun(NOW, app.pausedStores);
     const at = lastRunAt(NOW);
     const replen = run.lines.filter((l) => l.kind === "replenish");
     const renew = run.lines.filter((l) => l.kind === "renew");
@@ -71,7 +71,7 @@ export default function ActivityLog() {
       })),
     ];
     return rows;
-  }, []);
+  }, [app.pausedStores]);
 
   const peopleRows = useMemo<LogRow[]>(() => app.audit.map((e) => ({ ...e, source: "people" as const })), [app.audit]);
 

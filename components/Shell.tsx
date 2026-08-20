@@ -175,9 +175,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
           ) : (
             <>
               <span className="text-xs text-ink2 font-medium shrink-0">{STORES.length} stores · live</span>
-              <span className="text-muted text-xs shrink-0 hidden sm:inline">·</span>
-              <span className="label shrink-0">Focus store</span>
-              <StorePicker />
+              {/* Planning picks a store in Store 360, not from the header — a
+                  second store selector up here only competed with it. */}
+              {app.role === "leadership" && (
+                <>
+                  <span className="text-muted text-xs shrink-0 hidden sm:inline">·</span>
+                  <span className="label shrink-0">Focus store</span>
+                  <StorePicker />
+                </>
+              )}
             </>
           )}
           <span className="text-muted text-xs shrink-0 hidden sm:inline">·</span>

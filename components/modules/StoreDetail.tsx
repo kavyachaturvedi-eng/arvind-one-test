@@ -48,7 +48,7 @@ export default function StoreView() {
   const [opening, setOpening] = useState(true);
   useEffect(() => {
     setOpening(true);
-    const t = setTimeout(() => setOpening(false), 520);
+    const t = setTimeout(() => setOpening(false), 1100);
     return () => clearTimeout(t);
   }, [storeId]);
 
@@ -96,16 +96,17 @@ export default function StoreView() {
     <div className="space-y-4 relative">
       {opening && (
         <div
-          className="absolute inset-0 z-30 grid place-items-center"
-          style={{ background: "var(--surface-1)", animation: "storeOpen 520ms ease-out forwards" }}
+          className="absolute -inset-3 sm:-inset-6 z-40 grid place-items-center"
+          style={{ background: "var(--surface-1)", animation: "storeOpen 1100ms ease-out forwards" }}
           data-store-opening
           aria-live="polite"
         >
-          <div className="text-center">
+          <div className="text-center" style={{ animation: "storeOpenRise 420ms ease-out both" }}>
             <div className="label mb-2">Opening Store 360</div>
-            <div className="text-xl font-semibold text-ink">{store.name}</div>
+            <div className="text-2xl font-semibold text-ink">{store.name}</div>
+            <div className="text-xs text-ink2 mt-1">{cluster.name} · {store.city}</div>
             <div className="mx-auto mt-3 h-0.5 w-28 overflow-hidden" style={{ background: "var(--line)" }}>
-              <div className="h-full" style={{ background: "var(--brand)", animation: "storeOpenBar 520ms ease-out forwards" }} />
+              <div className="h-full" style={{ background: "var(--brand)", animation: "storeOpenBar 1000ms ease-out forwards" }} />
             </div>
           </div>
         </div>

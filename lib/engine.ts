@@ -116,6 +116,12 @@ for (const style of STYLES) {
 }
 export const dcAvailable = (styleId: string, size: Size) => dcStock.get(`${styleId}|${size}`) ?? 0;
 
+/** Take units out of the warehouse pool when a move or a run line ships. */
+export function drawFromWarehouse(styleId: string, size: Size, units: number) {
+  const key = `${styleId}|${size}`;
+  dcStock.set(key, Math.max(0, (dcStock.get(key) ?? 0) - units));
+}
+
 function hash(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -1137,12 +1143,14 @@ export function warehouseHeld(): { units: number; share: number; goalUnits: numb
  * on fill rate or brokenness; its gap to norm is then split between the same
  * style returning and a new style arriving, per that store's replenish share.
  */
-export function replenRun(at: number): ReplenRun {
+export function replenRun(at: number, pausedStores: string[] = []): ReplenRun {
   const triggered: ReplenRun["triggered"] = [];
   const lines: ReplenLine[] = [];
+  const paused = new Set(pausedStores);
 
-  // The run covers the brand planning owns, not the whole company.
+  // The run covers the brand planning owns, minus any store it is paused for.
   planningStores().forEach((store) => {
+    if (paused.has(store.id)) return;
     const v = vitalsFor(store.id);
     const carried = stylesAtStore(store.id).length;
     const brokenShare = carried > 0 ? (v.brokenStyles + v.atRiskStyles) / carried : 0;
@@ -1653,4 +1661,91 @@ export function styleInventory(stores: Store[]): StyleInventoryRow[] {
   });
 
   return out.sort((a, b) => b.valueAtRisk - a.valueAtRisk);
+}
+
+// ── Moving stock for real ────────────────────────────────────────────────────
+//
+// Planning can override the algorithm and move units on its own judgement:
+// warehouse to a store, or store to store. These functions mutate the live
+// stock rows and drop the caches over them, so the move shows up everywhere
+// immediately rather than being recorded and forgotten.
+
+/** Units the warehouse holds for a style, across every size. */
+export function warehouseTotal(styleId: string): number {
+  return styleById(styleId).sizes.reduce((a, size) => a + dcAvailable(styleId, size), 0);
+}
+
+/** Units the warehouse holds for a style, size by size. */
+export function warehouseBySize(styleId: string): Array<{ size: Size; units: number }> {
+  return styleById(styleId).sizes.map((size) => ({ size, units: dcAvailable(styleId, size) }));
+}
+
+/** Sellable units of one SKU on one store's floor. */
+export function unitsAt(storeId: string, styleId: string, size: Size): number {
+  const row = skuRow(storeId, styleId, size);
+  return row ? sellable(row) : 0;
+}
+
+export interface MoveRequest {
+  from: string; // "warehouse" or a store id
+  toStoreId: string;
+  styleId: string;
+  size: Size;
+  units: number;
+}
+
+/**
+ * What a move would be refused for. Checked before anything moves, so the
+ * planner sees the reason rather than a half-applied batch.
+ */
+export function validateMove(m: MoveRequest): string[] {
+  const errors: string[] = [];
+  if (m.units <= 0) errors.push("Nothing to move.");
+  if (m.from === m.toStoreId) errors.push("Source and destination are the same store.");
+  const available = m.from === "warehouse" ? dcAvailable(m.styleId, m.size) : unitsAt(m.from, m.styleId, m.size);
+  if (m.units > available) {
+    errors.push(
+      m.from === "warehouse"
+        ? `Warehouse holds ${available} of size ${m.size}, not ${m.units}.`
+        : `${storeById(m.from).name} has ${available} of size ${m.size} on the floor, not ${m.units}.`,
+    );
+  }
+  return errors;
+}
+
+/**
+ * Apply a move. Adds the units to the destination floor and takes them off the
+ * source — the warehouse pool, or the donor store's floor.
+ */
+export function applyMove(m: MoveRequest): boolean {
+  if (validateMove(m).length > 0) return false;
+
+  const destination = skuRow(m.toStoreId, m.styleId, m.size);
+  if (destination) {
+    destination.onHand += m.units;
+  } else {
+    // The destination did not carry this SKU at all — a renewal, in other words.
+    const row: StockRow = {
+      storeId: m.toStoreId,
+      styleId: m.styleId,
+      size: m.size,
+      onHand: m.units,
+      inTransit: 0,
+      reserved: 0,
+      inStockDays: 1,
+      sold28: 0,
+      soldOnMarkdown28: 0,
+    };
+    STOCK.push(row);
+    indexRow(row);
+  }
+
+  if (m.from === "warehouse") drawFromWarehouse(m.styleId, m.size, m.units);
+  else {
+    const donor = skuRow(m.from, m.styleId, m.size);
+    if (donor) donor.onHand = Math.max(0, donor.onHand - m.units);
+  }
+
+  vitalsCache = null;
+  return true;
 }

@@ -27,6 +27,9 @@ import { NO_FILTERS, type EstateFilters, type Period } from "./engine";
 import type {
   AllocationPush,
   AuditEntry,
+  Cycle,
+  CycleKind,
+  StockMove,
   TrainingItem,
   CashException,
   HqAssignment,
@@ -87,6 +90,8 @@ export type ModuleId =
   | "asks"
   | "planset"
   | "hqtask"
+  | "renew"
+  | "move"
   | "log"
   | "stores"
 ;
@@ -142,6 +147,12 @@ interface AppState {
   normLog: NormChange[];
   /** Tasks head office has assigned to stores this session. */
   hqTasks: HqAssignment[];
+  /** Stores the replenishment run is paused for. It fires for everyone else. */
+  pausedStores: string[];
+  /** Replenishment, renewal and allocation cycles. */
+  cycles: Cycle[];
+  /** Every unit movement that actually happened. */
+  moves: StockMove[];
   /** Units planning has pushed to a store outside the run. */
   pushes: AllocationPush[];
 }
@@ -184,6 +195,13 @@ export interface LeaveRequest {
 }
 
 let reqSeq = 1;
+
+/** How each kind of cycle reads on screen and in the trail. */
+export const CYCLE_LABEL: Record<CycleKind, string> = {
+  replenishment: "Replenishment",
+  renewal: "Renewal",
+  allocation: "Allocation",
+};
 
 /** How each kind of store ask reads on screen and in the audit trail. */
 export const REQUEST_LABEL: Record<PlanningRequestKind, string> = {
@@ -236,6 +254,10 @@ type Action =
   | { type: "run:drop"; lineIds: string[]; by: string; label: string }
   | { type: "norm:set"; storeId: string; to: number; by: string; reason: string }
   | { type: "hq:assign"; task: HqAssignment }
+  | { type: "store:pause"; storeId: string; paused: boolean; by: string }
+  | { type: "cycle:create"; cycle: Cycle }
+  | { type: "cycle:decide"; id: string; status: "approved" | "rejected"; by: string; note?: string }
+  | { type: "cycle:apply"; id: string; moves: StockMove[]; by: string }
   | { type: "store:add"; store: Store }
   | { type: "alloc:push"; pushes: AllocationPush[]; by: string; label: string }
   | { type: "reset" };
@@ -459,6 +481,9 @@ const initial: AppState = {
   norms: {},
   normLog: [],
   hqTasks: [],
+  pausedStores: [],
+  cycles: [],
+  moves: [],
   pushes: [],
   audit: [
     { at: NOW - 64 * 60_000, actor: "Commercial", action: "Price revision published", object: "11 styles", system: "Arvind One" },
@@ -805,6 +830,79 @@ function reducer(state: AppState, action: Action): AppState {
           ...state.audit,
         ],
       };
+
+    case "store:pause":
+      return {
+        ...state,
+        pausedStores: action.paused
+          ? [...new Set([...state.pausedStores, action.storeId])]
+          : state.pausedStores.filter((id) => id !== action.storeId),
+        audit: [
+          {
+            at: NOW,
+            actor: action.by,
+            action: action.paused ? "Replenishment paused" : "Replenishment resumed",
+            object: storeById(action.storeId).name,
+            system: "Arvind One",
+          },
+          ...state.audit,
+        ],
+      };
+
+    case "cycle:create":
+      return {
+        ...state,
+        cycles: [action.cycle, ...state.cycles],
+        audit: [
+          {
+            at: action.cycle.createdAt,
+            actor: action.cycle.createdBy,
+            action: `${CYCLE_LABEL[action.cycle.kind]} cycle created`,
+            object: `${action.cycle.id} · ${action.cycle.lines.length} lines · ${action.cycle.lines.reduce((a, l) => a + l.units, 0)} units`,
+            system: "Arvind One",
+          },
+          ...state.audit,
+        ],
+      };
+
+    case "cycle:decide": {
+      const c = state.cycles.find((x) => x.id === action.id);
+      return {
+        ...state,
+        cycles: state.cycles.map((x) =>
+          x.id === action.id ? { ...x, status: action.status, decidedBy: action.by, decidedAt: NOW, decisionNote: action.note } : x,
+        ),
+        audit: [
+          {
+            at: NOW,
+            actor: action.by,
+            action: `${c ? CYCLE_LABEL[c.kind] : "Cycle"} cycle ${action.status}`,
+            object: action.id,
+            system: "Arvind One",
+          },
+          ...state.audit,
+        ],
+      };
+    }
+
+    case "cycle:apply": {
+      const c = state.cycles.find((x) => x.id === action.id);
+      return {
+        ...state,
+        cycles: state.cycles.map((x) => (x.id === action.id ? { ...x, status: "applied", appliedAt: NOW } : x)),
+        moves: [...action.moves, ...state.moves],
+        audit: [
+          {
+            at: NOW,
+            actor: action.by,
+            action: `${c ? CYCLE_LABEL[c.kind] : "Cycle"} applied`,
+            object: `${action.id} · ${action.moves.reduce((a, m) => a + m.units, 0)} units moved`,
+            system: "Arvind One",
+          },
+          ...state.audit,
+        ],
+      };
+    }
 
     case "store:add":
       return {

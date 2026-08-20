@@ -283,8 +283,12 @@ tbody tr:hover {
    fixed-position child, which is the Safari bug that ate the till once. */
 @keyframes storeOpen {
   0%   { opacity: 1; }
-  70%  { opacity: 1; }
+  72%  { opacity: 1; }
   100% { opacity: 0; visibility: hidden; }
+}
+@keyframes storeOpenRise {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
 }
 @keyframes storeOpenBar {
   0%   { width: 0%; }
