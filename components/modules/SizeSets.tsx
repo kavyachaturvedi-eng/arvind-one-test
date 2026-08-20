@@ -159,9 +159,6 @@ export default function SizeSets() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Size Sets</h1>
-          <p className="text-sm text-ink2 mt-1 max-w-2xl">
-            Every style whose core sizes are broken or at risk, ranked by value at risk.
-          </p>
         </div>
       </div>
 
@@ -171,7 +168,6 @@ export default function SizeSets() {
           label="Size-set health"
           value={pct(vitals.sizeSetScore)}
           tone={vitals.sizeSetScore < 0.7 ? "critical" : vitals.sizeSetScore < 0.85 ? "warn" : "good"}
-          sub="styles with every core size on the floor"
           freshness={4}
         />
         <Stat label="Broken sets" value={String(vitals.brokenStyles)} tone="critical" sub="two or more core sizes gone" />
@@ -180,7 +176,6 @@ export default function SizeSets() {
           label="Value at risk"
           value={inr(vitals.valueAtRisk, { compact: true })}
           tone="critical"
-          sub="7 days of full-price demand these sets cannot serve"
           emphasis
         />
       </div>
@@ -190,7 +185,6 @@ export default function SizeSets() {
       <Card>
         <SectionTitle
           title="Exception queue"
-          sub="Every broken or at-risk size set at this store, ranked by the money it is costing. Tap a row for the decision and to act on it."
           right={
             <div className="flex items-center gap-2 flex-wrap">
               <Tabs
@@ -355,9 +349,6 @@ function DecisionModal({
       wide
       onClose={onClose}
       title={sig.style.name}
-      sub={`${sig.style.brand} · ${sig.style.category} · ${sig.style.colour} · MRP ${inr(sig.style.mrp)} · ${
-        sig.health.status === "broken" ? "size set broken" : "size set at risk"
-      }`}
       footer={
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <button className="btn" onClick={onClose}>

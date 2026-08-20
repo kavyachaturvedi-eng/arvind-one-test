@@ -31,7 +31,6 @@ export default function Agents() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">AI Agents</h1>
-          <p className="text-sm text-ink2 mt-1">Bounded autonomy: small moves run alone, big moves wait for you, everything is logged.</p>
         </div>
         <Chip tone={openApprovals.length ? "warn" : "good"}>{openApprovals.length} awaiting approval</Chip>
       </div>
@@ -46,7 +45,7 @@ export default function Agents() {
       {/* Approval queue — the human-in-the-loop heart of the screen */}
       {openApprovals.length > 0 && (
         <Card>
-          <SectionTitle title="Waiting on you" sub="Approve and the agent executes; reject and it stands down." />
+          <SectionTitle title="Waiting on you" />
           <div className="space-y-2">
             {openApprovals.map(({ agent, ap }) => (
               <div key={ap.id} className="border border-line p-3 flex items-start gap-3">

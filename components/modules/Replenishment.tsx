@@ -61,7 +61,6 @@ export default function Replenishment() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Replenishment</h1>
-          <p className="text-sm text-ink2 mt-1">Every SKU below cover, with its fix. Pulls execute here; transfers open Save the Sale.</p>
         </div>
         {openPulls.length > 1 && (
           <button className="btn-primary" onClick={raiseAll}>Raise all {openPulls.length} pulls</button>
@@ -129,7 +128,7 @@ export default function Replenishment() {
       </Card>
 
       <Card>
-        <SectionTitle title="Transfer from a store" sub="Warehouse is empty for these sizes." right={<Chip>{transfers.length}</Chip>} />
+        <SectionTitle title="Transfer from a store" right={<Chip>{transfers.length}</Chip>} />
         {transfers.length === 0 ? (
           <Empty title="No transfers suggested" />
         ) : (

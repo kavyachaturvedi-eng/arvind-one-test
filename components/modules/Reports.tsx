@@ -33,7 +33,7 @@ function EstateReports() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Reports</h1>
-          <p className="text-sm text-ink2 mt-1">Estate level · generated from live numbers.</p>
+          <p className="text-sm text-ink2 mt-1">Estate level</p>
         </div>
         <button className="btn-primary !py-1.5 !text-xs" onClick={() => app.toastNow("Estate pack sent to leadership", "good")}>Send pack</button>
       </div>
@@ -109,7 +109,7 @@ function StoreReports() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Reports</h1>
-          <p className="text-sm text-ink2 mt-1">{store.name} · generated from live numbers.</p>
+          <p className="text-sm text-ink2 mt-1">{store.name}</p>
         </div>
         <Tabs
           value={tab}

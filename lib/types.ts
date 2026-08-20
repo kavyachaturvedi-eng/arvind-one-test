@@ -236,7 +236,7 @@ export interface WorkflowEvent {
   system: SourceSystem;
 }
 
-export type TicketKind = "maintenance" | "tag_reprint" | "it" | "vm" | "safety";
+export type TicketKind = "maintenance" | "tag_reprint" | "it" | "vm" | "safety" | "stock_missing" | "other";
 export type TicketStatus = "open" | "auto_dispatched" | "awaiting_approval" | "in_progress" | "resolved" | "breached";
 
 export interface Ticket {

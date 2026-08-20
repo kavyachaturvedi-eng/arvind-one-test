@@ -51,7 +51,6 @@ export default function Copilot() {
           <div className="flex items-center justify-between px-4 py-3 border-b border-line">
             <div>
               <div className="text-sm font-medium text-ink">Arvi</div>
-              <div className="text-2xs text-muted">Asks the same numbers every screen uses. Actions need your tap.</div>
             </div>
             <button className="btn-ghost !px-2" onClick={() => { setOpen(false); setActive(null); }}>×</button>
           </div>
@@ -85,9 +84,6 @@ export default function Copilot() {
                     </button>
                   )}
                   <button className="btn !py-1.5 !text-xs" onClick={() => setActive(null)}>Back</button>
-                </div>
-                <div className="text-2xs text-muted pt-2 border-t border-line">
-                  Computed from the same metric definitions every screen uses · nothing is invented
                 </div>
               </div>
             )}

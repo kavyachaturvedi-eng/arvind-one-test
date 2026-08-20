@@ -22,6 +22,25 @@ export default function Login() {
   const [storeId, setStoreId] = useState(STORES[0].id);
   const storeSide = role === "store" || role === "staff";
 
+  // Store logins are per person: pick the name, then key the PIN.
+  const people = app.users.filter((u) => (role === "store" ? u.role === "Store Manager" : u.role !== "Store Manager"));
+  const [who, setWho] = useState(people[0]?.name ?? "");
+  const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState(false);
+  const person = app.users.find((u) => u.name === (people.some((p) => p.name === who) ? who : people[0]?.name));
+
+  function submit() {
+    if (!storeSide) {
+      app.dispatch({ type: "login", role });
+      return;
+    }
+    if (!person || pin !== person.pin) {
+      setPinError(true);
+      return;
+    }
+    app.dispatch({ type: "login", role, storeId, userName: person.name });
+  }
+
   return (
     <div className="min-h-screen grid lg:grid-cols-[1.1fr_1fr]" style={{ background: "var(--plane)" }}>
       {/* Editorial brand panel */}
@@ -90,30 +109,62 @@ export default function Login() {
           </div>
 
           {storeSide && (
-            <div className="mt-4">
-              <div className="label mb-1.5">Store</div>
-              <select
-                value={storeId}
-                onChange={(e) => setStoreId(e.target.value)}
-                className="w-full border border-line bg-raised px-3 py-2.5 text-sm text-ink"
-              >
-                {STORES.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} · {s.brand} · {s.city}</option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div className="mt-4">
+                <div className="label mb-1.5">Store</div>
+                <select
+                  value={storeId}
+                  onChange={(e) => setStoreId(e.target.value)}
+                  className="w-full border border-line bg-raised px-3 py-2.5 text-sm text-ink"
+                >
+                  {STORES.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name} · {s.brand} · {s.city}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mt-3">
+                <div className="label mb-1.5">Who is signing in</div>
+                <select
+                  data-who
+                  value={person?.name ?? ""}
+                  onChange={(e) => { setWho(e.target.value); setPin(""); setPinError(false); }}
+                  className="w-full border border-line bg-raised px-3 py-2.5 text-sm text-ink"
+                >
+                  {people.map((p) => (
+                    <option key={p.name} value={p.name}>{p.name} · {p.role}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mt-3">
+                <div className="label mb-1.5">PIN</div>
+                <input
+                  data-pin
+                  value={pin}
+                  onChange={(e) => { setPin(e.target.value.replace(/[^\d]/g, "").slice(0, 4)); setPinError(false); }}
+                  onKeyDown={(e) => e.key === "Enter" && submit()}
+                  inputMode="numeric"
+                  type="password"
+                  placeholder="4 digits"
+                  className="w-full border border-line bg-raised px-3 py-3 text-lg num tracking-[0.4em] text-ink"
+                  style={{ borderColor: pinError ? "var(--status-critical)" : undefined }}
+                />
+                {pinError && (
+                  <div className="text-2xs mt-1.5" style={{ color: "var(--status-critical)" }}>
+                    Wrong PIN. Ask your manager to reset it.
+                  </div>
+                )}
+              </div>
+            </>
           )}
 
-          <button
-            data-signin
-            className="btn-primary w-full mt-5 !py-3"
-            onClick={() => app.dispatch({ type: "login", role, storeId: storeSide ? storeId : undefined })}
-          >
-            Enter {ROLES.find((r) => r.id === role)!.label} view
+          <button data-signin className="btn-primary w-full mt-5 !py-3" onClick={submit}>
+            {storeSide ? "Sign in" : `Enter ${ROLES.find((r) => r.id === role)!.label} view`}
           </button>
 
           <div className="mt-6 text-2xs text-muted leading-relaxed">
-            Demo environment. Synthetic data for 24 stores; every screen renders identically on every machine.
+            Demo PINs: manager 1234, cashiers 1111 and 3333, floor 2222 and 4444, omni 5555.
           </div>
         </div>
       </div>

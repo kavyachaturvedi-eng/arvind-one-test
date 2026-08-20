@@ -147,9 +147,6 @@ export default function Catchment() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Customer Catchment</h1>
-          <p className="text-sm text-ink2 mt-1 max-w-2xl">
-            Customer pin codes and area concentration for this store, for launch planning and media targeting.
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <Chip tone="brand">Source: loyalty ledger · {store.name}</Chip>
@@ -162,14 +159,12 @@ export default function Catchment() {
         <Stat
           label="Share within 5 km"
           value={pct(within5.reduce((a, p) => a + p.customers, 0) / Math.max(1, totalCustomers))}
-          sub={`${within5.length} of ${placed.length} areas sit inside the walk-in ring`}
         />
         <Stat label="Top area by spend" value={topSpend.area} sub={`${inr(topSpend.spend)} average spend per customer · ${topSpend.distanceKm} km out`} />
         <Stat
           label="Estimated untapped"
           value={untapped.toLocaleString("en-IN")}
           tone="warn"
-          sub="Addressable base not yet a customer, at the stated penetration assumption"
         />
       </div>
 
@@ -178,7 +173,6 @@ export default function Catchment() {
         <Card>
           <SectionTitle
             title="Where they come from"
-            sub="Bubble area is customers, colour is average spend. Distance from the centre is real; the bearing is a stable hash of the pin code, not a street address."
             right={
               <select
                 className="rounded-md border border-line bg-raised px-2 py-1 text-xs"
@@ -297,7 +291,6 @@ export default function Catchment() {
       <Card>
         <SectionTitle
           title="New store launch — the three areas to act on"
-          sub="High customer count, long travel distance. The same three rows are either a media list or a site shortlist, depending on which question you are answering."
           right={
             <Tabs
               value={launchView}

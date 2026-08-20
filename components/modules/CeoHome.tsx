@@ -49,7 +49,6 @@ export default function CeoHome() {
         <Stat
           label="MTD vs target"
           value={pct(e.mtdSales / Math.max(1, e.mtdTarget))}
-          sub={`${inr(e.mtdSales, { compact: true })} of ${inr(e.mtdTarget, { compact: true })}`}
           tone={e.mtdSales >= e.mtdTarget ? "good" : "warn"}
           emphasis
         />

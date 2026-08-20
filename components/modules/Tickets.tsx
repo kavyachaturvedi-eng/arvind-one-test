@@ -26,6 +26,8 @@ const KIND_LABEL: Record<TicketKind, string> = {
   it: "IT",
   vm: "VM",
   safety: "Safety",
+  stock_missing: "Stock missing",
+  other: "Something else",
 };
 const KIND_TONE: Record<TicketKind, "neutral" | "good" | "warn" | "serious" | "critical" | "brand"> = {
   maintenance: "neutral",
@@ -33,6 +35,8 @@ const KIND_TONE: Record<TicketKind, "neutral" | "good" | "warn" | "serious" | "c
   it: "warn",
   vm: "serious",
   safety: "critical",
+  stock_missing: "warn",
+  other: "neutral",
 };
 const STATUS_LABEL: Record<Ticket["status"], string> = {
   open: "Open",
@@ -50,6 +54,8 @@ const VENDOR_BY_KIND: Record<TicketKind, string> = {
   vm: "In-house VM pool",
   safety: "SafeGuard Fire Services",
   tag_reprint: "In-store printer",
+  stock_missing: "Store Operations, shrinkage desk",
+  other: "Store Operations",
 };
 
 interface StoreAsset { id: string; name: string; kind: TicketKind }
@@ -61,6 +67,9 @@ const ASSETS: StoreAsset[] = [
   { id: "AST-LIFT-01", name: "Customer lift", kind: "maintenance" },
   { id: "AST-TRM-03", name: "Trial room mirror", kind: "maintenance" },
   { id: "AST-FIRE-A", name: "Fire extinguisher A", kind: "safety" },
+  { id: "AST-FLR-01", name: "Floor stock, piece missing", kind: "stock_missing" },
+  { id: "AST-STK-01", name: "Stockroom, piece missing", kind: "stock_missing" },
+  { id: "AST-OTH-01", name: "Something else in the store", kind: "other" },
 ];
 
 const hash = (s: string) => { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); };
@@ -391,7 +400,6 @@ function TicketModal({
     <Modal
       open onClose={onClose} wide
       title={t.title}
-      sub={`${t.id} · ${KIND_LABEL[t.kind]} · ${storeById(t.storeId).name} · raised ${fmtDateTime(t.raisedAt)} by ${t.raisedBy}`}
       footer={
         <>
           <button className="btn" onClick={onClose}>Close</button>

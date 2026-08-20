@@ -102,6 +102,7 @@ export default function BillHistory() {
   const [decided, setDecided] = useState<Record<string, { kind: "returned" | "exchanged"; reason: string }>>({});
   const [acting, setActing] = useState<{ bill: PastBill; kind: "returned" | "exchanged" } | null>(null);
   const [reason, setReason] = useState(RETURN_REASONS[0]);
+  const [refundMode, setRefundMode] = useState<"original" | "credit">("original");
 
   const rows = useMemo(() => {
     const withDecisions = base.map((b) => (decided[b.id] ? { ...b, status: decided[b.id].kind, reason: decided[b.id].reason } : b));
@@ -120,6 +121,19 @@ export default function BillHistory() {
     if (!acting) return;
     const { bill, kind } = acting;
     setDecided((d) => ({ ...d, [bill.id]: { kind, reason } }));
+    const asCredit = kind === "returned" && refundMode === "credit";
+    if (asCredit) {
+      const note = {
+        id: `CN-${2100 + app.creditNotes.length}`,
+        phone: bill.phone,
+        customer: bill.customer,
+        amount: bill.total,
+        balance: bill.total,
+        againstBill: bill.id,
+        issuedLabel: "Today",
+      };
+      app.dispatch({ type: "credit:issue", note });
+    }
     app.dispatch({
       type: "audit",
       entry: {
@@ -127,7 +141,9 @@ export default function BillHistory() {
         actor: app.actorName,
         action:
           kind === "returned"
-            ? `${bill.id} returned, ${inr(bill.total)} refunded to ${bill.tender}. Reason: ${reason}`
+            ? asCredit
+              ? `${bill.id} returned, ${inr(bill.total)} issued as a credit note. Reason: ${reason}`
+              : `${bill.id} returned, ${inr(bill.total)} refunded to ${bill.tender}. Reason: ${reason}`
             : `${bill.id} exchanged. Reason: ${reason}`,
         object: bill.id,
         system: "POS",
@@ -135,8 +151,10 @@ export default function BillHistory() {
     });
     app.toastNow(
       kind === "returned"
-        ? `${inr(bill.total)} refunded to ${bill.tender}. Stock goes back after a quality check.`
-        : `Exchange started for ${bill.id}. Bill the new item; the difference settles there.`,
+        ? asCredit
+          ? `Credit note issued for ${inr(bill.total)}. It shows up on their next bill.`
+          : `${inr(bill.total)} refunded to ${bill.tender}.`
+        : `Exchange started for ${bill.id}. Bill the new item at the counter.`,
       "good"
     );
     setActing(null);
@@ -240,12 +258,15 @@ export default function BillHistory() {
           open
           onClose={() => setActing(null)}
           title={acting.kind === "returned" ? `Return & refund ${acting.bill.id}` : `Exchange ${acting.bill.id}`}
-          sub={`${acting.bill.customer} · ${inr(acting.bill.total)} · paid by ${acting.bill.tender}`}
           footer={
             <>
               <button className="btn" onClick={() => setActing(null)}>Cancel</button>
               <button data-bill-confirm className="btn-primary" onClick={confirmAction}>
-                {acting.kind === "returned" ? `Refund ${inr(acting.bill.total)} to ${acting.bill.tender}` : "Start the exchange"}
+                {acting.kind === "returned"
+                  ? refundMode === "credit"
+                    ? `Issue a credit note for ${inr(acting.bill.total)}`
+                    : `Refund ${inr(acting.bill.total)} to ${acting.bill.tender}`
+                  : "Start the exchange"}
               </button>
             </>
           }
@@ -259,11 +280,28 @@ export default function BillHistory() {
                 ))}
               </select>
             </div>
-            <div className="text-2xs text-muted leading-relaxed">
-              {acting.kind === "returned"
-                ? "The refund goes to the original payment mode. Points earned on this bill reverse. The item re-enters stock only after a quality check scan."
-                : "Exchange keeps the sale: the returned item goes for quality check, and you bill the new item at the counter. Any price difference settles on the new bill."}
-            </div>
+            {acting.kind === "returned" && (
+              <div>
+                <div className="label mb-1.5">How is the money going back?</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setRefundMode("original")}
+                    className={`border p-3 text-left ${refundMode === "original" ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)]" : "border-line"}`}
+                  >
+                    <div className="text-sm font-medium text-ink">Refund to {acting.bill.tender}</div>
+                    <div className="text-2xs text-muted mt-0.5">{inr(acting.bill.total)}</div>
+                  </button>
+                  <button
+                    data-credit-note
+                    onClick={() => setRefundMode("credit")}
+                    className={`border p-3 text-left ${refundMode === "credit" ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)]" : "border-line"}`}
+                  >
+                    <div className="text-sm font-medium text-ink">Credit note</div>
+                    <div className="text-2xs text-muted mt-0.5">Use on any future bill</div>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </Modal>
       )}

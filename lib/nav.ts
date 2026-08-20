@@ -106,6 +106,10 @@ export const NAV_GROUPS: NavGroup[] = [
     key: "money", label: "Money", glyph: "₹", roles: ["store"], section: "Operations",
     children: [{ id: "cash", label: "Cash" }],
   },
+  {
+    key: "sys", label: "Systems", glyph: "◍", roles: ["store"], section: "Operations",
+    children: [{ id: "health", label: "Devices & feeds" }],
+  },
 
   // ── Planning ──
   {
@@ -198,6 +202,7 @@ export const NAV_ACTIONS: NavAction[] = [
   { label: "Ask for leave", hint: "Attendance and the holiday calendar", id: "attendance", roles: ["staff"] },
   { label: "Pull stock from the warehouse", hint: "Replenishment", id: "replenish", roles: ["store"] },
   { label: "Plan next week's shifts", hint: "Staff & Shifts", id: "team", roles: ["store"] },
+  { label: "Check if devices are working", hint: "Systems", id: "health", roles: ["store"] },
   { label: "Review smart stock moves", hint: "Festival & swap suggestions", id: "merch", roles: ["store", "planner"] },
   { label: "Review agent approvals", hint: "AI agents waiting on you", id: "agents", roles: ["store", "planner", "leadership"] },
   { label: "Create a training", hint: "Publishes to every store", id: "trainings", roles: ["planner"] },

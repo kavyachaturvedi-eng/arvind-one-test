@@ -177,9 +177,6 @@ export default function Governance() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Metric Registry</h1>
-          <p className="text-sm text-ink2 mt-1 max-w-2xl">
-            One definition per metric, with an owner, a version and a freshness contract.
-          </p>
         </div>
       </div>
 
@@ -191,7 +188,7 @@ export default function Governance() {
 
       {/* ── The registry ── */}
       <Card>
-        <SectionTitle title="The registry" sub="Open any row for the full definition, sources and readers." />
+        <SectionTitle title="The registry" />
         <Table>
           <thead>
             <tr>
@@ -244,7 +241,6 @@ export default function Governance() {
         <Card>
           <SectionTitle
             title="One metric, five systems, five answers"
-            sub={`Sellable stock for ${styleForLineage.name} (${styleForLineage.id}) at ${app.storeId}. This is not a hypothetical — it is what each system would tell you right now.`}
           />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <Table>
@@ -292,7 +288,7 @@ export default function Governance() {
 
       {/* ── Freshness contract ── */}
       <Card>
-        <SectionTitle title="Freshness contracts" sub="Promised refresh against observed refresh, per metric." />
+        <SectionTitle title="Freshness contracts" />
         <Table>
           <thead>
             <tr><Th>Metric</Th><Th>Promised refresh</Th><Th>Observed now</Th><Th align="right">Age</Th></tr>
@@ -312,7 +308,7 @@ export default function Governance() {
 
       {/* ── Change control ── */}
       <Card>
-        <SectionTitle title="Change control" sub="Every definition change is a reviewed, versioned event with an author and a reason." />
+        <SectionTitle title="Change control" />
         <Table>
           <thead><tr><Th>When</Th><Th>Metric</Th><Th align="center">Version</Th><Th>Author</Th><Th>Reviewed by</Th><Th>Reason</Th></tr></thead>
           <tbody>
@@ -343,7 +339,6 @@ export default function Governance() {
       <Card>
         <SectionTitle
           title="The adoption gate"
-          sub="A metric cannot be marked verified until it has an owner, a definition, a formula and a freshness contract — and until every input it depends on has a signed-off source."
         />
         {unverified.map((m) => (
           <div key={m.id} className="rounded-lg border border-line p-3">

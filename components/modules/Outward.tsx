@@ -175,7 +175,6 @@ export default function Outward() {
       <Card>
         <SectionTitle
           title="Build a batch"
-          sub={`Pick the kind and the quantity. The batch splits automatically into transfer codes of at most ${OUTWARD_CODE_LIMIT} units.`}
         />
         <div className="grid gap-3 lg:grid-cols-[1fr_auto] items-end">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -269,7 +268,6 @@ export default function Outward() {
             <Card>
               <SectionTitle
                 title={`${sel.id} · ${sel.kind}`}
-                sub={`${storeById(sel.storeId).name} · raised ${fmtDateTime(sel.createdAt)}`}
                 right={<Chip tone="brand">{sel.codes.length} transfer codes</Chip>}
               />
 

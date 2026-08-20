@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useMemo, useState } from "react";
-import { NOW, storeById, styleById } from "@/lib/seed";
+import { NOW, STYLES, rng, storeById, styleById } from "@/lib/seed";
 import { findDonors, sellable, skuRow } from "@/lib/engine";
 import { classifyCancellation, type RootCause } from "@/lib/rules";
 import { useApp } from "@/lib/state";
@@ -65,6 +65,42 @@ const RIDER: Record<OmniOrder["channel"], string> = {
 
 const QUEUE_STATUSES: OmniStatus[] = ["new", "locating", "packed", "handed_over", "return_pending"];
 
+const hashN = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
+const FIRST = ["Ananya", "Vikram", "Priya", "Rahul", "Sneha", "Arjun", "Divya", "Karan"];
+const LAST = ["Mehta", "Iyer", "Kapoor", "Desai", "Nair", "Malhotra", "Reddy", "Bose"];
+
+interface BopisOrder {
+  id: string;
+  phone: string;
+  customer: string;
+  item: string;
+  size: string;
+  qty: number;
+  value: number;
+  placedLabel: string;
+  ready: boolean;
+}
+
+/** Website orders waiting for the customer to walk in and collect. */
+function buildBopis(storeId: string): BopisOrder[] {
+  const r = rng(hashN("bopis" + storeId));
+  return Array.from({ length: 5 }, (_, i) => {
+    const s = STYLES[Math.floor(r() * STYLES.length)];
+    const qty = 1 + Math.floor(r() * 2);
+    return {
+      id: `WEB-${72100 + i * 7 + Math.floor(r() * 5)}`,
+      phone: `98${String(10000000 + Math.floor(r() * 89999999)).slice(0, 8)}`,
+      customer: `${FIRST[Math.floor(r() * FIRST.length)]} ${LAST[Math.floor(r() * LAST.length)]}`,
+      item: s.name,
+      size: s.sizes[Math.floor(r() * s.sizes.length)],
+      qty,
+      value: s.mrp * qty,
+      placedLabel: ["2 h ago", "Yesterday", "Yesterday", "2 days ago", "3 days ago"][i],
+      ready: i !== 2,
+    };
+  });
+}
+
 export default function Omni() {
   const app = useApp();
   const [cantFind, setCantFind] = useState<string | null>(null);
@@ -80,10 +116,23 @@ export default function Omni() {
 
   const scopeLabel = app.role === "store" || app.role === "staff" ? storeById(app.storeId).name : "All stores";
 
-  const queue = useMemo(
-    () => [...scope].filter((o) => QUEUE_STATUSES.includes(o.status)).sort((a, b) => b.placedAt - a.placedAt),
-    [scope]
-  );
+  // Website orders the customer collects in person. Deterministic per store.
+  const bopis = useMemo(() => buildBopis(app.storeId), [app.storeId]);
+  const [pickedUp, setPickedUp] = useState<Record<string, string>>({});
+  const [bopisQuery, setBopisQuery] = useState("");
+  const bopisRows = useMemo(() => {
+    const q = bopisQuery.trim().toLowerCase();
+    if (!q) return bopis;
+    return bopis.filter((b) => b.phone.includes(q) || b.id.toLowerCase().includes(q) || b.customer.toLowerCase().includes(q));
+  }, [bopis, bopisQuery]);
+
+  const [search, setSearch] = useState("");
+  const queue = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = [...scope].filter((o) => QUEUE_STATUSES.includes(o.status)).sort((a, b) => b.placedAt - a.placedAt);
+    if (!q) return list;
+    return list.filter((o) => o.id.toLowerCase().includes(q) || styleById(o.styleId).name.toLowerCase().includes(q) || o.channel.toLowerCase().includes(q));
+  }, [scope, search]);
   const past = useMemo(
     () => [...scope].filter((o) => !QUEUE_STATUSES.includes(o.status)).sort((a, b) => b.placedAt - a.placedAt),
     [scope]
@@ -207,8 +256,88 @@ export default function Omni() {
         <Stat label="SLA breached" value={String(breached)} tone={breached ? "critical" : "good"} />
       </div>
 
+      {/* ── Pick-up orders: the customer is standing at the counter ──────── */}
+      <Card>
+        <SectionTitle
+          title="Store pick-up (website orders)"
+          right={<Chip tone={bopisRows.filter((b) => !pickedUp[b.id]).length ? "warn" : "good"}>{bopisRows.filter((b) => !pickedUp[b.id]).length} waiting</Chip>}
+        />
+        <div className="flex gap-2 max-w-xl mb-3">
+          <span className="grid place-items-center w-11 border border-line bg-[color:var(--plane)] text-lg shrink-0" aria-hidden>⌸</span>
+          <input
+            data-bopis-search
+            value={bopisQuery}
+            onChange={(e) => setBopisQuery(e.target.value)}
+            placeholder="Mobile number or order id"
+            className="flex-1 rounded-lg border border-line bg-raised px-3 py-3 text-base text-ink placeholder:text-muted"
+          />
+        </div>
+        {bopisRows.length === 0 ? (
+          <Empty title="No pick-up order matches" />
+        ) : (
+          <Table>
+            <thead>
+              <tr><Th>Order</Th><Th>Customer</Th><Th>Item</Th><Th align="right">Value</Th><Th>Status</Th><Th align="right">Action</Th></tr>
+            </thead>
+            <tbody>
+              {bopisRows.map((b) => (
+                <tr key={b.id}>
+                  <Td>
+                    <div className="num text-sm font-semibold text-ink">{b.id}</div>
+                    <div className="text-2xs text-muted">{b.placedLabel}</div>
+                  </Td>
+                  <Td>
+                    <div className="text-sm text-ink">{b.customer}</div>
+                    <div className="text-2xs text-muted num">{b.phone}</div>
+                  </Td>
+                  <Td className="text-xs text-ink2">{b.qty} × {b.item} ({b.size})</Td>
+                  <Td align="right" className="num text-sm font-semibold text-ink">{inr(b.value)}</Td>
+                  <Td>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-ink">
+                      <StatusDot tone={pickedUp[b.id] ? "good" : b.ready ? "warn" : "neutral"} />
+                      {pickedUp[b.id] ? "Collected" : b.ready ? "Ready at the counter" : "Being packed"}
+                    </span>
+                  </Td>
+                  <Td align="right">
+                    {pickedUp[b.id] ? (
+                      <span className="text-2xs text-muted">Done</span>
+                    ) : b.ready ? (
+                      <button
+                        data-bopis-handover
+                        className="btn-primary !py-1.5 !text-xs"
+                        onClick={() => {
+                          setPickedUp((p) => ({ ...p, [b.id]: "done" }));
+                          app.dispatch({
+                            type: "audit",
+                            entry: { at: NOW, actor: app.actorName, action: `${b.id} handed to ${b.customer} at the counter`, object: b.id, system: "Arvind One" },
+                          });
+                          app.toastNow(`${b.id} handed over. Ask for the OTP on their phone if it is a prepaid order.`, "good");
+                        }}
+                      >
+                        Hand to customer
+                      </button>
+                    ) : (
+                      <span className="text-2xs text-muted">Not ready</span>
+                    )}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </Card>
+
       <Card>
         <SectionTitle title="Live order queue" right={<Chip tone="neutral">{queue.length} open</Chip>} />
+        <div className="flex gap-2 max-w-xl mb-3">
+          <input
+            data-omni-search
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by order id, item or channel"
+            className="flex-1 rounded-lg border border-line bg-raised px-3 py-2.5 text-sm text-ink placeholder:text-muted"
+          />
+        </div>
         {queue.length === 0 ? (
           <Empty title="No open orders" />
         ) : (
@@ -352,7 +481,6 @@ export default function Omni() {
           open
           onClose={() => setPod(null)}
           title={`Hand over to rider. ${podOrder.id}`}
-          sub="Rider signs, you photograph the sealed parcel. Both are needed."
           footer={
             <>
               <button className="btn" onClick={() => setPod(null)}>Cancel</button>
@@ -424,7 +552,6 @@ function CantFindModal({
       wide
       onClose={onClose}
       title={`Can't find it. ${order.id}`}
-      sub={`${style.name} · size ${order.size} · ${inr(order.value)} · searched ${order.findMinutes} min`}
       footer={
         <>
           <button className="btn" onClick={onClose}>Keep searching</button>

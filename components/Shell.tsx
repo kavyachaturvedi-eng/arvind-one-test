@@ -171,11 +171,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
             {role.label}
           </span>
           {app.role === "store" || app.role === "staff" ? (
-            // A store login belongs to one store — no switching from the floor.
+            // A store login belongs to one person at one store.
             <span className="text-xs text-ink font-medium shrink-0">
+              {app.userName ? `${app.userName} · ` : ""}
               {(() => {
                 const s = STORES.find((x) => x.id === app.storeId)!;
-                return `${s.name} · ${s.brand} · ${s.city}`;
+                return `${s.name} · ${s.city}`;
               })()}
             </span>
           ) : (

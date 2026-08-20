@@ -29,7 +29,6 @@ export default function LiveExecution() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold text-ink tracking-tight">Live execution</h1>
-          <p className="text-sm text-ink2 mt-1.5 max-w-2xl leading-relaxed">What every store is doing right now.</p>
         </div>
         <Chip tone="good" icon={<span className="w-2 h-2 rounded-full pulse-crit inline-block" style={{ background: "var(--status-good)" }} />}>
           Live
@@ -48,13 +47,11 @@ export default function LiveExecution() {
         <Stat
           label="Tasks completed"
           value={pct(e.tasksDone / Math.max(1, e.tasksTotal))}
-          sub={`${e.tasksDone} of ${e.tasksTotal} across the estate`}
         />
         <Stat label="Open exceptions" value={String(e.exceptionsOpen)} sub="Size sets needing a decision" tone="warn" onClick={() => app.go("performance")} />
         <Stat
           label="Needs attention"
           value={String(e.attention + e.behind)}
-          sub={`${e.behind} behind · ${e.attention} watch · ${e.onTrack} on track`}
           tone={e.behind > 0 ? "critical" : "warn"}
           emphasis
         />
@@ -81,7 +78,6 @@ export default function LiveExecution() {
           <Card>
             <SectionTitle
               title="Every store, right now"
-              sub="Green is on plan; amber needs a look; red is behind on more than one front. Open a store to see its manager's view."
               right={
                 <Tabs
                   value={filter}
@@ -185,7 +181,6 @@ function ActionQueue() {
             key={m.id}
             tone="neutral"
             title={`Move ${m.units} × ${m.styleName} (${m.size})`}
-            sub={`${m.from.name} → ${m.to.name} · unlocks ${inr(m.valueUnlocked, { compact: true })}`}
             cta="Approve"
             onAct={() => approveMove(m.id)}
           />
@@ -196,7 +191,7 @@ function ActionQueue() {
   );
 }
 
-function QueueRow({ tone, title, sub, cta, onAct }: { tone: "warn" | "critical" | "neutral"; title: string; sub: string; cta: string; onAct: () => void }) {
+function QueueRow({ tone, title, sub, cta, onAct }: { tone: "warn" | "critical" | "neutral"; title: string; sub?: string; cta: string; onAct: () => void }) {
   return (
     <div className="rounded-lg border border-line p-2.5 flex items-start gap-2.5">
       <StatusDot tone={tone} />

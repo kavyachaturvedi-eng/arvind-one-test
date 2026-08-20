@@ -220,9 +220,6 @@ export default function Crm() {
                       ))}
                     </tbody>
                   </Table>
-                  <div className="text-2xs text-muted mt-2">
-                    Returns and exchanges for this customer live in Bills &amp; Returns, under Sell.
-                  </div>
                 </div>
               )}
             </Card>
@@ -248,9 +245,6 @@ export default function Crm() {
                 {added > 0 && (
                   <div className="text-xs text-ink2 flex items-center gap-1.5"><StatusDot tone="good" />{added} added this session</div>
                 )}
-                <div className="text-2xs text-muted leading-relaxed pt-1">
-                  Offers and campaigns go out from the national marketing team, the store never has to write one.
-                </div>
               </div>
             </Card>
           )}

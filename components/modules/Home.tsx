@@ -51,7 +51,6 @@ export default function Home() {
         <Stat
           label="Today"
           value={inr(v.todaySales, { compact: true })}
-          sub={`vs ${inr(v.lySameDay, { compact: true })} this day last year`}
           tone={v.todaySales >= v.lySameDay ? "good" : "warn"}
           emphasis
         />

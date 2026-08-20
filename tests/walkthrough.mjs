@@ -17,7 +17,7 @@ const ROLES = [
   ["leadership", "CEO"],
 ];
 const MODULES_BY_ROLE = {
-  store: ["pos", "bills", "offers", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "reports", "agents", "ask"],
+  store: ["pos", "bills", "offers", "health", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "reports", "agents", "ask"],
   staff: ["pos", "bills", "offers", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift", "attendance"],
   planner: ["live", "performance", "tickets", "allocate", "merch", "moves", "catchment", "trainings", "truth", "reports", "governance", "agents", "ask"],
   leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "agents", "ask"],
@@ -85,6 +85,8 @@ async function expandNav(page) {
   // ── 0. Sign in — the login screen is the front door ─────────────────────
   const signin = page.locator("[data-signin]");
   if ((await signin.count()) > 0) {
+    // Store logins need a person and their PIN.
+    await page.locator("[data-pin]").fill("1111");
     await page.screenshot({ path: `${SHOTS}/login.png` });
     await signin.click();
     await page.waitForTimeout(400);
@@ -424,6 +426,31 @@ async function expandNav(page) {
     }
   }
 
+  // Split payment: the coupon flow left us on the payment stage with a bill.
+  {
+    await page.locator("main button", { hasText: /^Cash$/ }).click();
+    await page.waitForTimeout(220);
+    await page.locator("[data-part-amount]").fill("500");
+    await page.waitForTimeout(180);
+    const split = page.locator("[data-add-tender]");
+    if ((await split.count()) === 0) fail("split tender button missing");
+    else {
+      await split.click();
+      await page.waitForTimeout(260);
+      if (/Still to pay/.test(await page.locator("body").innerText())) pass("split payment: part tender recorded, balance shown");
+      else fail("split payment did not record the part tender");
+      await page.locator("main button", { hasText: /^Card$/ }).click();
+      await page.waitForTimeout(220);
+      await page.screenshot({ path: `${SHOTS}/split.png` });
+      await page.locator("[data-confirm-pay]").click();
+      await page.waitForTimeout(340);
+      if (/Split/.test(await page.locator("body").innerText())) pass("bill closed as a split payment");
+      else fail("split bill did not close");
+      await page.locator("[data-new-bill]").click();
+      await page.waitForTimeout(260);
+    }
+  }
+
   // Day end from the till, then reopen so the rest of the run can bill.
   await page.locator("[data-day-end]").click();
   await page.waitForTimeout(280);
@@ -486,6 +513,10 @@ async function expandNav(page) {
   await page.locator("[data-list-search]").fill("polo");
   await page.waitForTimeout(240);
   await page.screenshot({ path: `${SHOTS}/full-list.png`, fullPage: true });
+
+  // The signed-in person's own name is in the header, not a generic role.
+  if (/Meera Pillai/.test(await page.locator("header").innerText())) pass("the signed-in person's name shows in the header");
+  else fail("staff name missing from the header");
 
   // Bills & Returns: find a bill, return it with a reason.
   await page.locator('nav [data-module="bills"]').first().click();
@@ -585,10 +616,19 @@ async function expandNav(page) {
   if (before !== afterCell) pass(`shift cell cycles on tap (${before} → ${afterCell})`);
   else fail("shift cell did not change on tap");
   await page.locator("[data-staff-name]").fill("Priya Nair");
+  await page.locator("[data-staff-pin]").fill("9876");
   await page.locator("[data-staff-name]").press("Enter");
   await page.waitForTimeout(260);
-  if (/Priya Nair/.test(await page.locator("main").innerText())) pass("new team member added to the grid");
+  if (/Priya Nair/.test(await page.locator("main").innerText())) pass("new team member added with a PIN and permissions");
   else fail("added staff member did not appear");
+  // RBAC: toggling a permission sticks.
+  const perm = page.locator("[data-perm]").nth(8);
+  const before2 = (await perm.innerText()).trim();
+  await perm.click();
+  await page.waitForTimeout(220);
+  if ((await perm.innerText()).trim() !== before2) pass("permission toggled for a staff member");
+  else fail("permission toggle did not change");
+  await page.screenshot({ path: `${SHOTS}/rbac.png`, fullPage: true });
   await page.locator("[data-publish-week]").click();
   await page.waitForTimeout(260);
   if (/Week published/.test(await page.locator("main").innerText())) pass("week published to staff phones");

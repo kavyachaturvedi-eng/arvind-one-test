@@ -65,6 +65,7 @@ export type ModuleId =
   | "bills"
   | "attendance"
   | "offers"
+  | "health"
 ;
 
 interface AppState {
@@ -91,9 +92,46 @@ interface AppState {
   openFloat: number;
   /** Shift handovers at this counter, newest last. */
   handovers: Handover[];
+  /** Who is signed in, once a PIN is entered. */
+  userName: string | null;
+  users: StoreUser[];
+  creditNotes: CreditNote[];
+  /** Register whose printer is taking another register's jobs. */
+  printerRoutedTo: string | null;
+  /** Card terminal batches settled today. */
+  cardBatched: boolean;
   audit: AuditEntry[];
   toast: { id: number; message: string; tone: "good" | "warn" | "info" } | null;
   clockOffsetMinutes: number;
+}
+
+/** What a person is allowed to do. The manager sets these when adding staff. */
+export type Permission = "bill" | "refund" | "discount" | "receive" | "transfer" | "reports";
+
+export const ALL_PERMISSIONS: { id: Permission; label: string }[] = [
+  { id: "bill", label: "Take payments" },
+  { id: "refund", label: "Refunds and exchanges" },
+  { id: "discount", label: "Apply coupons" },
+  { id: "receive", label: "Receive and send stock" },
+  { id: "transfer", label: "Raise transfers" },
+  { id: "reports", label: "See store reports" },
+];
+
+export interface StoreUser {
+  name: string;
+  role: string;
+  pin: string;
+  permissions: Permission[];
+}
+
+export interface CreditNote {
+  id: string;
+  phone: string;
+  customer: string;
+  amount: number;
+  balance: number;
+  againstBill: string;
+  issuedLabel: string;
 }
 
 export interface Handover {
@@ -113,7 +151,13 @@ export interface LeaveRequest {
 }
 
 type Action =
-  | { type: "login"; role: RoleId; storeId?: string }
+  | { type: "login"; role: RoleId; storeId?: string; userName?: string }
+  | { type: "user:add"; user: StoreUser }
+  | { type: "user:permissions"; name: string; permissions: Permission[] }
+  | { type: "credit:issue"; note: CreditNote }
+  | { type: "credit:redeem"; id: string; amount: number }
+  | { type: "printer:route"; to: string | null }
+  | { type: "card:batch" }
   | { type: "logout" }
   | { type: "role"; role: RoleId }
   | { type: "store"; storeId: string }
@@ -268,6 +312,20 @@ const initial: AppState = {
   openFloat: 8000,
   // Yesterday's late-shift handover, so the pattern is visible from the start.
   handovers: [{ id: "HO-1", from: "Kiran Joshi", to: "Sana Qureshi", cash: 14600, atLabel: "Yesterday · 15:00" }],
+  userName: null,
+  users: [
+    { name: "Rohit Sharma", role: "Store Manager", pin: "1234", permissions: ["bill", "refund", "discount", "receive", "transfer", "reports"] },
+    { name: "Meera Pillai", role: "Cashier", pin: "1111", permissions: ["bill", "discount", "refund"] },
+    { name: "Aditya Rane", role: "Floor", pin: "2222", permissions: ["bill", "receive", "transfer"] },
+    { name: "Sana Qureshi", role: "Cashier", pin: "3333", permissions: ["bill", "discount"] },
+    { name: "Devansh Patil", role: "Floor", pin: "4444", permissions: ["receive", "transfer"] },
+    { name: "Kiran Joshi", role: "Omni champ", pin: "5555", permissions: ["bill", "receive"] },
+  ],
+  creditNotes: [
+    { id: "CN-2041", phone: "9812345678", customer: "Ishita Malhotra", amount: 2199, balance: 2199, againstBill: "B-4333", issuedLabel: "3 Aug" },
+  ],
+  printerRoutedTo: null,
+  cardBatched: false,
   audit: [
     { at: NOW - 64 * 60_000, actor: "Commercial", action: "Price revision published", object: "11 styles", system: "Arvind One" },
     { at: NOW - 63 * 60_000, actor: "Arvind One", action: "Created reprint job TK-8803", object: "41 units", system: "Arvind One" },
@@ -287,13 +345,57 @@ function reducer(state: AppState, action: Action): AppState {
         authed: true,
         role: action.role,
         storeId: action.storeId ?? state.storeId,
+        userName: action.userName ?? null,
         module: defaultModule(action.role),
+      };
+    case "user:add":
+      return {
+        ...state,
+        users: [...state.users, action.user],
+        audit: [{ at: NOW, actor: "Store Manager", action: `Added ${action.user.name} (${action.user.role}) with a PIN and ${action.user.permissions.length} permissions`, object: action.user.name, system: "Arvind One" }, ...state.audit],
+      };
+    case "user:permissions":
+      return {
+        ...state,
+        users: state.users.map((u) => (u.name === action.name ? { ...u, permissions: action.permissions } : u)),
+        audit: [{ at: NOW, actor: "Store Manager", action: `Changed what ${action.name} can do`, object: action.name, system: "Arvind One" }, ...state.audit],
+      };
+    case "credit:issue":
+      return {
+        ...state,
+        creditNotes: [action.note, ...state.creditNotes],
+        audit: [{ at: NOW, actor: state.userName ?? "Store Staff", action: `Credit note ${action.note.id} issued for ${action.note.amount} against ${action.note.againstBill}`, object: action.note.id, system: "POS" }, ...state.audit],
+      };
+    case "credit:redeem":
+      return {
+        ...state,
+        creditNotes: state.creditNotes.map((n) => (n.id === action.id ? { ...n, balance: Math.max(0, n.balance - action.amount) } : n)),
+        audit: [{ at: NOW, actor: state.userName ?? "Store Staff", action: `Credit note ${action.id} used for ${action.amount}`, object: action.id, system: "POS" }, ...state.audit],
+      };
+    case "printer:route":
+      return {
+        ...state,
+        printerRoutedTo: action.to,
+        audit: [{ at: NOW, actor: "Store Manager", action: action.to ? `Print jobs routed to ${action.to}` : "Print routing back to normal", object: "printer", system: "Arvind One" }, ...state.audit],
+      };
+    case "card:batch":
+      return {
+        ...state,
+        cardBatched: true,
+        audit: [{ at: NOW, actor: "Store Manager", action: "Card terminals batched for settlement", object: "terminals", system: "POS" }, ...state.audit],
       };
     case "logout":
       return { ...state, authed: false };
     case "role": {
-      // Leadership and planners are not scoped to a single store.
-      return { ...state, role: action.role, module: defaultModule(action.role) };
+      // Switching into a store role puts the right person's name in the header:
+      // the manager for the manager view, a floor or till person for staff.
+      let userName = state.userName;
+      const manager = state.users.find((u) => u.role === "Store Manager");
+      if (action.role === "store" && manager) userName = manager.name;
+      if (action.role === "staff" && (!userName || userName === manager?.name)) {
+        userName = state.users.find((u) => u.role !== "Store Manager")?.name ?? userName;
+      }
+      return { ...state, role: action.role, module: defaultModule(action.role), userName };
     }
     case "store":
       return { ...state, storeId: action.storeId };
@@ -506,6 +608,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initial);
 
   const actorName = useMemo(() => {
+    // A signed-in person's own name, once a PIN identified them.
+    if (state.userName && (state.role === "store" || state.role === "staff")) return state.userName;
     switch (state.role) {
       case "store":
         return "Store Manager";
@@ -516,7 +620,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       case "leadership":
         return "Admin";
     }
-  }, [state.role]);
+  }, [state.role, state.userName]);
 
   const createIst = useCallback((input: CreateIstInput): ISTRequest => {
     const result = evaluateIstPolicy(input.policy);

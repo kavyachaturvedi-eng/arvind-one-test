@@ -36,6 +36,7 @@ import StockLookup from "@/components/modules/StockLookup";
 import MyShift from "@/components/modules/MyShift";
 import Attendance from "@/components/modules/Attendance";
 import Offers from "@/components/modules/Offers";
+import Health from "@/components/modules/Health";
 import BillHistory from "@/components/modules/BillHistory";
 
 function Router() {
@@ -101,6 +102,8 @@ function Router() {
       return <Attendance />;
     case "offers":
       return <Offers />;
+    case "health":
+      return <Health />;
     case "bills":
       return <BillHistory />;
     default:

@@ -109,11 +109,6 @@ export function EndShiftDialog({ open, onClose }: { open: boolean; onClose: () =
               ))}
             </select>
           </div>
-
-          <div className="text-2xs text-muted leading-relaxed">
-            Your shift report goes to the manager with this handover: bills, sales and the counted cash. There is
-            nothing else to fill in.
-          </div>
         </div>
       )}
     </Modal>

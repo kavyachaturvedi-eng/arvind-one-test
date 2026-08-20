@@ -100,9 +100,6 @@ export default function MyShift() {
             );
           })}
         </div>
-        <div className="text-2xs text-muted mt-2.5">
-          Published by your manager. Ask for a day off from Attendance.
-        </div>
       </Card>
 
       {/* ── Cash operations ── */}
@@ -136,9 +133,6 @@ export default function MyShift() {
             ))}
           </tbody>
         </Table>
-        <div className="text-2xs text-muted mt-2">
-          Both people count the cash at a handover, so a shortage is always traceable to one shift.
-        </div>
       </Card>
 
       <EndShiftDialog open={endOpen} onClose={() => setEndOpen(false)} />

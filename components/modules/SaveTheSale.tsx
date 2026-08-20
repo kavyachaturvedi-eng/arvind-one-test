@@ -391,7 +391,6 @@ export default function SaveTheSale() {
             <Card>
               <SectionTitle
                 title={`${created.id} · ${STATUS_LABEL[created.status]}`}
-                sub={`${created.qty} × ${styleById(created.styleId).name} size ${created.size}`}
                 right={
                   <Chip tone={created.status === "approved" ? "good" : created.status === "rejected" ? "critical" : "warn"}>
                     {STATUS_LABEL[created.status]}
@@ -541,7 +540,6 @@ export default function SaveTheSale() {
         open={confirm}
         onClose={() => setConfirm(false)}
         title="Confirm the transfer"
-        sub="Posts to the inventory ledger and raises the pickup advice."
         footer={
           <>
             <button className="btn" onClick={() => setConfirm(false)}>

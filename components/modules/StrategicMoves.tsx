@@ -167,9 +167,6 @@ export default function StrategicMoves() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Strategic Moves</h1>
-          <p className="text-sm text-ink2 mt-1 max-w-2xl">
-            Cross-region and consolidation transfers, ranked by the value they unlock.
-          </p>
         </div>
       </div>
 
@@ -181,7 +178,6 @@ export default function StrategicMoves() {
         <Stat
           label="Inside 40 km lane"
           value={pct(totals.sameDayShare)}
-          sub={`${totals.sameDay} of ${MOVES.length} move same-day by courier`}
           tone={totals.sameDayShare >= 0.5 ? "good" : "warn"}
         />
       </div>
@@ -190,7 +186,6 @@ export default function StrategicMoves() {
       <Card>
         <SectionTitle
           title="Ranked queue"
-          sub="Ordered by value unlocked. Hover a move to find it on the network map below."
           right={
             <Tabs
               value={tab}
@@ -251,14 +246,13 @@ export default function StrategicMoves() {
       <Card>
         <SectionTitle
           title="The network, and what moves across it"
-          sub="Every store, sized by sellable units. Arrows are the moves currently listed above."
         />
         <NetworkMap moves={visible} hover={hover} onHover={setHover} decisions={decisions} />
       </Card>
 
       {/* ── Constraints ──────────────────────────────────────────────────── */}
       <Card>
-        <SectionTitle title="Rules the engine respected" sub="The constraints every move above already passed." />
+        <SectionTitle title="Rules the engine respected" />
         <ul className="space-y-2">
           {[
             ["Donor stays above its norm floor", "A store is never asked to give up stock it is selling at least as fast as the receiver. Moving the problem is not solving it."],

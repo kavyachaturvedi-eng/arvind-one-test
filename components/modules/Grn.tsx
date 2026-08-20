@@ -204,7 +204,6 @@ export default function Grn() {
           open
           onClose={() => setReceiving(null)}
           title={`Receive ${receiving.id}`}
-          sub={`${receiving.po} · ${receiving.from} · ${receiving.cartons} cartons`}
           footer={
             <>
               <button className="btn" onClick={() => setReceiving(null)}>Cancel</button>

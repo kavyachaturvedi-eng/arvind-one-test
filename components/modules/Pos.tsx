@@ -132,6 +132,10 @@ export default function Pos() {
   const [couponText, setCouponText] = useState("");
   const [coupon, setCoupon] = useState<{ code: string; amount: number } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
+  const [useNote, setUseNote] = useState(false);
+  const [paid, setPaid] = useState<{ mode: "UPI" | "Card" | "Cash"; amount: number }[]>([]);
+  const [partText, setPartText] = useState("");
+  const [paidLabel, setPaidLabel] = useState("");
   const [lastBill, setLastBill] = useState<Bill | null>(null);
   const [newBills, setNewBills] = useState<Bill[]>([]);
 
@@ -180,10 +184,17 @@ export default function Pos() {
   const gross = subtotal + bagValue;
   const couponValue = coupon?.amount ?? 0;
   const afterCoupon = Math.max(0, gross - couponValue);
-  const redeemValue = redeemPts && member ? Math.min(Math.floor(member.points * 0.25), afterCoupon) : 0;
+  // A credit note from an earlier return pays first, then points.
+  const openNote = member ? app.creditNotes.find((n) => n.phone === member.phone && n.balance > 0) ?? null : null;
+  const noteUsed = useNote && openNote ? Math.min(openNote.balance, afterCoupon) : 0;
+  const afterNote = afterCoupon - noteUsed;
+  const redeemValue = redeemPts && member ? Math.min(Math.floor(member.points * 0.25), afterNote) : 0;
   const ptsUsed = redeemValue > 0 ? Math.min(member?.points ?? 0, Math.ceil(redeemValue / 0.25)) : 0;
-  const total = afterCoupon - redeemValue;
-  const change = payMode === "Cash" ? Math.max(0, cash - total) : 0;
+  const total = afterNote - redeemValue;
+  const paidSoFar = paid.reduce((a, p) => a + p.amount, 0);
+  const due = Math.max(0, Math.round((total - paidSoFar) * 100) / 100);
+  const partAmount = Math.min(due, Math.max(0, Math.round((Number(partText) || 0) * 100) / 100));
+  const change = payMode === "Cash" ? Math.max(0, cash - due) : 0;
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -269,23 +280,43 @@ export default function Pos() {
     setCart((c) => c.map((l, i) => (i === idx ? { ...l, qty: Math.max(0, l.qty + d) } : l)).filter((l) => l.qty > 0));
   }
 
+  function addTender() {
+    if (!payMode || partAmount <= 0) return;
+    setPaid((p) => [...p, { mode: payMode, amount: partAmount }]);
+    setPayMode(null);
+    setCash(0);
+    setPartText("");
+  }
+
   function confirmPayment() {
-    if (!payMode || cart.length === 0) return;
+    if (cart.length === 0) return;
+    // Whatever is still due goes on the tender that is selected now.
+    const lines = due > 0 && payMode ? [...paid, { mode: payMode, amount: due }] : paid;
+    if (lines.length === 0) return;
+    const tenderLabel = lines.length === 1 ? lines[0].mode : "Split";
     const bill: Bill = {
       id: `B-${4300 + newBills.length}`,
       at: NOW,
       items: itemCount,
       value: total,
-      tender: payMode,
+      tender: lines.length === 1 ? lines[0].mode : "Card",
       customer: member ? member.name : undefined,
       status: "billed",
     };
+    if (noteUsed > 0 && openNote) app.dispatch({ type: "credit:redeem", id: openNote.id, amount: noteUsed });
     setNewBills((x) => [bill, ...x]);
     setLastBill(bill);
     app.dispatch({
       type: "audit",
-      entry: { at: NOW, actor: app.actorName, action: `Bill ${bill.id}. ${itemCount} item${itemCount > 1 ? "s" : ""}, ${inr(total)} by ${payMode}${ptsUsed ? ` (${ptsUsed} points used)` : ""}`, object: bill.id, system: "POS" },
+      entry: {
+        at: NOW,
+        actor: app.actorName,
+        action: `Bill ${bill.id}, ${itemCount} item${itemCount > 1 ? "s" : ""}, ${inr(total)} on ${lines.map((l) => `${l.mode} ${inr(l.amount)}`).join(" + ")}${noteUsed ? `, credit note ${inr(noteUsed)}` : ""}${ptsUsed ? `, ${ptsUsed} points` : ""}`,
+        object: bill.id,
+        system: "POS",
+      },
     });
+    setPaidLabel(tenderLabel);
     setStage("done");
   }
 
@@ -301,6 +332,10 @@ export default function Pos() {
     setCoupon(null);
     setCouponText("");
     setCouponError(null);
+    setUseNote(false);
+    setPaid([]);
+    setPartText("");
+    setPaidLabel("");
     setLastBill(null);
     resetPending();
     setStage("customer");
@@ -406,10 +441,6 @@ export default function Pos() {
                   placeholder="0.00"
                   className="flex-1 text-3xl font-semibold num bg-transparent outline-none text-ink border-b border-line"
                 />
-              </div>
-              <div className="text-2xs text-muted mt-3 leading-relaxed">
-                Count the drawer and enter what is actually in it, paise included. This is the figure the day close
-                reconciles against.
               </div>
             </div>
 
@@ -542,6 +573,11 @@ export default function Pos() {
               {coupon && (
                 <div className="flex justify-between text-xs" style={{ color: "var(--status-good)" }}>
                   <span>Coupon {coupon.code}</span><span className="num">−{inr(coupon.amount)}</span>
+                </div>
+              )}
+              {noteUsed > 0 && openNote && (
+                <div className="flex justify-between text-xs" style={{ color: "var(--status-good)" }}>
+                  <span>Credit note {openNote.id}</span><span className="num">−{inr(noteUsed)}</span>
                 </div>
               )}
               {redeemValue > 0 && (
@@ -736,7 +772,7 @@ export default function Pos() {
               <div className="h-full flex items-center justify-center p-6">
                 <div className="w-full max-w-md">
                   <div className="label mb-1.5">Step 3 of 3</div>
-                  <h2 className="text-xl font-medium text-ink mb-4">Take {inr(total)}</h2>
+                  <h2 className="text-xl font-medium text-ink mb-4">Take {inr(due)}</h2>
 
                   {/* Coupon codes come in on the customer's phone. */}
                   <div className="border border-line bg-raised p-3 mb-4">
@@ -772,11 +808,46 @@ export default function Pos() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 mb-4">
+                  {/* Credit note, if this customer has one open. */}
+                  {member && openNote && (
+                    <div className="border p-3 mb-4" style={{ borderColor: "var(--brand)" }}>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="label" style={{ color: "var(--brand)" }}>Credit note</span>
+                        <span className="text-sm text-ink flex-1 num">{openNote.id} · {inr(openNote.balance)} left</span>
+                        {noteUsed > 0 ? (
+                          <button className="btn !py-1 !text-2xs" onClick={() => setUseNote(false)}>Remove</button>
+                        ) : (
+                          <button data-use-note className="btn !py-1 !text-2xs" onClick={() => setUseNote(true)}>
+                            Use {inr(Math.min(openNote.balance, afterCoupon))}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Split payment: keep adding tenders until the bill is settled. */}
+                  {paid.length > 0 && (
+                    <div className="border border-line bg-raised p-3 mb-3 space-y-1.5">
+                      {paid.map((p, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm">
+                          <StatusDot tone="good" />
+                          <span className="text-ink flex-1">{p.mode}</span>
+                          <span className="num text-ink">{inr(p.amount)}</span>
+                          <button className="btn-ghost !px-1.5 !text-2xs" onClick={() => setPaid((x) => x.filter((_, j) => j !== i))}>×</button>
+                        </div>
+                      ))}
+                      <div className="flex justify-between text-sm font-semibold pt-1.5 border-t border-line">
+                        <span className="text-ink">Still to pay</span>
+                        <span className="num" style={{ color: due > 0 ? "var(--status-critical)" : "var(--status-good)" }}>{inr(due)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-2 mb-3">
                     {(["UPI", "Card", "Cash"] as const).map((t) => (
                       <button
                         key={t}
-                        onClick={() => { setPayMode(t); setCash(0); }}
+                        onClick={() => { setPayMode(t); setCash(0); setPartText(String(due)); }}
                         className={`h-16 border text-base font-medium transition-colors ${payMode === t ? "text-white border-transparent" : "border-line bg-raised text-ink"}`}
                         style={payMode === t ? { background: "var(--text-primary)" } : undefined}
                       >
@@ -785,27 +856,47 @@ export default function Pos() {
                     ))}
                   </div>
 
+                  {/* Part amount, so two tenders can settle one bill. */}
+                  {payMode && due > 0 && (
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="label shrink-0">Amount on {payMode}</span>
+                      <input
+                        data-part-amount
+                        value={partText}
+                        onChange={(e) => setPartText(e.target.value.replace(/[^\d.]/g, ""))}
+                        inputMode="decimal"
+                        className="w-32 border border-line bg-raised px-3 py-2 text-base num"
+                      />
+                      <button className="btn !py-2 !text-xs" onClick={() => setPartText(String(due))}>Full {inr(due)}</button>
+                      {partAmount > 0 && partAmount < due && (
+                        <button data-add-tender className="btn-primary !py-2 !text-xs" onClick={addTender}>
+                          Add {inr(partAmount)} and split
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {payMode === "UPI" && (
                     <div className="border border-line bg-raised p-5 text-center">
                       <div className="mx-auto w-32 h-32 grid grid-cols-8 gap-0.5 p-2 border border-line mb-3">
                         {Array.from({ length: 64 }, (_, i) => (
-                          <span key={i} style={{ background: rng(hash("qr" + total) + i)() > 0.5 ? "var(--text-primary)" : "transparent" }} />
+                          <span key={i} style={{ background: rng(hash("qr" + due) + i)() > 0.5 ? "var(--text-primary)" : "transparent" }} />
                         ))}
                       </div>
-                      <div className="text-xs text-ink2">Customer scans to pay {inr(total)}</div>
+                      <div className="text-xs text-ink2">Customer scans to pay {inr(due)}</div>
                     </div>
                   )}
                   {payMode === "Card" && (
                     <div className="border border-line bg-raised p-5 text-center">
                       <div className="text-sm text-ink mb-1">Tap or insert on the terminal</div>
-                      <div className="text-xs text-muted">Amount pushed: {inr(total)}</div>
+                      <div className="text-xs text-muted">Amount pushed: {inr(due)}</div>
                     </div>
                   )}
                   {payMode === "Cash" && (
                     <div className="border border-line bg-raised p-4">
                       <div className="label mb-2">Cash received</div>
                       <div className="grid grid-cols-4 gap-2 mb-3">
-                        {[total, Math.ceil(total / 500) * 500, Math.ceil(total / 1000) * 1000, Math.ceil(total / 1000) * 1000 + 1000]
+                        {[due, Math.ceil(due / 500) * 500, Math.ceil(due / 1000) * 1000, Math.ceil(due / 1000) * 1000 + 1000]
                           .filter((v2, i, a) => a.indexOf(v2) === i)
                           .map((amt) => (
                             <button key={amt} onClick={() => setCash(amt)} className={`h-12 border text-sm num ${cash === amt ? "border-[color:var(--brand)] text-[color:var(--brand)]" : "border-line bg-raised text-ink"}`}>
@@ -813,7 +904,7 @@ export default function Pos() {
                             </button>
                           ))}
                       </div>
-                      {cash >= total && cash > 0 && (
+                      {cash >= due && cash > 0 && (
                         <div className="flex justify-between text-sm text-ink pt-2 border-t border-line">
                           <span>Change to return</span>
                           <span className="num font-semibold">{inr(change)}</span>
@@ -826,10 +917,10 @@ export default function Pos() {
                     <button
                       data-confirm-pay
                       className="btn-primary !py-4 !text-base"
-                      disabled={!payMode || (payMode === "Cash" && cash < total)}
+                      disabled={due > 0 && (!payMode || (payMode === "Cash" && cash < due))}
                       onClick={confirmPayment}
                     >
-                      {payMode ? `Payment received. ${payMode}` : "Pick a tender"}
+                      {due <= 0 ? "Bill settled, print it" : payMode ? `Take ${inr(due)} on ${payMode}` : "Pick a tender"}
                     </button>
                     <button className="btn !py-4" onClick={() => setStage("items")}>Back</button>
                   </div>
@@ -845,7 +936,7 @@ export default function Pos() {
                   </div>
                   <h2 className="text-xl font-medium text-ink">{inr(lastBill.value)} received</h2>
                   <div className="text-xs text-muted mt-1 num">
-                    {lastBill.id} · {lastBill.items} item{lastBill.items > 1 ? "" : ""} · {lastBill.tender}
+                    {lastBill.id} · {lastBill.items} item{lastBill.items > 1 ? "s" : ""} · {paidLabel || lastBill.tender}
                     {member ? ` · ${Math.round(lastBill.value / 100)} pts to ${member.name.split(" ")[0]}` : ""}
                   </div>
 
@@ -875,7 +966,6 @@ export default function Pos() {
         open={dayEndOpen}
         onClose={() => setDayEndOpen(false)}
         title="Close the day"
-        sub={`${store.name} · ${billCount} bills · ${inr(salesToday)} billed`}
         footer={
           <>
             <button className="btn" onClick={() => setDayEndOpen(false)}>Not yet</button>
@@ -923,10 +1013,6 @@ export default function Pos() {
               </div>
             </div>
           )}
-          <div className="text-2xs text-muted leading-relaxed">
-            One summary goes to Finance: sales by payment mode, the cash to bank, and any counting difference. Nothing
-            is emailed and nothing is typed twice.
-          </div>
         </div>
       </Modal>
 
@@ -975,7 +1061,6 @@ export default function Pos() {
           onClose={() => setProfileOpen(false)}
           wide
           title={member.name}
-          sub={`${member.phone} · ${member.tier} member`}
           footer={
             <>
               <button className="btn" onClick={() => setProfileOpen(false)}>Close</button>

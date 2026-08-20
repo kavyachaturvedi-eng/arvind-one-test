@@ -339,6 +339,10 @@ export function ticketSlaHours(kind: Ticket["kind"]): number {
       return 48;
     case "vm":
       return 72;
+    case "stock_missing":
+      return 24;
+    case "other":
+      return 48;
   }
 }
 

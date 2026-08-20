@@ -37,7 +37,6 @@ export default function Trainings() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold text-ink">Trainings</h1>
-        <p className="text-sm text-ink2 mt-1">Publish once; it appears on every store&apos;s Tasks &amp; Chores with a due date.</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

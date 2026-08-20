@@ -221,9 +221,6 @@ export default function Reallocation() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Reallocation</h1>
-          <p className="text-sm text-ink2 mt-1 max-w-2xl">
-            Re-point units already bought at the stores that are actually selling them.
-          </p>
         </div>
       </div>
 
@@ -235,7 +232,6 @@ export default function Reallocation() {
       <Card>
         <SectionTitle
           title="What are we re-cutting?"
-          sub="Pick the style, the quantity already bought, and how hard the model should follow live demand. Everything below recomputes on change."
         />
         <div className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.4fr)]">
           <label className="block">
@@ -319,7 +315,6 @@ export default function Reallocation() {
         <Stat
           label="Margin unlocked"
           value={inr(sim.uplift.marginUnlocked, { compact: true })}
-          sub={`${sim.incremental.toLocaleString("en-IN")} incremental full-price units`}
           tone={sim.uplift.marginUnlocked > 0 ? "good" : undefined}
         />
       </div>
@@ -328,7 +323,6 @@ export default function Reallocation() {
       <Card>
         <SectionTitle
           title="Recommended re-cut"
-          sub="Sorted by the size of the change, biggest re-cut first. Planned is the grade-weighted split; recommended is the same units against the latest numbers."
           right={<Chip tone={recommendedTotal === plannedTotal ? "good" : "critical"}>{recommendedTotal === plannedTotal ? "Units conserved" : "Conservation error"}</Chip>}
         />
 
@@ -388,7 +382,6 @@ export default function Reallocation() {
                 <tr>
                   <Td>
                     <span className="text-sm font-semibold text-ink">Total</span>
-                    <div className="text-2xs text-muted mt-0.5">Nothing is created or destroyed — only the destination changes.</div>
                   </Td>
                   <Td align="right" className="num font-semibold text-ink">{plannedTotal.toLocaleString("en-IN")}</Td>
                   <Td align="right" className="num font-semibold text-ink">{recommendedTotal.toLocaleString("en-IN")}</Td>
@@ -422,7 +415,7 @@ export default function Reallocation() {
       {/* ── Diverging bars ───────────────────────────────────────────────── */}
       {units > 0 && !singleStore && (
         <Card>
-          <SectionTitle title="Units in and out, by store" sub="One axis, zero in the middle. Blue takes units in, red gives units up." />
+          <SectionTitle title="Units in and out, by store" />
           <div className="space-y-1.5">
             {rows.map((r) => (
               <div key={r.store.id} className="grid grid-cols-[minmax(96px,26%)_1fr_auto] gap-3 items-center">
@@ -452,14 +445,13 @@ export default function Reallocation() {
             <span>0</span>
             <span>+ {maxAbs} units in</span>
           </div>
-          <div className="text-2xs text-muted mt-1">Axis: units moved relative to the original grade-weighted plan.</div>
         </Card>
       )}
 
       {/* ── Simulation ───────────────────────────────────────────────────── */}
       {units > 0 && !singleStore && (
         <Card>
-          <SectionTitle title="If you accept this re-cut" sub="The estimated effect of the change, with the model written out underneath it." />
+          <SectionTitle title="If you accept this re-cut" />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <MiniStat label="Units moved" value={sim.unitsMoved.toLocaleString("en-IN")} note={`across ${movers.length} stores, ${sim.sellDays} selling days after landing`} />
             <MiniStat label="Incremental full-price units" value={sim.incremental.toLocaleString("en-IN")} note={`receiving stores sell this ${(sim.donorRos > 0 ? "faster than" : "where donors sell")} the donors`} />
@@ -505,8 +497,8 @@ export default function Reallocation() {
             </button>
           </div>
           {accepted && (
-            <div className="text-2xs text-muted mt-2 text-right">
-              Created as allocation tasks, due in 2 days, visible to each store on its own task list.
+            <div className="mt-3 text-sm" style={{ color: "var(--status-good)" }}>
+              ✓ {movers.length} allocation instructions created
             </div>
           )}
         </Card>

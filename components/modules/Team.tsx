@@ -6,7 +6,7 @@
 
 import React, { useMemo, useState } from "react";
 import { NOW, STAFF, rng, storeById } from "@/lib/seed";
-import { useApp } from "@/lib/state";
+import { ALL_PERMISSIONS, useApp, type Permission } from "@/lib/state";
 import { Card, Chip, SectionTitle, Stat, StatusDot, inr } from "@/components/ui";
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
@@ -54,23 +54,28 @@ export default function Team() {
   // Add-person form
   const [name, setName] = useState("");
   const [role, setRole] = useState(ROLES_ON_FLOOR[1]);
+  const [pin, setPin] = useState("");
+  const [perms, setPerms] = useState<Permission[]>(["bill"]);
 
   function addPerson() {
     const clean = name.trim();
     if (!clean) return;
-    if (team.some((m) => m.name.toLowerCase() === clean.toLowerCase())) {
+    if (app.users.some((m) => m.name.toLowerCase() === clean.toLowerCase())) {
       app.toastNow("That name is already on the team", "warn");
       return;
     }
+    if (pin.length !== 4) {
+      app.toastNow("Give them a 4-digit PIN so they can sign in", "warn");
+      return;
+    }
+    app.dispatch({ type: "user:add", user: { name: clean, role, pin, permissions: perms } });
     setAdded((a) => [...a, { name: clean, role, added: true }]);
     setWeek((w) => ({ ...w, ...seedWeek([clean]) }));
     setName("");
+    setPin("");
+    setPerms(["bill"]);
     setPublished(false);
-    app.dispatch({
-      type: "audit",
-      entry: { at: NOW, actor: app.actorName, action: `Added ${clean} (${role}) to the team at ${store.name}`, object: clean, system: "Arvind One" },
-    });
-    app.toastNow(`${clean} added, they get the app invite by SMS`, "good");
+    app.toastNow(`${clean} added with PIN ${pin}. They can sign in on the store device now.`, "good");
   }
 
   function cycle(nameKey: string, day: number) {
@@ -97,10 +102,7 @@ export default function Team() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Staff &amp; Shifts</h1>
-          <p className="text-sm text-ink2 mt-1">
-            {store.name} · who works when. Tap a box to change it: <span className="font-medium">M</span> morning,{" "}
-            <span className="font-medium">E</span> evening, <span className="font-medium">O</span> off.
-          </p>
+          <p className="text-sm text-ink2 mt-1">{store.name}</p>
         </div>
         <button data-publish-week className="btn-primary" disabled={published} onClick={publish}>
           {published ? "✓ Week published" : "Publish week to staff phones"}
@@ -118,7 +120,7 @@ export default function Team() {
       <Card>
         <SectionTitle
           title="Next week"
-          sub="Green is morning, blue is evening, grey is off. The bottom row shows how many people are in each day."
+          right={<span className="label">M morning · E evening · O off</span>}
         />
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
@@ -227,9 +229,66 @@ export default function Team() {
         )}
       </Card>
 
+      {/* ── Who can do what ── */}
+      <Card>
+        <SectionTitle title="What each person can do" right={<Chip>{app.users.length} people</Chip>} />
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="label text-left pb-2 pr-2">Person</th>
+                <th className="label pb-2 px-2">PIN</th>
+                {ALL_PERMISSIONS.map((p) => (
+                  <th key={p.id} className="label pb-2 px-2 text-center">{p.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {app.users.map((u) => (
+                <tr key={u.name} className="border-t border-line" data-user-row>
+                  <td className="py-2 pr-2 whitespace-nowrap">
+                    <div className="text-sm text-ink font-medium">{u.name}</div>
+                    <div className="text-2xs text-muted">{u.role}</div>
+                  </td>
+                  <td className="px-2 text-center">
+                    <span className="num text-xs text-ink2">{u.name === app.actorName ? u.pin : "••••"}</span>
+                  </td>
+                  {ALL_PERMISSIONS.map((p) => {
+                    const has = u.permissions.includes(p.id);
+                    const isManager = u.role === "Store Manager";
+                    return (
+                      <td key={p.id} className="px-2 py-1.5 text-center">
+                        <button
+                          data-perm
+                          disabled={isManager}
+                          onClick={() => {
+                            const next = has ? u.permissions.filter((x) => x !== p.id) : [...u.permissions, p.id];
+                            app.dispatch({ type: "user:permissions", name: u.name, permissions: next });
+                            app.toastNow(`${u.name}: ${p.label} ${has ? "turned off" : "turned on"}`, has ? "warn" : "good");
+                          }}
+                          className="w-9 h-9 border border-line grid place-items-center"
+                          style={{
+                            background: has ? "var(--ok-soft)" : "var(--plane)",
+                            color: has ? "var(--status-good)" : "var(--text-muted)",
+                            opacity: isManager ? 0.5 : 1,
+                          }}
+                          title={isManager ? "The manager always has every permission" : `Tap to ${has ? "remove" : "give"} ${p.label.toLowerCase()}`}
+                        >
+                          {has ? "✓" : "–"}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
       {/* ── Add a person ── */}
       <Card>
-        <SectionTitle title="Add someone to the team" sub="They get an SMS with the app link and appear in the shift grid straight away." />
+        <SectionTitle title="Add someone to the team" />
         <div className="flex flex-wrap items-end gap-2.5">
           <div className="flex-1 min-w-[180px]">
             <label className="label block mb-1">Full name</label>
@@ -250,9 +309,37 @@ export default function Team() {
               ))}
             </select>
           </div>
+          <div>
+            <label className="label block mb-1">Sign-in PIN</label>
+            <input
+              data-staff-pin
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+              inputMode="numeric"
+              placeholder="4 digits"
+              className="w-28 border border-line bg-raised px-3 py-2.5 text-sm num tracking-widest text-ink"
+            />
+          </div>
           <button data-staff-add className="btn-primary !py-2.5" onClick={addPerson}>
             + Add to team
           </button>
+        </div>
+        <div className="mt-3">
+          <div className="label mb-1.5">What they can do</div>
+          <div className="flex flex-wrap gap-1.5">
+            {ALL_PERMISSIONS.map((p) => {
+              const on = perms.includes(p.id);
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setPerms((x) => (on ? x.filter((y) => y !== p.id) : [...x, p.id]))}
+                  className={`btn !py-1.5 !text-xs ${on ? "!border-[color:var(--brand)] !text-[color:var(--brand)]" : ""}`}
+                >
+                  {on ? "✓ " : ""}{p.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </Card>
     </div>

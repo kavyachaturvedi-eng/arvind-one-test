@@ -39,6 +39,13 @@ export default function Cash() {
 
   const closed = app.dayClosed;
 
+  // X-report is a mid-shift read, Z-report closes the day out.
+  const [report, setReport] = useState<"X" | "Z" | null>(null);
+  const cashExpected = openingFloat + modes[2].value;
+  const [countText, setCountText] = useState("");
+  const counted = Math.round((Number(countText) || 0) * 100) / 100;
+  const variance = countText ? Math.round((counted - cashExpected) * 100) / 100 : 0;
+
   function clearOne(id: string) {
     app.dispatch({ type: "cash:update", id, patch: { status: "auto_cleared" } });
     app.toastNow("Cleared with the system's explanation attached", "good");
@@ -92,9 +99,6 @@ export default function Cash() {
         <Card>
           <SectionTitle title="Today's money, by payment mode" />
           <BarChart data={modes} format={(n) => inr(n, { compact: true })} />
-          <div className="text-2xs text-muted mt-3">
-            Cash line becomes tomorrow's deposit. UPI and card settle to the bank on their own.
-          </div>
         </Card>
 
         <Card>
@@ -131,6 +135,108 @@ export default function Cash() {
         </Card>
       </div>
 
+      {/* ── Register reads and the physical count ─────────────────────────── */}
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Card>
+          <SectionTitle
+            title="Register reads"
+            right={
+              <div className="flex gap-2">
+                <button data-x-report className="btn !py-1.5 !text-xs" onClick={() => setReport("X")}>X-report</button>
+                <button data-z-report className="btn !py-1.5 !text-xs" disabled={!closed} onClick={() => setReport("Z")}>Z-report</button>
+              </div>
+            }
+          />
+          {report === null ? (
+            <div className="text-xs text-muted py-2">Pick a read.</div>
+          ) : (
+            <div className="border border-line" data-report>
+              <div className="flex items-center justify-between px-3 py-2 border-b border-line bg-[color:var(--plane)]">
+                <span className="label">{report}-report · {store.code}-01 · Thu 13 Aug 11:42</span>
+                <Chip tone={report === "Z" ? "critical" : "brand"}>{report === "Z" ? "Closeout" : "Mid-shift read"}</Chip>
+              </div>
+              <div className="p-3 space-y-1.5 text-sm">
+                {[
+                  ["Gross sales", inr(v.todaySales)],
+                  ["Bills", String(v.bills)],
+                  ["UPI", inr(modes[0].value)],
+                  ["Card", inr(modes[1].value)],
+                  ["Cash", inr(modes[2].value)],
+                  ["Opening float", inr(openingFloat)],
+                  ["Cash expected in drawer", inr(cashExpected)],
+                  ["Returns today", inr(Math.round(v.todaySales * 0.04))],
+                ].map(([k, val]) => (
+                  <div key={k} className="flex justify-between">
+                    <span className="text-ink2">{k}</span>
+                    <span className="num text-ink">{val}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between pt-2 mt-1 border-t border-line font-semibold">
+                  <span className="text-ink">{report === "Z" ? "Banked and closed" : "Running total"}</span>
+                  <span className="num text-ink">{inr(v.todaySales)}</span>
+                </div>
+              </div>
+              <div className="px-3 py-2 border-t border-line flex gap-2">
+                <button className="btn !py-1.5 !text-xs" onClick={() => app.toastNow(`${report}-report printed on the till printer`, "info")}>
+                  Print
+                </button>
+                <button className="btn-ghost !text-xs" onClick={() => setReport(null)}>Close</button>
+              </div>
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <SectionTitle title="Count the drawer" right={<Chip tone={variance === 0 && countText ? "good" : countText ? "critical" : "neutral"}>{countText ? (variance === 0 ? "Matches" : "Variance") : "Not counted"}</Chip>} />
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="border border-line p-3">
+              <div className="label mb-1">System says</div>
+              <div className="text-xl font-semibold num text-ink">{inr(cashExpected)}</div>
+            </div>
+            <div className="border border-line p-3">
+              <div className="label mb-1">You counted</div>
+              <input
+                data-cash-count
+                value={countText}
+                onChange={(e) => setCountText(e.target.value.replace(/[^\d.]/g, ""))}
+                inputMode="decimal"
+                placeholder="0.00"
+                className="w-full text-xl font-semibold num bg-transparent outline-none text-ink border-b border-line"
+              />
+            </div>
+          </div>
+          {countText && (
+            <div className="border-l-2 pl-3 py-1" style={{ borderColor: variance === 0 ? "var(--status-good)" : "var(--status-critical)" }}>
+              <div className="text-sm font-medium" style={{ color: variance === 0 ? "var(--status-good)" : "var(--status-critical)" }}>
+                {variance === 0 ? "Cash matches the system" : `${inr(Math.abs(variance))} ${variance < 0 ? "short" : "extra"}`}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4 pt-3 border-t border-line">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="label">Card terminals</div>
+                <div className="text-sm text-ink mt-0.5">
+                  {app.cardBatched ? "Batched and sent for settlement" : `${inr(modes[1].value)} on 2 terminals, not batched`}
+                </div>
+              </div>
+              <button
+                data-card-batch
+                className="btn-primary !py-2 !text-xs"
+                disabled={app.cardBatched}
+                onClick={() => {
+                  app.dispatch({ type: "card:batch" });
+                  app.toastNow(`Terminals batched. ${inr(modes[1].value)} goes for settlement tonight.`, "good");
+                }}
+              >
+                {app.cardBatched ? "✓ Batched" : "Batch terminals"}
+              </button>
+            </div>
+          </div>
+        </Card>
+      </div>
+
       {/* Who handed what to whom, so a shortage has an owner. */}
       <Card>
         <SectionTitle title="Shift handovers today" right={<Chip>{app.handovers.length}</Chip>} />
@@ -150,10 +256,6 @@ export default function Cash() {
           </tbody>
         </Table>
       </Card>
-
-      <div className="text-2xs text-muted">
-        Closing the day posts one summary to Finance. No emails, no justification notes, no hunting for deposit slips.
-      </div>
     </div>
   );
 }

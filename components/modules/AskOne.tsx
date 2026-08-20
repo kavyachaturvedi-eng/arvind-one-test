@@ -99,9 +99,6 @@ export default function AskOne() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Ask One</h1>
-          <p className="text-sm text-ink2 mt-1 max-w-2xl">
-            Ask in plain language. Every answer shows the metric definition it was computed from.
-          </p>
         </div>
       </div>
 
@@ -154,7 +151,6 @@ export default function AskOne() {
         <Card>
           <SectionTitle
             title={asked ?? ""}
-            sub={`Scope: ${store.name} · ${store.brand} · asked by ${app.actorName}`}
             right={
               <div className="flex items-center gap-2">
                 <button className="btn-ghost text-xs" onClick={() => app.toastNow(`Pinned "${asked}" to your home screen, it will refresh on the metric's own contract`, "good")}>
@@ -231,7 +227,7 @@ export default function AskOne() {
       {/* ── History ── */}
       {history.length > 0 && (
         <Card>
-          <SectionTitle title="This session" sub="Questions are kept so an answer can be re-run against fresher data without retyping it." />
+          <SectionTitle title="This session" />
           <div className="flex flex-wrap gap-1.5">
             {history.map((q) => (
               <span key={q} className="chip text-ink2 bg-[color:var(--plane)]">

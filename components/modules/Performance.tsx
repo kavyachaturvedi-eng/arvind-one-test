@@ -134,9 +134,6 @@ export default function Performance() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Performance</h1>
-          <p className="text-sm text-ink2 mt-1 max-w-2xl">
-            Full-price sell-through and its drivers across the estate, with the chain from sell-through to margin.
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <Freshness minutes={18} />
@@ -150,14 +147,12 @@ export default function Performance() {
           value={pct(e.sellThrough, 1)}
           emphasis
           tone="critical"
-          sub={`${((BENCH_MID - e.sellThrough) * 100).toFixed(1)} pts below the 85–90% full-price benchmark`}
           spark={trend("estate-st", 14, 100, 0.012)}
         />
         <Stat
           label="Markdown exposure"
           value={inr(e.markdownExposure, { compact: true })}
           tone="warn"
-          sub="Residual units × MRP × expected depth. Definition not yet verified."
         />
         <Stat
           label="Fill rate vs norm"
@@ -174,13 +169,11 @@ export default function Performance() {
           label="Size-set health"
           value={pct(e.sizeSetScore)}
           tone="warn"
-          sub={`${e.brokenStyles} broken sets across ${e.stores} stores`}
         />
         <Stat
           label="Value at risk"
           value={inr(e.valueAtRisk, { compact: true })}
           tone="critical"
-          sub="Full-price sales the broken and at-risk sets will not make this week"
         />
       </div>
 
@@ -188,7 +181,6 @@ export default function Performance() {
       <Card>
         <SectionTitle
           title="Why the gap exists"
-          sub="Left to right, each node carries a live number from this dataset."
         />
         <div className="grid grid-cols-1 md:grid-cols-9 gap-2 items-stretch">
           <ChainNode
@@ -242,7 +234,6 @@ export default function Performance() {
         <Card>
           <SectionTitle
             title="Where the gap to benchmark goes"
-            sub={`From ${pct(currentST)} today to the ${pct(BENCH_LO)}–${pct(BENCH_HI)} benchmark midpoint of ${pct(BENCH_MID)} — ${gapPts.toFixed(1)} points, split by live estate signals.`}
           />
           <div className="space-y-2">
             <BridgeRow label="Today" from={0} to={currentST * 100} max={BENCH_MID * 100} colour="var(--baseline)" value={pct(currentST, 1)} />
@@ -276,7 +267,6 @@ export default function Performance() {
         <Card>
           <SectionTitle
             title="What closing the gap is worth"
-            sub="Every input is on screen and editable."
           />
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <span className="label">Target</span>
@@ -450,7 +440,6 @@ export default function Performance() {
       <Card>
         <SectionTitle
           title="Store league"
-          sub="Sort by any column. Manage by exception hides stores already above the threshold."
           right={
             <label className="inline-flex items-center gap-2 text-xs text-ink2">
               <input type="checkbox" checked={exceptionsOnly} onChange={(ev) => setExceptionsOnly(ev.target.checked)} />

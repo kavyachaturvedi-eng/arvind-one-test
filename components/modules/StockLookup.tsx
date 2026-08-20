@@ -5,7 +5,7 @@
 // warehouse, live, with the road to a transfer one tap away.
 
 import React, { useMemo, useState } from "react";
-import { STORES, STYLES, storeById, styleById } from "@/lib/seed";
+import { NOW, STORES, STYLES, storeById, styleById } from "@/lib/seed";
 import { dcAvailable, sellable, skuRow, stockForStyleAtStore } from "@/lib/engine";
 import { useApp } from "@/lib/state";
 import { Card, Chip, Empty, SectionTitle, SizeGrid, StatusDot, Swatch, Table, Td, Th, inr } from "@/components/ui";
@@ -17,6 +17,8 @@ export default function StockLookup() {
   const [query, setQuery] = useState("");
   const [styleId, setStyleId] = useState("");
   const [size, setSize] = useState<Size | "">("");
+
+  const [syncing, setSyncing] = useState(false);
 
   // The full list, with its own search and filters.
   const [fullList, setFullList] = useState(false);
@@ -91,9 +93,29 @@ export default function StockLookup() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <h1 className="text-xl font-semibold text-ink">Check stock</h1>
-        <button data-full-list className="btn" onClick={() => setFullList((v) => !v)}>
-          {fullList ? "Back to search" : "See full list"}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* The manager can push a stuck count without opening any settings. */}
+          {app.role === "store" && (
+            <button
+              data-inv-sync
+              className="btn"
+              disabled={syncing}
+              onClick={() => {
+                setSyncing(true);
+                app.dispatch({
+                  type: "audit",
+                  entry: { at: NOW, actor: app.actorName, action: "Forced a stock-count sync to the website", object: "inventory", system: "Arvind One" },
+                });
+                app.toastNow("Stock counts pushed. The website catches up in under a minute.", "good");
+              }}
+            >
+              {syncing ? "✓ Counts pushed" : "↻ Force sync counts"}
+            </button>
+          )}
+          <button data-full-list className="btn" onClick={() => setFullList((v) => !v)}>
+            {fullList ? "Back to search" : "See full list"}
+          </button>
+        </div>
       </div>
 
       {fullList ? (
