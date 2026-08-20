@@ -27,7 +27,7 @@ interface Asn {
 
 function buildAsns(storeId: string): Asn[] {
   const r = rng(hash("grn" + storeId));
-  const sources = ["RPC Bhiwandi", "RPC Bengaluru", "Linking Road", "Vendor. Arvind Mills", "Phoenix Marketcity"];
+  const sources = ["RPC Bhiwandi", "RPC Bengaluru", "Linking Road", "Vendor: Arvind Mills", "Phoenix Marketcity"];
   const kinds: Asn["kind"][] = ["Warehouse", "Warehouse", "Store transfer", "Vendor", "Store transfer"];
   const out: Asn[] = [];
   for (let i = 0; i < 5; i++) {
@@ -93,7 +93,7 @@ export default function Grn() {
         task: {
           id: `T-GRN-${receiving.id}`,
           storeId: app.storeId,
-          title: `${short} units short on ${receiving.id}. ${reason}`,
+          title: `${short} units short on ${receiving.id}: ${reason}`,
           detail: `${receiving.from} · ${receiving.po}. Photo of carton seals attached at receipt.`,
           origin: "replenishment",
           assignedTo: app.actorName,

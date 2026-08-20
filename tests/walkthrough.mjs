@@ -17,8 +17,8 @@ const ROLES = [
   ["leadership", "CEO"],
 ];
 const MODULES_BY_ROLE = {
-  store: ["pos", "bills", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "reports", "agents", "ask"],
-  staff: ["pos", "bills", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift", "attendance"],
+  store: ["pos", "bills", "offers", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "reports", "agents", "ask"],
+  staff: ["pos", "bills", "offers", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift", "attendance"],
   planner: ["live", "performance", "tickets", "allocate", "merch", "moves", "catchment", "trainings", "truth", "reports", "governance", "agents", "ask"],
   leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "agents", "ask"],
 };
@@ -95,6 +95,17 @@ async function expandNav(page) {
   } else {
     fail("login screen did not render");
   }
+
+  // Modules with something new carry a dot until they are opened.
+  await expandNav(page);
+  const dotCount = await page.locator('nav [aria-label="new"]').count();
+  if (dotCount > 0) {
+    pass(`${dotCount} nav modules carry a new-activity dot`);
+    await page.locator('nav [data-module="grn"]').first().click();
+    await page.waitForTimeout(280);
+    if ((await page.locator('nav [aria-label="new"]').count()) < dotCount) pass("opening a module clears its dot");
+    else fail("dot did not clear after opening the module");
+  } else fail("no notification dots on the nav");
 
   // ── 1. Every module renders for every role ──────────────────────────────
   for (const [roleId, role] of ROLES) {
@@ -345,11 +356,11 @@ async function expandNav(page) {
   const floatBox = page.locator("[data-float]");
   if ((await floatBox.count()) === 0) fail("day-open gate missing on the billing screen");
   else {
-    await floatBox.fill("10000");
+    await floatBox.fill("9840.50");
     await page.screenshot({ path: `${SHOTS}/day-open.png` });
     await page.locator("[data-day-open]").click();
     await page.waitForTimeout(300);
-    if ((await page.locator("[data-float]").count()) === 0) pass("day opened at the till with a counted float");
+    if ((await page.locator("[data-float]").count()) === 0) pass("day opened at the till with a counted float, paise included");
     else fail("day-open did not take");
   }
 
@@ -379,6 +390,39 @@ async function expandNav(page) {
   else fail("held-bills drawer did not open");
   await page.keyboard.press("Escape");
   await page.waitForTimeout(200);
+
+  // Bill an item, then apply a coupon code at payment.
+  {
+    // Product tiles carry a "N pcs" line; sizes with stock read "N left".
+    const tiles = page.locator("main button", { hasText: / pcs$/ });
+    const tn = Math.min(await tiles.count(), 8);
+    let added = false;
+    for (let i = 0; i < tn && !added; i++) {
+      await tiles.nth(i).click();
+      await page.waitForTimeout(240);
+      const sizeBtn = page.locator("main button", { hasText: /\d+ left$/ }).first();
+      if ((await sizeBtn.count()) === 0) continue;
+      await sizeBtn.click();
+      await page.waitForTimeout(220);
+      const add = page.locator("[data-add-item]");
+      if ((await add.count()) === 0) continue;
+      await add.click();
+      await page.waitForTimeout(260);
+      added = true;
+    }
+    if (!added) fail("could not add an item at the till");
+    else {
+      pass("item added to the bill from the tile grid");
+      await page.locator("main button", { hasText: /^Charge/ }).first().click();
+      await page.waitForTimeout(300);
+      await page.locator("[data-coupon]").fill("FESTIVE10");
+      await page.locator("[data-coupon-apply]").click();
+      await page.waitForTimeout(280);
+      if (/Coupon FESTIVE10/.test(await page.locator("body").innerText())) pass("coupon applied at payment and shown on the bill");
+      else fail("coupon did not apply at payment");
+      await page.screenshot({ path: `${SHOTS}/coupon.png` });
+    }
+  }
 
   // Day end from the till, then reopen so the rest of the run can bill.
   await page.locator("[data-day-end]").click();
@@ -412,6 +456,36 @@ async function expandNav(page) {
   else fail("recent-members list still shown");
   if (!/Capture rate/i.test(crmText)) pass("programme stats hidden from staff");
   else fail("programme stats still visible to staff");
+
+  // Offers: the board and a coupon check.
+  await page.locator('nav [data-module="offers"]').first().click();
+  await page.waitForTimeout(320);
+  const offerCount = await page.locator("[data-offer]").count();
+  if (offerCount >= 4) pass(`${offerCount} running offers, in words a cashier can say`);
+  else fail(`offer board thin (${offerCount})`);
+  await page.locator("[data-coupon-check-input]").fill("EXPIRED50");
+  await page.locator("[data-coupon-check]").click();
+  await page.waitForTimeout(240);
+  if (/will not apply/.test(await page.locator("main").innerText())) pass("a dead coupon is refused with the reason");
+  else fail("coupon check did not refuse an expired code");
+  await page.screenshot({ path: `${SHOTS}/offers.png`, fullPage: true });
+
+  // Check stock: the full inventory list with filters.
+  await page.locator('nav [data-module="lookup"]').first().click();
+  await page.waitForTimeout(300);
+  await page.locator("[data-full-list]").click();
+  await page.waitForTimeout(300);
+  const fullRows = await page.locator("main tbody tr").count();
+  if (fullRows > 20) pass(`full inventory list rendered (${fullRows} styles)`);
+  else fail(`full list too short (${fullRows})`);
+  await page.locator("[data-stock-filter]").selectOption("Out of stock");
+  await page.waitForTimeout(260);
+  const outRows = await page.locator("main tbody tr").count();
+  if (outRows < fullRows) pass(`stock filter narrows the list (${outRows} out of stock)`);
+  else fail("stock filter did not narrow the list");
+  await page.locator("[data-list-search]").fill("polo");
+  await page.waitForTimeout(240);
+  await page.screenshot({ path: `${SHOTS}/full-list.png`, fullPage: true });
 
   // Bills & Returns: find a bill, return it with a reason.
   await page.locator('nav [data-module="bills"]').first().click();

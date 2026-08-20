@@ -64,6 +64,7 @@ export type ModuleId =
   | "shift"
   | "bills"
   | "attendance"
+  | "offers"
 ;
 
 interface AppState {

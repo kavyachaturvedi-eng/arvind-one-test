@@ -18,6 +18,46 @@ export default function StockLookup() {
   const [styleId, setStyleId] = useState("");
   const [size, setSize] = useState<Size | "">("");
 
+  // The full list, with its own search and filters.
+  const [fullList, setFullList] = useState(false);
+  const [listQuery, setListQuery] = useState("");
+  const [brandFilter, setBrandFilter] = useState("All brands");
+  const [catFilter, setCatFilter] = useState("All categories");
+  const [stockFilter, setStockFilter] = useState<"All" | "In stock" | "Low" | "Out of stock">("All");
+
+  const inventory = useMemo(() => {
+    return STYLES.map((s) => {
+      const rows = stockForStyleAtStore(app.storeId, s.id);
+      const units = rows.reduce((a, x) => a + sellable(x), 0);
+      const brokenSizes = s.coreSizes.filter((cs) => {
+        const row = rows.find((x) => x.size === cs);
+        return !row || sellable(row) <= 0;
+      });
+      return { style: s, units, carried: rows.length > 0, brokenSizes };
+    });
+  }, [app.storeId]);
+
+  const brands = useMemo(() => ["All brands", ...Array.from(new Set(STYLES.map((s) => s.brand)))], []);
+  const cats = useMemo(() => ["All categories", ...Array.from(new Set(STYLES.map((s) => s.category)))], []);
+
+  const listRows = useMemo(() => {
+    const q = listQuery.toLowerCase().trim();
+    return inventory
+      .filter((r) => (brandFilter === "All brands" ? true : r.style.brand === brandFilter))
+      .filter((r) => (catFilter === "All categories" ? true : r.style.category === catFilter))
+      .filter((r) =>
+        stockFilter === "All"
+          ? true
+          : stockFilter === "Out of stock"
+          ? r.units === 0
+          : stockFilter === "Low"
+          ? r.units > 0 && r.units <= 6
+          : r.units > 6
+      )
+      .filter((r) => (!q ? true : r.style.name.toLowerCase().includes(q) || r.style.id.toLowerCase().includes(q)))
+      .sort((a, b) => a.units - b.units);
+  }, [inventory, listQuery, brandFilter, catFilter, stockFilter]);
+
   const options = useMemo(() => {
     const q = query.toLowerCase().trim();
     if (!q) return STYLES.slice(0, 30);
@@ -49,8 +89,99 @@ export default function StockLookup() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold text-ink">Check stock</h1>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <h1 className="text-xl font-semibold text-ink">Check stock</h1>
+        <button data-full-list className="btn" onClick={() => setFullList((v) => !v)}>
+          {fullList ? "Back to search" : "See full list"}
+        </button>
+      </div>
 
+      {fullList ? (
+        <Card>
+          <SectionTitle title={`Everything at ${myStore.name}`} right={<Chip>{listRows.length} styles</Chip>} />
+          <div className="flex gap-2 flex-wrap">
+            <input
+              data-list-search
+              value={listQuery}
+              onChange={(e) => setListQuery(e.target.value)}
+              placeholder="Search by name or code"
+              className="flex-1 min-w-[200px] rounded-lg border border-line bg-raised px-3 py-2.5 text-sm text-ink placeholder:text-muted"
+            />
+            <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} className="border border-line bg-raised px-3 py-2.5 text-sm text-ink">
+              {brands.map((b) => (
+                <option key={b}>{b}</option>
+              ))}
+            </select>
+            <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} className="border border-line bg-raised px-3 py-2.5 text-sm text-ink">
+              {cats.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
+            <select
+              data-stock-filter
+              value={stockFilter}
+              onChange={(e) => setStockFilter(e.target.value as typeof stockFilter)}
+              className="border border-line bg-raised px-3 py-2.5 text-sm text-ink"
+            >
+              {["All", "In stock", "Low", "Out of stock"].map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-3">
+            <Table>
+              <thead>
+                <tr><Th>Item</Th><Th>Brand</Th><Th>Category</Th><Th align="right">MRP</Th><Th align="right">On the floor</Th><Th>Core sizes</Th><Th align="right" /></tr>
+              </thead>
+              <tbody>
+                {listRows.map((r) => (
+                  <tr key={r.style.id}>
+                    <Td>
+                      <span className="inline-flex items-center gap-2">
+                        <Swatch hex={r.style.colourHex} />
+                        <span>
+                          <span className="block text-sm text-ink">{r.style.name}</span>
+                          <span className="block text-2xs text-muted num">{r.style.id}</span>
+                        </span>
+                      </span>
+                    </Td>
+                    <Td className="text-xs text-ink2">{r.style.brand}</Td>
+                    <Td className="text-xs text-ink2">{r.style.category}</Td>
+                    <Td align="right" className="num text-xs">{inr(r.style.mrp)}</Td>
+                    <Td align="right">
+                      <span
+                        className="num text-sm font-semibold"
+                        style={{ color: r.units === 0 ? "var(--status-critical)" : r.units <= 6 ? "var(--status-warning)" : "var(--status-good)" }}
+                      >
+                        {r.units}
+                      </span>
+                    </Td>
+                    <Td className="text-xs">
+                      {r.brokenSizes.length === 0 ? (
+                        <span className="inline-flex items-center gap-1.5 text-ink2"><StatusDot tone="good" />all there</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5" style={{ color: "var(--status-critical)" }}>
+                          <StatusDot tone="critical" />{r.brokenSizes.join(", ")} at zero
+                        </span>
+                      )}
+                    </Td>
+                    <Td align="right">
+                      <button
+                        className="btn !py-1 !text-2xs"
+                        onClick={() => { setStyleId(r.style.id); setSize(""); setFullList(false); }}
+                      >
+                        Check sizes
+                      </button>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+            {listRows.length === 0 && <Empty title="Nothing matches those filters" />}
+          </div>
+        </Card>
+      ) : (
       <Card>
         <SectionTitle title="1 · Which item?" />
         <div className="flex gap-2">
@@ -102,7 +233,7 @@ export default function StockLookup() {
 
         {style && (
           <div className="mt-5 pt-4 border-t border-line">
-            <SectionTitle title="2 · Which size?" sub={`What ${myStore.name} has on the floor right now.`} />
+            <SectionTitle title="2 · Which size?" />
             <SizeGrid
               sizes={style.sizes}
               units={myUnits}
@@ -113,11 +244,12 @@ export default function StockLookup() {
           </div>
         )}
       </Card>
+      )}
 
-      {style && size && (
+      {!fullList && style && size && (
         <Card>
           <SectionTitle
-            title={`${style.name} · size ${size}, everywhere`}
+            title={`${style.name} · size ${size}`}
             right={<Chip tone={totalElsewhere > 0 ? "good" : "critical"}>{totalElsewhere} elsewhere</Chip>}
           />
           <Table>

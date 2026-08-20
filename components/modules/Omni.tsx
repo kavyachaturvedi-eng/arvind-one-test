@@ -56,11 +56,11 @@ const CAUSE: Record<RootCause, string> = {
 
 /** Deterministic rider per channel, no clock, no randomness. */
 const RIDER: Record<OmniOrder["channel"], string> = {
-  "Tommy.com": "Ekart. Rider 4471",
-  Myntra: "Delhivery. Rider 2210",
-  Amazon: "Amazon Logistics. Rider 8802",
-  Flipkart: "Ekart. Rider 3319",
-  AJIO: "Blue Dart. Rider 5541",
+  "Tommy.com": "Ekart, rider 4471",
+  Myntra: "Delhivery, rider 2210",
+  Amazon: "Amazon Logistics, rider 8802",
+  Flipkart: "Ekart, rider 3319",
+  AJIO: "Blue Dart, rider 5541",
 };
 
 const QUEUE_STATUSES: OmniStatus[] = ["new", "locating", "packed", "handed_over", "return_pending"];
@@ -154,7 +154,7 @@ export default function Omni() {
       type: "omni:update",
       id: o.id,
       patch: { status: "cancelled", rootCause: cause },
-      label: `Cancelled. ${CAUSE[cause]}`,
+      label: `Cancelled: ${CAUSE[cause]}`,
       actor: app.actorName,
     });
     app.toastNow(`${o.id} cancelled, reason recorded: ${CAUSE[cause]}`, "warn");
@@ -181,7 +181,7 @@ export default function Omni() {
       case "locating":
         return [
           { value: "packed", label: "Mark packed" },
-          { value: "cantfind", label: "Can't find it, cancel with reason" },
+          { value: "cantfind", label: "Can't find it" },
         ];
       case "packed":
         return [{ value: "handover", label: "Hand over to rider" }];

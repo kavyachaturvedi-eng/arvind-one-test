@@ -29,7 +29,7 @@ export function EndShiftDialog({ open, onClose }: { open: boolean; onClose: () =
   const [countText, setCountText] = useState(String(drawer));
   const [confirmed, setConfirmed] = useState(false);
 
-  const counted = Math.max(0, Math.floor(Number(countText) || 0));
+  const counted = Math.max(0, Math.round((Number(countText) || 0) * 100) / 100);
   const diff = counted - drawer;
   const done = app.handovers.some((h) => h.from === app.actorName);
 
@@ -88,8 +88,8 @@ export function EndShiftDialog({ open, onClose }: { open: boolean; onClose: () =
               <input
                 data-handover-count
                 value={countText}
-                onChange={(e) => setCountText(e.target.value.replace(/[^\d]/g, "").slice(0, 7))}
-                inputMode="numeric"
+                onChange={(e) => setCountText(e.target.value.replace(/[^\d.]/g, "").slice(0, 10))}
+                inputMode="decimal"
                 className="flex-1 text-3xl font-semibold num bg-transparent outline-none text-ink border-b border-line"
               />
             </div>

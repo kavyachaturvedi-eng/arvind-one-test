@@ -8,6 +8,7 @@ import React, { useEffect, useState } from "react";
 import { NOW, STYLES, rng } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import { BarChart, Card, Chip, Modal, SectionTitle, Stat, StatusDot, Table, Tabs, Td, Th, inr, pct } from "@/components/ui";
+import { feedbackFor } from "@/lib/offers";
 import { ordersForPhone } from "./BillHistory";
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
@@ -311,6 +312,31 @@ function Customer360({ c, onClose, onBill }: { c: Customer; onClose: () => void;
           <Chip>{favCat}</Chip>
           {c.expiring > 0 && <Chip tone="warn">{c.expiring} points expiring</Chip>}
         </div>
+
+        {/* What they told the campaign team after their visits. */}
+        {(() => {
+          const fb = feedbackFor(c.phone);
+          if (!fb) return <div className="text-xs text-muted">No feedback on record yet.</div>;
+          const colour = fb.average >= 4 ? "var(--status-good)" : fb.average >= 3 ? "var(--status-warning)" : "var(--status-critical)";
+          return (
+            <div className="border p-3" style={{ borderColor: colour }}>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="label">Their feedback</span>
+                <span className="text-base font-semibold num" style={{ color: colour }}>{fb.average.toFixed(1)} / 5</span>
+                <span style={{ color: colour }}>{"★".repeat(Math.round(fb.average))}<span className="text-muted">{"★".repeat(5 - Math.round(fb.average))}</span></span>
+                <span className="text-2xs text-muted">{fb.count} survey{fb.count === 1 ? "" : "s"}</span>
+              </div>
+              <div className="mt-2 space-y-1">
+                {fb.entries.map((e, i) => (
+                  <div key={i} className="text-xs text-ink2">
+                    <span className="num" style={{ color: colour }}>{e.rating}/5</span> · {e.comment}{" "}
+                    <span className="text-2xs text-muted">({e.when})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         <div>
           <div className="label mb-1.5">Purchase history</div>

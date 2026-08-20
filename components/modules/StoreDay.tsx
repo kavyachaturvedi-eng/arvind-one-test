@@ -40,8 +40,8 @@ interface Chore {
 function buildHq(storeId: string): HqTask[] {
   const r = rng(hash("hq" + storeId));
   return [
-    { id: "HQ-1", title: "New EOSS window display, install creative kit 24B", from: "VM, HO", due: NOW + 26 * HOUR, slaHours: 48, needsPhoto: true },
-    { id: "HQ-2", title: "Festive season staffing plan, confirm roster", from: "Retail Ops", due: NOW + 6 * HOUR, slaHours: 24, needsPhoto: false },
+    { id: "HQ-1", title: "New EOSS window display: install creative kit 24B", from: "VM, HO", due: NOW + 26 * HOUR, slaHours: 48, needsPhoto: true },
+    { id: "HQ-2", title: "Festive season staffing plan: confirm roster", from: "Retail Ops", due: NOW + 6 * HOUR, slaHours: 24, needsPhoto: false },
     { id: "HQ-3", title: `Price revision on ${3 + Math.floor(r() * 9)} styles, verify tags on floor`, from: "Commercial", due: NOW + 3 * HOUR, slaHours: 24, needsPhoto: true },
     { id: "HQ-4", title: "Quarterly fire-safety self-audit checklist", from: "Admin", due: NOW + 50 * HOUR, slaHours: 72, needsPhoto: false },
   ];
@@ -50,8 +50,8 @@ function buildHq(storeId: string): HqTask[] {
 function buildTrainings(storeId: string): Training[] {
   const r = rng(hash("trn" + storeId));
   return [
-    { id: "TR-1", title: "New denim fits. FW26 line knowledge", who: "All floor staff", mins: 20, duenDays: 2, progress: 0.5 + r() * 0.3 },
-    { id: "TR-2", title: "Omni handover & POD, refresher", who: "Omni champ", mins: 10, duenDays: 1, progress: 0 },
+    { id: "TR-1", title: "New denim fits: FW26 line knowledge", who: "All floor staff", mins: 20, duenDays: 2, progress: 0.5 + r() * 0.3 },
+    { id: "TR-2", title: "Omni handover and POD refresher", who: "Omni champ", mins: 10, duenDays: 1, progress: 0 },
     { id: "TR-3", title: "Loyalty pitch at billing", who: "Cashiers", mins: 15, duenDays: 5, progress: 0.8 + r() * 0.2 },
   ];
 }
@@ -60,8 +60,8 @@ const CHORES: Chore[] = [
   { id: "C-1", title: "Facade, glass & signage", owner: "Kiran Joshi", slot: "09:30" },
   { id: "C-2", title: "Fixtures, mannequins, trial rooms", owner: "Devansh Patil", slot: "10:00" },
   { id: "C-3", title: "Till float counted & sealed", owner: "Rohit Sharma", slot: "11:00" },
-  { id: "C-4", title: "Section sign-off, sizes & best-sellers", owner: "Meera Pillai", slot: "11:15" },
-  { id: "C-5", title: "Hourly floor walk. 6 blocks", owner: "Meera Pillai", slot: "12:00" },
+  { id: "C-4", title: "Section sign-off: sizes and best-sellers", owner: "Meera Pillai", slot: "11:15" },
+  { id: "C-5", title: "Hourly floor walk: 6 blocks", owner: "Meera Pillai", slot: "12:00" },
   { id: "C-6", title: "Stockroom replenishment pull", owner: "Aditya Rane", slot: "14:00" },
   { id: "C-7", title: "Evening section sign-off", owner: "Sana Qureshi", slot: "20:00" },
 ];
@@ -110,13 +110,13 @@ export default function StoreDay() {
     setAuditTask(null);
     app.dispatch({
       type: "audit",
-      entry: { at: NOW, actor: app.actorName, action: `${t.id} closed with photo. ${score}% VM compliance, auto-approved by Arvi Vision`, object: t.id, system: "Arvi" },
+      entry: { at: NOW, actor: app.actorName, action: `${t.id} closed with photo, ${score}% VM compliance, auto-approved by Arvi Vision`, object: t.id, system: "Arvi" },
     });
-    app.toastNow(`${t.id} closed · ${score}% VM compliance. HQ SLA resolved`, "good");
+    app.toastNow(`${t.id} closed · ${score}% VM compliance, HQ SLA resolved`, "good");
   }
   function completeChore(c: Chore) {
     setChoresDone((d) => [...d, c.id]);
-    app.toastNow(`${c.title}, done`, "good");
+    app.toastNow(`${c.title} done`, "good");
   }
 
   return (
@@ -145,7 +145,7 @@ export default function StoreDay() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="From HQ" value={String(openHq.length)} tone={openHq.length ? "warn" : "good"} sub="Open, with an SLA" emphasis />
-        <Stat label="System tasks" value={String(systemTasks.length)} sub="Raised by exceptions & orders" />
+        <Stat label="System tasks" value={String(systemTasks.length)} sub="Raised by the system" />
         <Stat label="Training due" value={String(trainingDue.length)} tone={trainingDue.some((t) => t.duenDays <= 1) ? "warn" : undefined} sub="Modules pending this week" />
         <Stat label="Floor chores" value={`${CHORES.length - openChores.length}/${CHORES.length}`} tone={openChores.length <= 2 ? "good" : "warn"} sub="Done today" />
       </div>

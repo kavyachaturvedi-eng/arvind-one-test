@@ -204,13 +204,22 @@ export default function Tickets() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <Stat label="Open tickets" value={String(live.length)} sub={`${scopedToOneStore ? storeById(app.storeId).name : "All 15 stores"} · live`} />
-        <Stat label="Breached SLA" value={String(breached)} tone={breached ? "critical" : "good"} sub={breached ? "Up the ladder" : "Nothing overdue"} />
-        <Stat label="Waiting on approval" value={String(awaiting.length)} tone={awaiting.length ? "warn" : undefined} sub="Above the store threshold" />
-        <Stat label="Average age" value={`${avgAgeDays.toFixed(1)} d`} tone="good" sub="Across live tickets" />
-        <Stat label="Approvals pending" value={inr(approvalValue, { compact: true })} sub="Value awaiting approval" />
-      </div>
+      {/* The floor and the manager need three numbers. Planning gets the rest. */}
+      {scopedToOneStore ? (
+        <div className="grid grid-cols-3 gap-3">
+          <Stat label="Open" value={String(live.length)} tone={live.length ? "warn" : "good"} emphasis />
+          <Stat label="Breached SLA" value={String(breached)} tone={breached ? "critical" : "good"} />
+          <Stat label="Pending approval" value={String(awaiting.length)} tone={awaiting.length ? "warn" : undefined} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <Stat label="Open tickets" value={String(live.length)} sub="Across the estate" />
+          <Stat label="Breached SLA" value={String(breached)} tone={breached ? "critical" : "good"} sub={breached ? "Up the ladder" : "Nothing overdue"} />
+          <Stat label="Waiting on approval" value={String(awaiting.length)} tone={awaiting.length ? "warn" : undefined} sub="Above the store threshold" />
+          <Stat label="Average age" value={`${avgAgeDays.toFixed(1)} d`} tone="good" sub="Across live tickets" />
+          <Stat label="Approvals pending" value={inr(approvalValue, { compact: true })} sub="Value awaiting approval" />
+        </div>
+      )}
 
       <Card>
         <SectionTitle

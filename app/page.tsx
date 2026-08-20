@@ -35,6 +35,7 @@ import MerchMoves from "@/components/modules/MerchMoves";
 import StockLookup from "@/components/modules/StockLookup";
 import MyShift from "@/components/modules/MyShift";
 import Attendance from "@/components/modules/Attendance";
+import Offers from "@/components/modules/Offers";
 import BillHistory from "@/components/modules/BillHistory";
 
 function Router() {
@@ -98,6 +99,8 @@ function Router() {
       return <MyShift />;
     case "attendance":
       return <Attendance />;
+    case "offers":
+      return <Offers />;
     case "bills":
       return <BillHistory />;
     default:

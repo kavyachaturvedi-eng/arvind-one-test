@@ -159,10 +159,7 @@ export default function Outward() {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-semibold text-ink">Send stock out</h1>
-          <p className="text-sm text-ink2 mt-1 max-w-2xl">Planning decides what goes back. You pack it and hand it to the transporter.</p>
-        </div>
+        <h1 className="text-xl font-semibold text-ink">Send stock out</h1>
       </div>
 
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
@@ -238,14 +235,7 @@ export default function Outward() {
           </div>
         )}
       </Card>
-      ) : (
-        <Card>
-          <div className="flex items-center gap-2.5 text-xs text-ink2">
-            <StatusDot tone="neutral" />
-            New return requests from Planning appear below on their own — pack the codes, attach the video, and dispatch.
-          </div>
-        </Card>
-      )}
+      ) : null}
 
       {/* ── Batch list + working surface ──────────────────────────────────── */}
       <div className="grid gap-4 lg:grid-cols-[280px_1fr] items-start">

@@ -9,6 +9,8 @@ import { CATEGORIES, NOW, rng, storeById, styleById } from "@/lib/seed";
 import { sellable, stockForStyleAtStore, stylesAtStore, vitalsFor } from "@/lib/engine";
 import { useApp } from "@/lib/state";
 import { Card, Chip, ColumnChart, Empty, Modal, SectionTitle, Stat, StatusDot, Table, Td, Th, fmtTime, inr, pct } from "@/components/ui";
+import { applyCoupon } from "@/lib/offers";
+import { feedbackFor } from "@/lib/offers";
 import { RETURN_REASONS, ordersForPhone } from "./BillHistory";
 import type { Category, Style } from "@/lib/types";
 
@@ -127,6 +129,9 @@ export default function Pos() {
   const [cash, setCash] = useState(0);
   const [bag, setBag] = useState(false);
   const [redeemPts, setRedeemPts] = useState(false);
+  const [couponText, setCouponText] = useState("");
+  const [coupon, setCoupon] = useState<{ code: string; amount: number } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
   const [lastBill, setLastBill] = useState<Bill | null>(null);
   const [newBills, setNewBills] = useState<Bill[]>([]);
 
@@ -170,12 +175,14 @@ export default function Pos() {
   // Cash that leaves for the bank at day close, float stays behind.
   const cashForDeposit = Math.round((salesToday * 0.26) / 10) * 10;
 
-  // Carry bag and loyalty-point payment. One point is worth 25 paise.
+  // Carry bag, coupon and loyalty-point payment. One point is worth 25 paise.
   const bagValue = bag ? CARRY_BAG_PRICE : 0;
   const gross = subtotal + bagValue;
-  const redeemValue = redeemPts && member ? Math.min(Math.floor(member.points * 0.25), gross) : 0;
+  const couponValue = coupon?.amount ?? 0;
+  const afterCoupon = Math.max(0, gross - couponValue);
+  const redeemValue = redeemPts && member ? Math.min(Math.floor(member.points * 0.25), afterCoupon) : 0;
   const ptsUsed = redeemValue > 0 ? Math.min(member?.points ?? 0, Math.ceil(redeemValue / 0.25)) : 0;
-  const total = gross - redeemValue;
+  const total = afterCoupon - redeemValue;
   const change = payMode === "Cash" ? Math.max(0, cash - total) : 0;
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -191,6 +198,18 @@ export default function Pos() {
       if (m) setProfileOpen(true);
       return next;
     });
+  }
+
+  function tryCoupon() {
+    const res = applyCoupon(couponText, gross);
+    if (res.ok) {
+      setCoupon({ code: couponText.trim().toUpperCase(), amount: res.amount });
+      setCouponError(null);
+      app.toastNow(`${res.message} ${inr(res.amount)} off this bill.`, "good");
+    } else {
+      setCoupon(null);
+      setCouponError(res.message);
+    }
   }
 
   function settle(orderId: string, kind: "returned" | "exchanged", reason: string) {
@@ -279,6 +298,9 @@ export default function Pos() {
     setCash(0);
     setBag(false);
     setRedeemPts(false);
+    setCoupon(null);
+    setCouponText("");
+    setCouponError(null);
     setLastBill(null);
     resetPending();
     setStage("customer");
@@ -379,20 +401,15 @@ export default function Pos() {
                 <input
                   data-float
                   value={floatText}
-                  onChange={(e) => setFloatText(e.target.value.replace(/[^\d]/g, "").slice(0, 6))}
-                  inputMode="numeric"
+                  onChange={(e) => setFloatText(e.target.value.replace(/[^\d.]/g, "").slice(0, 9))}
+                  inputMode="decimal"
+                  placeholder="0.00"
                   className="flex-1 text-3xl font-semibold num bg-transparent outline-none text-ink border-b border-line"
                 />
               </div>
-              <div className="flex gap-1.5 mt-3">
-                {[5000, 8000, 10000, 15000].map((amt) => (
-                  <button key={amt} className="btn !py-1.5 !text-xs flex-1" onClick={() => setFloatText(String(amt))}>
-                    {inr(amt, { compact: true })}
-                  </button>
-                ))}
-              </div>
               <div className="text-2xs text-muted mt-3 leading-relaxed">
-                Count the drawer and enter what is actually in it. This is the figure the day close reconciles against.
+                Count the drawer and enter what is actually in it, paise included. This is the figure the day close
+                reconciles against.
               </div>
             </div>
 
@@ -401,7 +418,7 @@ export default function Pos() {
               className="btn-primary w-full mt-4 !py-4 !text-base"
               disabled={!floatText || Number(floatText) <= 0}
               onClick={() => {
-                app.dispatch({ type: "day:open", by: app.actorName, float: Number(floatText) });
+                app.dispatch({ type: "day:open", by: app.actorName, float: Math.round((Number(floatText) || 0) * 100) / 100 });
                 app.dispatch({
                   type: "audit",
                   entry: { at: NOW, actor: app.actorName, action: `Till opened with ${inr(Number(floatText))} counted in the drawer`, object: "day-open", system: "POS" },
@@ -522,6 +539,11 @@ export default function Pos() {
               )}
               <div className="flex justify-between text-xs text-ink2"><span>Subtotal</span><span className="num">{inr(subtotal)}</span></div>
               {bag && <div className="flex justify-between text-xs text-ink2"><span>Carry bag</span><span className="num">{inr(bagValue)}</span></div>}
+              {coupon && (
+                <div className="flex justify-between text-xs" style={{ color: "var(--status-good)" }}>
+                  <span>Coupon {coupon.code}</span><span className="num">−{inr(coupon.amount)}</span>
+                </div>
+              )}
               {redeemValue > 0 && (
                 <div className="flex justify-between text-xs" style={{ color: "var(--status-good)" }}>
                   <span>Points ({ptsUsed.toLocaleString("en-IN")} used)</span><span className="num">−{inr(redeemValue)}</span>
@@ -715,6 +737,40 @@ export default function Pos() {
                 <div className="w-full max-w-md">
                   <div className="label mb-1.5">Step 3 of 3</div>
                   <h2 className="text-xl font-medium text-ink mb-4">Take {inr(total)}</h2>
+
+                  {/* Coupon codes come in on the customer's phone. */}
+                  <div className="border border-line bg-raised p-3 mb-4">
+                    <div className="label mb-1.5">Coupon code</div>
+                    {coupon ? (
+                      <div className="flex items-center gap-2.5">
+                        <StatusDot tone="good" />
+                        <span className="text-sm text-ink flex-1 num">{coupon.code} · {inr(coupon.amount)} off</span>
+                        <button
+                          className="btn !py-1 !text-2xs"
+                          onClick={() => { setCoupon(null); setCouponText(""); setCouponError(null); }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex gap-2">
+                          <input
+                            data-coupon
+                            value={couponText}
+                            onChange={(e) => { setCouponText(e.target.value.toUpperCase()); setCouponError(null); }}
+                            onKeyDown={(e) => e.key === "Enter" && tryCoupon()}
+                            placeholder="Type or scan the code"
+                            className="flex-1 border border-line bg-raised px-3 py-2.5 text-sm num tracking-wide"
+                          />
+                          <button data-coupon-apply className="btn !py-2.5 !text-xs" onClick={tryCoupon}>Apply</button>
+                        </div>
+                        {couponError && (
+                          <div className="text-2xs mt-1.5" style={{ color: "var(--status-critical)" }}>{couponError}</div>
+                        )}
+                      </>
+                    )}
+                  </div>
 
                   <div className="grid grid-cols-3 gap-2 mb-4">
                     {(["UPI", "Card", "Cash"] as const).map((t) => (
@@ -948,6 +1004,41 @@ export default function Pos() {
                 <div className="text-2xs text-muted mt-0.5">orders, last 30 days</div>
               </div>
             </div>
+
+            {/* How they rated us last time, from the campaign team's survey. */}
+            {(() => {
+              const fb = feedbackFor(member.phone);
+              if (!fb) {
+                return (
+                  <div className="border border-line px-3 py-2.5 text-xs text-muted" data-feedback>
+                    No feedback on record yet. Worth asking how the visit went.
+                  </div>
+                );
+              }
+              const tone = fb.average >= 4 ? "good" : fb.average >= 3 ? "warn" : "critical";
+              const colour = tone === "good" ? "var(--status-good)" : tone === "warn" ? "var(--status-warning)" : "var(--status-critical)";
+              return (
+                <div className="border p-3" style={{ borderColor: colour }} data-feedback>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <span className="label">Their feedback</span>
+                    <span className="text-base font-semibold num" style={{ color: colour }}>
+                      {fb.average.toFixed(1)} / 5
+                    </span>
+                    <span style={{ color: colour }}>{"★".repeat(Math.round(fb.average))}<span className="text-muted">{"★".repeat(5 - Math.round(fb.average))}</span></span>
+                    <span className="text-2xs text-muted">{fb.count} survey{fb.count === 1 ? "" : "s"}</span>
+                    {fb.average < 3.5 && <Chip tone="critical">handle with care</Chip>}
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {fb.entries.map((e, i) => (
+                      <div key={i} className="text-xs text-ink2">
+                        <span className="num" style={{ color: colour }}>{e.rating}/5</span> · {e.comment}{" "}
+                        <span className="text-2xs text-muted">({e.when})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             <div>
               <div className="label mb-2">Past orders</div>

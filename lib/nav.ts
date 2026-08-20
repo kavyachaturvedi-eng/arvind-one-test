@@ -65,6 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
     children: [
       { id: "crm", label: "Loyalty", focus: "points" },
       { id: "crm", label: "Add a member", focus: "enrol" },
+      { id: "offers", label: "Offers" },
     ],
   },
   {
@@ -190,6 +191,7 @@ export const NAV_ACTIONS: NavAction[] = [
   { label: "Check stock in another store", hint: "Every store and the warehouse", id: "lookup", roles: ["staff", "store"] },
   { label: "Check loyalty points", hint: "Ten seconds, no queue held up", id: "crm", focus: "points", roles: ["staff", "store"] },
   { label: "Return or exchange a bill", hint: "Last 30 days, with a reason", id: "bills", roles: ["staff", "store"] },
+  { label: "What offers are running", hint: "Offers and coupon codes", id: "offers", roles: ["staff", "store"] },
   { label: "Add a member", hint: "Name and mobile, done", id: "crm", focus: "enrol", roles: ["staff", "store"] },
   { label: "Report a problem", hint: "Opens tickets", id: "tickets", roles: ["staff", "store"] },
   { label: "End my shift", hint: "Count the cash and hand over", id: "shift", roles: ["staff"] },

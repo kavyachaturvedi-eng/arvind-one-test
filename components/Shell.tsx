@@ -5,7 +5,7 @@ import { ROLES, STORES } from "@/lib/seed";
 import { AGENTS, agentApprovals } from "@/lib/agents";
 import { sizeSetExceptions } from "@/lib/engine";
 import { NAV_GROUPS, SECTION_ORDER, type NavChild } from "@/lib/nav";
-import { useApp } from "@/lib/state";
+import { useApp, type ModuleId } from "@/lib/state";
 import CommandPalette from "./CommandPalette";
 import { EndShiftDialog } from "./EndShift";
 import { Chip, Freshness, Toast } from "./ui";
@@ -15,6 +15,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [navOpen, setNavOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [endShiftOpen, setEndShiftOpen] = useState(false);
+  // Once a module is opened, its dot clears for the session.
+  const [seen, setSeen] = useState<Set<ModuleId>>(new Set());
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const role = ROLES.find((r) => r.id === app.role)!;
 
@@ -35,6 +37,29 @@ export function Shell({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups, app.module, app.focus]);
 
+  // ── New-since-you-looked dots ──────────────────────────────────────────────
+  // A module carries a dot when something arrived that a person has not seen:
+  // orders to pick, stock at the door, an SLA breach, an approval waiting.
+  const dots = useMemo(() => {
+    const d = new Set<ModuleId>();
+    const mine = app.omni.filter((o) => o.storeId === app.storeId || app.role === "planner" || app.role === "leadership");
+    if (mine.some((o) => o.status === "new" || o.status === "locating")) d.add("omni");
+    if (app.tickets.some((t) => t.status === "awaiting_approval" || t.status === "auto_dispatched")) d.add("tickets");
+    if (app.tasks.some((t) => t.storeId === app.storeId && t.status !== "done" && t.priority === 1)) d.add("storeday");
+    if (app.role === "store" || app.role === "staff") {
+      d.add("grn"); // a vehicle is at the door in the seeded day
+      d.add("offers"); // this week's offer board is new
+    }
+    if (app.role === "store") {
+      d.add("merch");
+      if (app.leaves.some((l) => l.status === "pending")) d.add("team");
+    }
+    if (app.role === "planner" || app.role === "leadership" || app.role === "store") d.add("agents");
+    if (app.trainings.length > 0) d.add("trainings");
+    return d;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app.omni, app.tickets, app.tasks, app.leaves, app.trainings, app.role, app.storeId]);
+
   // Pending work, surfaced where people look — the nav.
   const approvalsWaiting = useMemo(
     () => AGENTS.filter((a) => a.roles.includes(app.role)).reduce((n, a) => n + agentApprovals(a.id, app.storeId).length, 0),
@@ -53,9 +78,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app.module, app.focus, app.role]);
 
-  // A new screen always starts at the top.
+  // A new screen always starts at the top, and its dot clears.
   useEffect(() => {
     window.scrollTo({ top: 0 });
+    setSeen((s) => (s.has(app.module) ? s : new Set(s).add(app.module)));
   }, [app.module, app.focus]);
 
   // Store roles run on floor tablets, used by people who are not desk workers:
@@ -193,6 +219,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         >
                           <span className="w-4 text-center opacity-70">{g.glyph}</span>
                           <span className="text-[13px] flex-1">{g.label}</span>
+                          {/* A dot on the group when something inside it is new and unopened. */}
+                          {!open && g.children.some((c) => dots.has(c.id) && !seen.has(c.id)) && <NewDot />}
                           {g.key === "invm" && stockExceptions > 0 && <CountBadge n={stockExceptions} tone="critical" />}
                           {(g.key === "sai" || g.key === "pai" || g.key === "aai") && approvalsWaiting > 0 && (
                             <CountBadge n={approvalsWaiting} tone="brand" />
@@ -219,7 +247,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                         : "text-ink2 hover:bg-[color:var(--plane)]"
                                     }`}
                                   >
-                                    {c.label}
+                                    <span className="flex-1">{c.label}</span>
+                                    {dots.has(c.id) && !seen.has(c.id) && <NewDot />}
                                   </button>
                                 </li>
                               );
@@ -258,6 +287,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {app.toast && <Toast key={app.toast.id} message={app.toast.message} tone={app.toast.tone} onDone={() => app.dispatch({ type: "toast:clear" })} />}
     </div>
   );
+}
+
+function NewDot() {
+  return <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "var(--brand)" }} aria-label="new" />;
 }
 
 function CountBadge({ n, tone }: { n: number; tone: "brand" | "critical" }) {
