@@ -3,8 +3,8 @@
 // Reports — store-level report pack. Numbers only, one tap to share.
 
 import React, { useMemo, useState } from "react";
-import { rng, storeById } from "@/lib/seed";
-import { allVitals, brandRollups, enterprise, regionRollups, sizeSetExceptions, topSellers, vitalsFor } from "@/lib/engine";
+import { STORES, rng, storeById } from "@/lib/seed";
+import { PLANNING_BRAND, allVitals, brandRollups, enterprise, planningStores, regionRollups, sizeSetExceptions, topSellers, vitalsFor } from "@/lib/engine";
 import { useApp } from "@/lib/state";
 import { Card, Chip, SectionTitle, Swatch, Table, Tabs, Td, Th, inr, pct } from "@/components/ui";
 
@@ -23,9 +23,13 @@ export default function Reports() {
 function EstateReports() {
   const app = useApp();
   const e = useMemo(() => enterprise(), []);
-  const brands = useMemo(() => brandRollups(), []);
+  // Planning and buying own one brand, so their report is that brand's estate.
+  // Leadership keeps the cross-brand view.
+  const oneBrand = app.role === "planner" || app.role === "catplan";
+  const brands = useMemo(() => (oneBrand ? brandRollups().filter((b) => b.brand === PLANNING_BRAND) : brandRollups()), [oneBrand]);
+  const scopeStores = useMemo(() => (oneBrand ? planningStores() : STORES), [oneBrand]);
   const regions = useMemo(() => regionRollups(), []);
-  const vitals = useMemo(() => allVitals(), []);
+  const vitals = useMemo(() => allVitals().filter((v) => scopeStores.some((st) => st.id === v.store.id)), [scopeStores]);
   const laggards = useMemo(() => [...vitals].sort((a, b) => a.achievement - b.achievement).slice(0, 5), [vitals]);
 
   return (

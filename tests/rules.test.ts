@@ -876,3 +876,66 @@ describe("offers against an item", () => {
     expect(hits.some((h) => h.offer.id === "OF-4")).toBe(false);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Size curves — allocating in sets rather than one size at a time
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("size curves", () => {
+  const apparel: Size[] = ["XS", "S", "M", "L", "XL", "XXL"];
+  const apparelPivotal: Size[] = ["M", "L", "XL"];
+  const waist: Size[] = ["28", "30", "32", "34", "36", "38"];
+  const waistPivotal: Size[] = ["32", "34", "36"];
+
+  it("shapes an apparel set the way a retailer states it: 1-2-3-4-2-1", () => {
+    const curve = planning.sizeCurve(apparel, apparelPivotal);
+    expect(curve.map((c) => c.ratio)).toEqual([1, 2, 3, 4, 2, 1]);
+    expect(planning.unitsPerSet(curve)).toBe(13);
+  });
+
+  it("shapes a waist run symmetrically", () => {
+    const curve = planning.sizeCurve(waist, waistPivotal);
+    expect(curve.map((c) => c.ratio)).toEqual([1, 2, 3, 3, 2, 1]);
+    expect(planning.unitsPerSet(curve)).toBe(12);
+  });
+
+  it("marks the pivotal sizes on the curve", () => {
+    const curve = planning.sizeCurve(apparel, apparelPivotal);
+    expect(curve.filter((c) => c.pivotal).map((c) => c.size)).toEqual(["M", "L", "XL"]);
+  });
+
+  it("falls back to the pivotal split on an unfamiliar run, never flat", () => {
+    const curve = planning.sizeCurve(["S", "M", "L", "XL"] as Size[], ["M", "L"] as Size[]);
+    expect(curve.map((c) => c.ratio)).toEqual([1, 3, 3, 1]);
+    expect(new Set(curve.map((c) => c.ratio)).size).toBeGreaterThan(1);
+  });
+
+  it("turns sets into a per-size allocation", () => {
+    const curve = planning.sizeCurve(apparel, apparelPivotal);
+    expect(planning.setsToUnits(curve, 3)).toEqual({ XS: 3, S: 6, M: 9, L: 12, XL: 6, XXL: 3 });
+    expect(planning.setsToUnits(curve, 0)).toEqual({});
+    expect(planning.setsToUnits(curve, -2)).toEqual({});
+  });
+
+  it("reads a hand-typed allocation back as sets and a remainder", () => {
+    const curve = planning.sizeCurve(apparel, apparelPivotal);
+    expect(planning.unitsToSets(curve, { XS: 2, S: 4, M: 6, L: 8, XL: 4, XXL: 2 })).toEqual({ sets: 2, remainder: 0 });
+    // Two sets plus five loose units.
+    expect(planning.unitsToSets(curve, { XS: 2, S: 4, M: 6, L: 8, XL: 4, XXL: 7 })).toEqual({ sets: 2, remainder: 5 });
+  });
+
+  it("does not call a pile of one size a set", () => {
+    const curve = planning.sizeCurve(apparel, apparelPivotal);
+    const r = planning.unitsToSets(curve, { L: 20 });
+    expect(r.sets).toBe(0);
+    expect(r.remainder).toBe(20);
+  });
+
+  it("caps sets by the tightest size the warehouse can fill", () => {
+    const curve = planning.sizeCurve(apparel, apparelPivotal);
+    // Plenty of everything except XXL, which allows only two sets.
+    expect(planning.maxSets(curve, { XS: 90, S: 90, M: 90, L: 90, XL: 90, XXL: 2 })).toBe(2);
+    // Nothing in a pivotal size means no whole set at all.
+    expect(planning.maxSets(curve, { XS: 90, S: 90, M: 0, L: 90, XL: 90, XXL: 90 })).toBe(0);
+  });
+});

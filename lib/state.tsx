@@ -89,6 +89,7 @@ export type ModuleId =
   | "otb"
   | "asks"
   | "planset"
+  | "rules"
   | "hqtask"
   | "renew"
   | "move"
@@ -135,7 +136,7 @@ interface AppState {
    * The estate view. Flat by design: every store, plus filters that narrow it.
    * `storeId` is set when a planner has opened one store; null is the list.
    */
-  estate: { filters: EstateFilters; period: Period; storeId: string | null };
+  estate: { filters: EstateFilters; period: Period; storeId: string | null; dropId: string };
   /** Store asks waiting on planning. Store proposes, planning decides. */
   requests: PlanningRequest[];
   /** Run lines planning has released to the warehouse. */
@@ -149,6 +150,8 @@ interface AppState {
   hqTasks: HqAssignment[];
   /** Stores the replenishment run is paused for. It fires for everyone else. */
   pausedStores: string[];
+  /** Run thresholds, editable in Planning → Rules. */
+  thresholds: { fillTrigger: number; brokenTrigger: number };
   /** Replenishment, renewal and allocation cycles. */
   cycles: Cycle[];
   /** Every unit movement that actually happened. */
@@ -247,6 +250,7 @@ type Action =
   // ── Retail planning ──
   | { type: "estate:filter"; patch: Partial<EstateFilters> }
   | { type: "estate:period"; period: Period }
+  | { type: "estate:drop"; dropId: string }
   | { type: "estate:open"; storeId: string | null }
   | { type: "url"; params: URLSearchParams }
   | { type: "request:create"; request: PlanningRequest }
@@ -256,6 +260,7 @@ type Action =
   | { type: "norm:set"; storeId: string; to: number; by: string; reason: string }
   | { type: "hq:assign"; task: HqAssignment }
   | { type: "store:pause"; storeId: string; paused: boolean; by: string }
+  | { type: "rule:set"; patch: Partial<AppState["thresholds"]>; by: string; label: string }
   | { type: "cycle:create"; cycle: Cycle }
   | { type: "cycle:decide"; id: string; status: "approved" | "rejected"; by: string; note?: string }
   | { type: "cycle:apply"; id: string; moves: StockMove[]; by: string }
@@ -475,7 +480,7 @@ const initial: AppState = {
   ],
   printerRoutedTo: null,
   cardBatched: false,
-  estate: { filters: NO_FILTERS, period: "week", storeId: null },
+  estate: { filters: NO_FILTERS, period: "week", storeId: null, dropId: "AW26-D1" },
   requests: seedRequests(),
   released: [],
   dropped: [],
@@ -483,6 +488,7 @@ const initial: AppState = {
   normLog: [],
   hqTasks: [],
   pausedStores: [],
+  thresholds: { fillTrigger: 0.92, brokenTrigger: 0.55 },
   cycles: [],
   moves: [],
   pushes: [],
@@ -727,6 +733,9 @@ function reducer(state: AppState, action: Action): AppState {
     case "estate:period":
       return { ...state, estate: { ...state.estate, period: action.period } };
 
+    case "estate:drop":
+      return { ...state, estate: { ...state.estate, dropId: action.dropId } };
+
     case "estate:open":
       // Opening a store is a page of its own, not a mode of the list.
       return {
@@ -748,6 +757,7 @@ function reducer(state: AppState, action: Action): AppState {
         module,
         focus: p.get("f"),
         estate: {
+          dropId: p.get("drop") ?? state.estate.dropId,
           filters: {
             region: one("region", "all"),
             cluster: one("cluster", "all"),
@@ -848,6 +858,13 @@ function reducer(state: AppState, action: Action): AppState {
           },
           ...state.audit,
         ],
+      };
+
+    case "rule:set":
+      return {
+        ...state,
+        thresholds: { ...state.thresholds, ...action.patch },
+        audit: [{ at: NOW, actor: action.by, action: "Rule changed", object: action.label, system: "Arvind One" }, ...state.audit],
       };
 
     case "cycle:create":
@@ -956,6 +973,7 @@ interface Ctx extends AppState {
   // ── Retail planning ──
   setFilter: (patch: Partial<EstateFilters>) => void;
   setPeriod: (p: Period) => void;
+  setDrop: (dropId: string) => void;
   openStore: (storeId: string | null) => void;
   /** The store's norm, honouring any change planning has made this session. */
   normFor: (storeId: string) => number;
@@ -1120,6 +1138,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // would claim a store you are not looking at.
     if (state.module === "store" && state.estate.storeId) p.set("store", state.estate.storeId);
     if (state.estate.period !== "week") p.set("p", state.estate.period);
+    if (state.estate.dropId !== "AW26-D1") p.set("drop", state.estate.dropId);
     (["region", "cluster", "grade", "band"] as const).forEach((k) => {
       if (state.estate.filters[k] !== "all") p.set(k, state.estate.filters[k]);
     });
@@ -1164,6 +1183,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     createIst,
     setFilter: (patch) => dispatch({ type: "estate:filter", patch }),
     setPeriod: (p) => dispatch({ type: "estate:period", period: p }),
+    setDrop: (dropId) => dispatch({ type: "estate:drop", dropId }),
     openStore: (storeId) => dispatch({ type: "estate:open", storeId }),
     normFor: (storeId) => state.norms[storeId] ?? storeById(storeId).norm,
     raiseRequest,

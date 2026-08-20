@@ -20,7 +20,7 @@ type LineSort = "store" | "style" | "units" | "wh" | "value";
 
 export default function Replen() {
   const app = useApp();
-  const run = useMemo(() => replenRun(NOW, app.pausedStores), [app.pausedStores]);
+  const run = useMemo(() => replenRun(NOW, app.pausedStores, app.thresholds), [app.pausedStores, app.thresholds]);
   const [filter, setFilter] = useState<Filter>("open");
 
   const open = run.lines.filter((l) => !app.released.includes(l.id) && !app.dropped.includes(l.id));

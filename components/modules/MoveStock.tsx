@@ -16,6 +16,7 @@ import { inr } from "@/lib/rules";
 import { CycleBuilder, CycleCard } from "@/components/modules/Renewal";
 import PullbackBuilder from "@/components/modules/PullbackBuilder";
 import type { Size, StockMove } from "@/lib/types";
+import { SEEDED_MOVES } from "@/lib/seed";
 
 type MoveSort = "at" | "from" | "to" | "style" | "units";
 
@@ -68,7 +69,7 @@ export default function MoveStock() {
   const cycles = app.cycles.filter((c) => c.kind === "allocation" || c.kind === "pullback");
 
   const sorter = useSort<MoveSort>("at");
-  const sortedMoves = sorter.sort(app.moves, (m, key) => {
+  const sortedMoves = sorter.sort([...app.moves, ...SEEDED_MOVES], (m, key) => {
     switch (key) {
       case "at": return m.at;
       case "from": return m.from === "warehouse" ? "Warehouse" : storeById(m.from).name;
@@ -83,8 +84,7 @@ export default function MoveStock() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Move stock</h1>
-          <p className="text-xs text-ink2 mt-1">Warehouse to a store, or store to store, on your call</p>
-        </div>
+                  </div>
         <div className="flex items-center gap-2">
           <button className="btn" data-pullback onClick={() => setPull(true)}>
             Pull back
@@ -93,13 +93,6 @@ export default function MoveStock() {
             Allocate
           </button>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Moves this session" value={String(app.moves.length)} emphasis />
-        <Stat label="Units moved" value={app.moves.reduce((a, m) => a + m.units, 0).toLocaleString("en-IN")} />
-        <Stat label="Warehouse total, this unit" value={warehouseTotal(styleId).toLocaleString("en-IN")} sub={style.name} />
-        <Stat label={`Available in ${chosenSize}`} value={String(available)} tone={available === 0 ? "critical" : undefined} />
       </div>
 
       <Card>
@@ -203,8 +196,8 @@ export default function MoveStock() {
 
       <Card>
         <SectionTitle title="Movement log" />
-        {app.moves.length === 0 ? (
-          <div className="text-sm text-ink2">Nothing moved yet this session.</div>
+        {sortedMoves.length === 0 ? (
+          <div className="text-sm text-ink2">Nothing moved yet.</div>
         ) : (
           <Table>
             <thead>

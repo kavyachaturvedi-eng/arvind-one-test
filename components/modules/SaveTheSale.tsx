@@ -71,7 +71,6 @@ export default function SaveTheSale() {
   const [qty, setQty] = useState(1);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [donorId, setDonorId] = useState<string>("");
   const [confirm, setConfirm] = useState(false);
   const [created, setCreated] = useState<ISTRequest | null>(null);
   const [rider, setRider] = useState<RiderDispatch | null>(null);
@@ -102,7 +101,8 @@ export default function SaveTheSale() {
     return findDonors(app.storeId, style.id, size as Size, qty);
   }, [app.storeId, style, size, qty]);
 
-  const donor = donors.find((d) => d.store.id === donorId) ?? donors[0] ?? null;
+  // The network picks: best-ranked donor, not a choice the floor makes.
+  const donor = donors[0] ?? null;
 
   const policyInput: IstPolicyInput | null = useMemo(() => {
     if (!style || !size || !donor) return null;
@@ -136,7 +136,6 @@ export default function SaveTheSale() {
     setStyleId("");
     setSize("");
     setQty(1);
-    setDonorId("");
     setCustomerName("");
     setCustomerPhone("");
     setConfirm(false);
@@ -204,7 +203,6 @@ export default function SaveTheSale() {
                   onClick={() => {
                     setStyleId(s.id);
                     setSize("");
-                    setDonorId("");
                     setCreated(null);
                   }}
                   className={`w-full text-left rounded-lg border px-2.5 py-2 flex items-center gap-2.5 transition-colors ${
@@ -236,7 +234,6 @@ export default function SaveTheSale() {
                   selected={size || undefined}
                   onPick={(s) => {
                     setSize(s as Size);
-                    setDonorId("");
                     setCreated(null);
                   }}
                 />
@@ -250,7 +247,7 @@ export default function SaveTheSale() {
               {size && (units[size] ?? 0) === 0 && (
                 <div className="mt-5 pt-4 border-t border-line">
                   <SectionTitle
-                    title="3 · Get it from"
+                    title="3 · How many?"
                     right={
                       <div className="flex items-center gap-2">
                         <span className="label">Qty</span>
@@ -259,6 +256,7 @@ export default function SaveTheSale() {
                           min={1}
                           max={20}
                           value={qty}
+                          data-ist-qty
                           onChange={(e) => setQty(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
                           className="w-16 rounded-md border border-line bg-raised px-2 py-1 text-sm num"
                         />
@@ -266,64 +264,18 @@ export default function SaveTheSale() {
                     }
                   />
                   {donors.length === 0 ? (
-                    <Callout tone="critical" title="Nothing in the network has this size">
-                      No store holds size {size} in sellable condition. Offer the online channel; the SKU is added to the
-                      planner&apos;s exception list.
+                    <Callout tone="critical" title={`Nothing in the network has size ${size}`}>
+                      Offer the online channel. The SKU goes on planning&apos;s exception list.
                     </Callout>
                   ) : (
-                    <div className="space-y-2">
-                      <DistanceLane
-                        donors={donors.slice(0, 5)}
-                        activeId={donorId || donors[0].store.id}
-                        onPick={(id) => {
-                          setDonorId(id);
-                          setCreated(null);
-                        }}
-                      />
-                      {donors.slice(0, 5).map((d) => {
-                        const active = (donorId || donors[0].store.id) === d.store.id;
-                        return (
-                          <button
-                            key={d.store.id}
-                            onClick={() => {
-                              setDonorId(d.store.id);
-                              setCreated(null);
-                            }}
-                            className={`w-full text-left rounded-lg border p-2.5 transition-colors ${
-                              active ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)]" : "border-line hover:bg-[color:var(--plane)]"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="text-sm font-medium text-ink flex items-center gap-2">
-                                  {d.store.name}
-                                  {!d.saleable && <Chip tone="critical">flagged defective</Chip>}
-                                  {d.distanceKm <= 40 && d.saleable && <Chip tone="good">same-day lane</Chip>}
-                                </div>
-                                <div className="text-2xs text-muted mt-0.5">
-                                  {d.store.city} · {d.distanceKm} km · {d.sellable} sellable · {d.excess} above a week's cover ·
-                                  fill {pct(d.fillRate)}
-                                  {d.distanceKm <= 40 && d.saleable && (
-                                    <span style={{ color: "var(--status-good)" }}> · rider ETA ≈ {fmtEta(riderEtaMin(d.distanceKm))}</span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <div className="text-2xs label">match</div>
-                                <div className="text-sm font-semibold num text-ink">{(d.score * 100).toFixed(0)}</div>
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <Callout tone="good" title={`Requesting ${qty} × size ${size}`} />
                   )}
                 </div>
               )}
 
               {policy && donor && (
                 <div className="mt-5 pt-4 border-t border-line">
-                  <SectionTitle title="4 · Checks" />
+                  <SectionTitle title="4 · Checks" right={<Chip>From {donor.store.name} · {donor.distanceKm} km</Chip>} />
                   <PolicyTrail policy={policy} />
 
                   <div className="grid sm:grid-cols-2 gap-3 mt-4">
@@ -624,64 +576,6 @@ function PolicyTrail({ policy }: { policy: ReturnType<typeof evaluateIstPolicy> 
 
 // ── Distance lane — where each donor sits against the 40 km same-day radius ──
 
-function DistanceLane({
-  donors,
-  activeId,
-  onPick,
-}: {
-  donors: ReturnType<typeof findDonors>;
-  activeId: string;
-  onPick: (id: string) => void;
-}) {
-  const max = Math.max(60, ...donors.map((d) => d.distanceKm + 8));
-  const pos = (km: number) => `${Math.min(97, (km / max) * 100)}%`;
-  return (
-    <div className="border border-line bg-[color:var(--plane)] px-3 pt-2 pb-5" data-distance-lane>
-      <div className="flex items-center justify-between mb-3">
-        <span className="label">Distance from you</span>
-        <span className="text-2xs text-muted">inside 40 km, a rider runs it today</span>
-      </div>
-      <div className="relative h-9">
-        {/* Track */}
-        <div className="absolute left-0 right-0 top-[13px] h-px" style={{ background: "var(--baseline)" }} />
-        {/* Same-day shading + boundary */}
-        <div className="absolute top-[9px] h-[9px] left-0" style={{ width: pos(40), background: "var(--ok-soft)" }} />
-        <div className="absolute top-0 bottom-3 w-px" style={{ left: pos(40), background: "var(--status-warning)" }} />
-        <span className="absolute text-2xs num" style={{ left: pos(40), transform: "translateX(-50%)", bottom: -8, color: "var(--status-warning)" }}>
-          40 km
-        </span>
-        {/* You */}
-        <span className="absolute w-3 h-3 rounded-full border-2 border-[color:var(--surface-2)]" style={{ left: 0, top: "8px", background: "var(--text-primary)" }} />
-        <span className="absolute text-2xs font-semibold text-ink" style={{ left: 0, top: -4 }}>You</span>
-        {/* Donors */}
-        {donors.map((d, i) => {
-          const active = d.store.id === activeId;
-          return (
-            <button
-              key={d.store.id}
-              onClick={() => onPick(d.store.id)}
-              title={`${d.store.name} · ${d.distanceKm} km`}
-              className="absolute -translate-x-1/2 group"
-              style={{ left: pos(d.distanceKm), top: i % 2 === 0 ? "4px" : "10px" }}
-              aria-label={`${d.store.name}, ${d.distanceKm} km`}
-            >
-              <span
-                className="block w-3 h-3 rounded-full border-2 border-[color:var(--surface-2)] transition-transform group-hover:scale-125"
-                style={{ background: active ? "var(--brand)" : d.distanceKm <= 40 ? "var(--status-good)" : "var(--text-muted)" }}
-              />
-              <span
-                className={`absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-2xs num ${active ? "font-semibold" : ""}`}
-                style={{ top: i % 2 === 0 ? "-14px" : "14px", color: active ? "var(--brand)" : "var(--text-muted)" }}
-              >
-                {d.distanceKm} km
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "Draft",

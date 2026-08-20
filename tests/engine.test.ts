@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CLUSTERS, CURRENT_SEASON, METRICS, NOW, OTB, ROLES, STOCK, STORES, STYLES, createStore, dropsForSeason, rng } from "../lib/seed";
-import { dayOfWeekIST, fillBand, lastRunAt, mixVerdict, otbRemaining, qualifiesForRun } from "../lib/rules";
+import { dayOfWeekIST, fillBand, lastRunAt, maxSets, mixVerdict, otbRemaining, qualifiesForRun, sizeCurve } from "../lib/rules";
 import {
   allVitals,
   brandRollups,
@@ -33,8 +33,12 @@ import {
   warehouseHeld,
   dropAllocation,
   dropUnitsFor,
+  allDropPerformance,
   applyMove,
   applyPullback,
+  dropPerformance,
+  istDiscipline,
+  stylesInDrop,
   brokenStuds,
   unitsAt,
   validatePullback,
@@ -1400,5 +1404,81 @@ describe("a deeper assortment", () => {
 
   it("keeps every style id unique after the range was extended", () => {
     expect(new Set(STYLES.map((s) => s.id)).size).toBe(STYLES.length);
+  });
+});
+
+describe("drop context", () => {
+  it("assigns every style to a real drop, and core lands in the launch drop", () => {
+    const own = STYLES.filter((s) => s.brand === PLANNING_BRAND);
+    own.forEach((s) => expect(dropsForSeason(CURRENT_SEASON.id).some((d) => d.id === s.dropId)).toBe(true));
+    // NOS carries from launch — it is never introduced mid-season.
+    own.filter((s) => s.isNOS).forEach((s) => expect(s.dropId).toBe("AW26-D1"));
+  });
+
+  it("splits the range across the drops rather than piling it into one", () => {
+    const counts = dropsForSeason(CURRENT_SEASON.id).map((d) => stylesInDrop(d.id).length);
+    counts.forEach((c) => expect(c).toBeGreaterThan(0));
+    expect(counts.reduce((a, c) => a + c, 0)).toBe(STYLES.filter((s) => s.brand === PLANNING_BRAND).length);
+  });
+
+  it("reports each drop with finite figures and its own days-out", () => {
+    const perf = allDropPerformance(planningStores());
+    expect(perf).toHaveLength(3);
+    perf.forEach((p) => {
+      [p.bought, p.onFloor, p.warehouse, p.valueAtRisk].forEach((n) => {
+        expect(Number.isFinite(n)).toBe(true);
+        expect(n).toBeGreaterThanOrEqual(0);
+      });
+      expect(p.sellThrough).toBeGreaterThanOrEqual(0);
+      expect(p.sellThrough).toBeLessThanOrEqual(1);
+      expect(p.styles).toBeGreaterThan(0);
+      expect(p.coreStyles).toBeLessThanOrEqual(p.styles);
+    });
+    // The launch drop lands first.
+    expect(perf[0].daysOut).toBeLessThan(perf[1].daysOut);
+  });
+
+  it("adds each drop's buy up to the brand's total buy", () => {
+    const perf = allDropPerformance(planningStores());
+    const brandBuy = STYLES.filter((s) => s.brand === PLANNING_BRAND).reduce((a, s) => a + s.bought, 0);
+    expect(perf.reduce((a, p) => a + p.bought, 0)).toBe(brandBuy);
+  });
+
+  it("returns nothing for a drop that does not exist", () => {
+    expect(dropPerformance("NOPE", planningStores())).toBeNull();
+  });
+});
+
+describe("IST discipline", () => {
+  it("never claims more units sold than were received", () => {
+    planningStores().forEach((s) => {
+      const d = istDiscipline(s.id);
+      expect(d.soldIn2Days).toBeLessThanOrEqual(d.received);
+      expect(d.share).toBeGreaterThanOrEqual(0);
+      expect(d.share).toBeLessThanOrEqual(1);
+    });
+  });
+
+  it("is deterministic per store", () => {
+    const a = istDiscipline(planningStores()[0].id);
+    const b = istDiscipline(planningStores()[0].id);
+    expect(a).toEqual(b);
+  });
+});
+
+describe("warehouse depth supports both stories", () => {
+  it("keeps exhausted SKUs, so a transfer is still sometimes the only option", () => {
+    const zeros = STYLES.flatMap((s) => s.sizes.map((z) => dcAvailable(s.id, z))).filter((n) => n === 0);
+    expect(zeros.length).toBeGreaterThan(20);
+  });
+
+  it("holds a complete run on some styles, so a whole set can be allocated", () => {
+    const own = STYLES.filter((s) => s.brand === PLANNING_BRAND);
+    const withSets = own.filter((st) => {
+      const curve = sizeCurve(st.sizes, st.coreSizes);
+      const avail = Object.fromEntries(st.sizes.map((z) => [z, dcAvailable(st.id, z)]));
+      return maxSets(curve, avail) > 0;
+    });
+    expect(withSets.length).toBeGreaterThan(3);
   });
 });

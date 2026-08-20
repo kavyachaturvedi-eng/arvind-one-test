@@ -8,12 +8,18 @@
 import React, { useMemo, useState } from "react";
 import { Card, Chip, SectionTitle, Stat, StatusDot, Table, Td, Th, fmtRunDate, relTime } from "@/components/ui";
 import { filterStores, planningStores } from "@/lib/engine";
-import { CLUSTERS, HOUR, NOW, clusterById, storeById } from "@/lib/seed";
+import { CLUSTERS, HOUR, NOW, SEEDED_HQ_TASKS, clusterById, storeById } from "@/lib/seed";
 import { useApp } from "@/lib/state";
-import { ticketSlaHours } from "@/lib/rules";
+
 import type { HqAssignment } from "@/lib/types";
 
 const DESKS = ["VM", "Retail Ops", "Commercial", "Planning", "Admin", "Training"];
+
+const hash = (s: string) => {
+  let h = 5;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+};
 const SCOPES = ["estate", "cluster", "store"] as const;
 type Scope = (typeof SCOPES)[number];
 
@@ -51,8 +57,30 @@ export default function HqTasks() {
     setTitle("");
   }
 
-  const openTasks = app.hqTasks;
-  const storesCovered = new Set(openTasks.flatMap((t) => t.storeIds)).size;
+  const [q, setQ] = useState("");
+  // What was raised before this session, so the screen opens with a history.
+  const all = useMemo(() => [...app.hqTasks, ...SEEDED_HQ_TASKS], [app.hqTasks]);
+  const openTasks = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return all.filter(
+      (t) =>
+        !needle ||
+        t.title.toLowerCase().includes(needle) ||
+        t.from.toLowerCase().includes(needle) ||
+        t.raisedBy.toLowerCase().includes(needle) ||
+        t.storeIds.some((id) => storeById(id).name.toLowerCase().includes(needle)),
+    );
+  }, [all, q]);
+  const storesCovered = new Set(all.flatMap((t) => t.storeIds)).size;
+
+  /** Deterministic completion, so a task list has a real status spread. */
+  function statusOf(t: HqAssignment) {
+    if (t.dueAt > NOW && app.hqTasks.some((x) => x.id === t.id)) return { label: "Open", tone: "warn" as const, done: 0 };
+    const done = (hash(t.id) % (t.storeIds.length + 1));
+    if (done === t.storeIds.length) return { label: "Done", tone: "good" as const, done };
+    if (t.dueAt < NOW) return { label: "Overdue", tone: "critical" as const, done };
+    return { label: "In progress", tone: "warn" as const, done };
+  }
 
   return (
     <div className="space-y-4">
@@ -61,10 +89,10 @@ export default function HqTasks() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Assigned this session" value={String(openTasks.length)} emphasis />
+        <Stat label="Tasks" value={String(all.length)} emphasis />
         <Stat label="Stores covered" value={`${storesCovered} of ${stores.length}`} />
-        <Stat label="Needing a photo" value={String(openTasks.filter((t) => t.needsPhoto).length)} />
-        <Stat label="Due inside 24h" value={String(openTasks.filter((t) => t.dueAt - NOW <= 24 * HOUR).length)} />
+        <Stat label="Overdue" value={String(all.filter((t) => statusOf(t).label === "Overdue").length)} tone="critical" />
+        <Stat label="Due inside 24h" value={String(all.filter((t) => t.dueAt > NOW && t.dueAt - NOW <= 24 * HOUR).length)} />
       </div>
 
       <Card>
@@ -144,9 +172,18 @@ export default function HqTasks() {
       </Card>
 
       <Card>
-        <SectionTitle title="Assigned" />
+        <SectionTitle title="Tasks" />
+        <div className="mb-3">
+          <input
+            value={q}
+            data-hq-search
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search a task, a store, a desk or who raised it"
+            className="w-full rounded-lg border border-line bg-raised px-3 py-2.5 text-sm text-ink placeholder:text-muted"
+          />
+        </div>
         {openTasks.length === 0 ? (
-          <div className="text-sm text-ink2">Nothing assigned yet.</div>
+          <div className="text-sm text-ink2">Nothing matches.</div>
         ) : (
           <Table>
             <thead>
@@ -154,39 +191,69 @@ export default function HqTasks() {
                 <Th>Task</Th>
                 <Th>From</Th>
                 <Th>Stores</Th>
+                <Th align="right">Done</Th>
+                <Th>Status</Th>
                 <Th>Due</Th>
-                <Th>Photo</Th>
-                <Th>Raised</Th>
+                <Th>Raised by</Th>
+                <Th align="right">Chase</Th>
               </tr>
             </thead>
             <tbody>
-              {openTasks.map((t) => (
-                <tr key={t.id} data-hq-row>
-                  <Td className="text-ink">{t.title}</Td>
-                  <Td>{t.from}</Td>
-                  <Td className="text-ink2">
-                    {t.storeIds.length === stores.length
-                      ? "Every store"
-                      : t.storeIds.length === 1
-                      ? storeById(t.storeIds[0]).name
-                      : `${t.storeIds.length} stores · ${clusterById(storeById(t.storeIds[0]).clusterId).name}`}
-                  </Td>
-                  <Td className="num text-xs">{fmtRunDate(t.dueAt)}</Td>
-                  <Td>
-                    {t.needsPhoto ? (
+              {openTasks.map((t) => {
+                const st = statusOf(t);
+                const lead = storeById(t.storeIds[0]);
+                return (
+                  <tr key={t.id} data-hq-row={st.label.toLowerCase()}>
+                    <Td className="text-ink">{t.title}</Td>
+                    <Td>{t.from}</Td>
+                    <Td className="text-ink2">
+                      {t.storeIds.length === stores.length
+                        ? "Every store"
+                        : t.storeIds.length === 1
+                        ? lead.name
+                        : `${t.storeIds.length} · ${clusterById(lead.clusterId).name}`}
+                    </Td>
+                    <Td align="right" className="num">
+                      {st.done} of {t.storeIds.length}
+                    </Td>
+                    <Td>
                       <span className="inline-flex items-center gap-1.5">
-                        <StatusDot tone="warn" />
-                        <span className="text-xs text-ink2">Required</span>
+                        <StatusDot tone={st.tone} />
+                        <span className="text-xs text-ink2">{st.label}</span>
                       </span>
-                    ) : (
-                      <span className="text-xs text-muted">—</span>
-                    )}
-                  </Td>
-                  <Td className="text-xs text-ink2">
-                    {t.raisedBy} · {relTime(t.raisedAt, NOW)}
-                  </Td>
-                </tr>
-              ))}
+                    </Td>
+                    <Td className="num text-xs">{fmtRunDate(t.dueAt)}</Td>
+                    <Td className="text-xs text-ink2">
+                      {t.raisedBy} · {relTime(t.raisedAt, NOW)}
+                    </Td>
+                    <Td align="right">
+                      {st.label === "Done" ? (
+                        <span className="text-muted text-xs">—</span>
+                      ) : (
+                        <button
+                          className="btn !py-1 !text-2xs"
+                          data-hq-call
+                          onClick={() => {
+                            app.dispatch({
+                              type: "audit",
+                              entry: {
+                                at: NOW,
+                                actor: app.actorName,
+                                action: "Called about a task",
+                                object: `${clusterById(lead.clusterId).managerName} · ${t.title}`,
+                                system: "Arvind One",
+                              },
+                            });
+                            app.toastNow(`Calling ${clusterById(lead.clusterId).managerName} — ${clusterById(lead.clusterId).name}`, "info");
+                          }}
+                        >
+                          Call {clusterById(lead.clusterId).managerName.split(" ")[0]}
+                        </button>
+                      )}
+                    </Td>
+                  </tr>
+                );
+              })}
             </tbody>
           </Table>
         )}

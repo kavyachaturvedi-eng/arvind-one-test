@@ -13,7 +13,7 @@ import { applyMove, applyPullback, dcAvailable, gradedStyles, planningStores, re
 import { NOW, STYLES, storeById, styleById } from "@/lib/seed";
 import { CYCLE_LABEL, useApp } from "@/lib/state";
 import { PLANNING_BRAND } from "@/lib/engine";
-import { inr, pct } from "@/lib/rules";
+import { inr, maxSets, pct, setsToUnits, sizeCurve, unitsPerSet, unitsToSets } from "@/lib/rules";
 import type { Cycle, CycleLine, Size, StockMove } from "@/lib/types";
 
 export default function Renewal() {
@@ -25,12 +25,13 @@ export default function Renewal() {
   const applied = cycles.filter((c) => c.status === "applied");
 
   // What the run thinks is worth renewing. A suggestion, not a decision.
-  const suggestions = useMemo(() => replenRun(NOW, app.pausedStores).lines.filter((l) => l.kind === "renew"), [app.pausedStores]);
+  const suggestions = useMemo(() => replenRun(NOW, app.pausedStores, app.thresholds).lines.filter((l) => l.kind === "renew"), [app.pausedStores, app.thresholds]);
   const alreadyProposed = new Set(cycles.flatMap((c) => c.lines.map((l) => `${l.storeId}|${l.styleId}`)));
-  const freshSuggestions = suggestions.filter((s) => !alreadyProposed.has(`${s.storeId}|${s.styleId}`));
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const shownSuggestions = suggestions.filter((sg) => !alreadyProposed.has(`${sg.storeId}|${sg.styleId}`) && !dismissed.includes(sg.id));
 
-  function acceptSuggestions() {
-    if (freshSuggestions.length === 0) return;
+  function acceptSuggestions(picked: typeof suggestions) {
+    if (picked.length === 0) return;
     const cycle: Cycle = {
       id: `CY-RN-${app.cycles.length + 1}`,
       kind: "renewal",
@@ -38,18 +39,18 @@ export default function Renewal() {
       createdAt: NOW,
       createdBy: app.actorName,
       source: "warehouse",
-      note: "Built from the run's suggestions",
-      lines: freshSuggestions.map((s, i) => ({
+      note: "From the run's suggestions",
+      lines: picked.map((sg, i) => ({
         id: `CL-${i}`,
-        storeId: s.storeId,
-        styleId: s.styleId,
-        size: styleById(s.styleId).coreSizes[0],
-        units: s.units,
-        reason: s.reason,
+        storeId: sg.storeId,
+        styleId: sg.styleId,
+        size: styleById(sg.styleId).coreSizes[0],
+        units: sg.units,
+        reason: sg.reason,
       })),
     };
     app.dispatch({ type: "cycle:create", cycle });
-    app.toastNow(`${cycle.lines.length} suggested renewals sent for approval`, "good");
+    app.toastNow(`${cycle.lines.length} sent for approval`, "good");
   }
 
   return (
@@ -57,48 +58,58 @@ export default function Renewal() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Renewal</h1>
-          <p className="text-xs text-ink2 mt-1">Created per SKU per store · needs approval before anything ships</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {freshSuggestions.length > 0 && (
-            <button className="btn" data-accept-suggested onClick={acceptSuggestions}>
-              Take the {freshSuggestions.length} suggested
-            </button>
-          )}
-          <button className="btn-primary" data-new-cycle onClick={() => setBuild(true)}>
-            Create a cycle
-          </button>
-        </div>
+                  </div>
+        <button className="btn-primary" data-new-cycle onClick={() => setBuild(true)}>
+          Create a cycle
+        </button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat label="Awaiting approval" value={String(waiting.length)} tone={waiting.length > 0 ? "warn" : "good"} emphasis />
-        <Stat label="Suggested by the run" value={String(freshSuggestions.length)} />
+        <Stat label="Suggested" value={String(shownSuggestions.length)} />
         <Stat label="Applied" value={String(applied.length)} />
         <Stat label="Units moved" value={app.moves.filter((m) => m.reason.startsWith("Renewal")).reduce((a, m) => a + m.units, 0).toLocaleString("en-IN")} />
       </div>
 
-      {freshSuggestions.length > 0 && (
+      {shownSuggestions.length > 0 && (
         <Card>
-          <SectionTitle title="Suggested" />
+          <SectionTitle
+            title="Suggested"
+            right={
+              <button className="btn !py-1 !text-2xs" data-accept-suggested onClick={() => acceptSuggestions(shownSuggestions)}>
+                Take all {shownSuggestions.length}
+              </button>
+            }
+          />
           <Table>
             <thead>
               <tr>
                 <Th>Store</Th>
                 <Th>SKU</Th>
                 <Th>New style</Th>
+                <Th>Replacing</Th>
                 <Th align="right">Units</Th>
-                <Th>Why</Th>
+                <Th align="right">Decide</Th>
               </tr>
             </thead>
             <tbody>
-              {freshSuggestions.map((s) => (
-                <tr key={s.id} data-renew-suggestion>
-                  <Td className="text-ink">{storeById(s.storeId).name}</Td>
-                  <Td className="num text-xs text-ink2">{s.styleId}</Td>
-                  <Td className="text-ink">{styleById(s.styleId).name}</Td>
-                  <Td align="right" className="num">{s.units}</Td>
-                  <Td className="text-xs text-ink2">{s.reason}</Td>
+              {shownSuggestions.map((sg) => (
+                <tr key={sg.id} data-renew-suggestion>
+                  <Td className="text-ink">{storeById(sg.storeId).name}</Td>
+                  <Td className="num text-xs text-ink2">{sg.styleId}</Td>
+                  <Td className="text-ink">{styleById(sg.styleId).name}</Td>
+                  <Td className="text-xs text-ink2">{sg.reason.split(" is finished")[0]}</Td>
+                  <Td align="right" className="num">{sg.units}</Td>
+                  <Td align="right">
+                    <div className="flex items-center gap-1.5 justify-end">
+                      <button className="btn !py-1 !text-2xs" data-suggest-take onClick={() => acceptSuggestions([sg])}>
+                        Take
+                      </button>
+                      <button className="btn !py-1 !text-2xs" data-suggest-drop onClick={() => setDismissed([...dismissed, sg.id])}>
+                        Dismiss
+                      </button>
+                    </div>
+                  </Td>
                 </tr>
               ))}
             </tbody>
@@ -248,7 +259,17 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
 
   // By unit: one SKU, allocated store by store and size by size. Size is not a
   // filter — a store needs a size breakdown, not one size at a time.
-  const [styleId, setStyleId] = useState(styles[0]?.id ?? "");
+  // Open on a unit the warehouse can ship as whole sets, otherwise the first
+  // thing on screen is "0 sets available" and a clamped input.
+  const bestForSets = useMemo(() => {
+    const scored = styles.map((st) => {
+      const c = sizeCurve(st.sizes, st.coreSizes);
+      const avail = Object.fromEntries(warehouseBySize(st.id).map((b) => [b.size, b.units])) as Partial<Record<Size, number>>;
+      return { id: st.id, sets: maxSets(c, avail) };
+    });
+    return [...scored].sort((a, b) => b.sets - a.sets)[0]?.id ?? styles[0]?.id ?? "";
+  }, [styles]);
+  const [styleId, setStyleId] = useState(bestForSets);
   const [byStore, setByStore] = useState<Record<string, Partial<Record<Size, number>>>>({});
   const [openRow, setOpenRow] = useState<string | null>(null);
 
@@ -259,6 +280,12 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
   const style = styleById(styleId);
   const bySize = useMemo(() => warehouseBySize(styleId), [styleId]);
   const total = useMemo(() => warehouseTotal(styleId), [styleId]);
+  // A set is how stock is actually allocated from scratch: a shaped ratio across
+  // the run, not one size at a time.
+  const curve = useMemo(() => sizeCurve(style.sizes, style.coreSizes), [style.sizes, style.coreSizes]);
+  const perSet = unitsPerSet(curve);
+  const available = useMemo(() => Object.fromEntries(bySize.map((b) => [b.size, b.units])) as Partial<Record<Size, number>>, [bySize]);
+  const setsAvailable = useMemo(() => maxSets(curve, available), [curve, available]);
 
   // What has been asked for, size by size, across every store.
   const perSize = useMemo(() => {
@@ -285,6 +312,16 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
 
   function storeTotal(sid: string) {
     return Object.values(byStore[sid] ?? {}).reduce((a, n) => a + (n ?? 0), 0);
+  }
+
+  /** Whole sets a store's current size breakdown amounts to. */
+  function setsFor(sid: string) {
+    return unitsToSets(curve, byStore[sid] ?? {}).sets;
+  }
+
+  /** Typing sets fills the sizes; the planner can then adjust any of them. */
+  function applySets(sid: string, sets: number) {
+    setByStore({ ...byStore, [sid]: setsToUnits(curve, sets) });
   }
 
   function submit() {
@@ -374,8 +411,13 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
               <span className="num text-ink2">MRP {inr(style.mrp)}</span>
             </div>
 
-            {/* Warehouse depth by size, and what is already spoken for. */}
             <div className="border border-line">
+              <div className="px-3 pt-2.5 flex items-center justify-between gap-3 flex-wrap">
+                <span className="label">One set = {perSet} units</span>
+                <span className="text-2xs text-muted num">
+                  {curve.map((c) => `${c.ratio}${c.size}`).join(" · ")} · {setsAvailable} sets in the warehouse
+                </span>
+              </div>
               <div className="px-3 pt-2.5 label">In the warehouse</div>
               <div className="p-3 pt-2 flex gap-2 flex-wrap">
                 {bySize.map((b) => {
@@ -416,6 +458,7 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
                   <Th align="right">Has this style</Th>
                   <Th>Set</Th>
                   <Th align="right">Fill rate</Th>
+                  <Th align="right">Sets</Th>
                   <Th align="right">Allocating</Th>
                   <Th align="right">Sizes</Th>
                 </tr>
@@ -444,6 +487,16 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
                           )}
                         </Td>
                         <Td align="right" className="num">{pct(app.normFor(st.id) > 0 ? (carried?.signal.sellable ?? 0) / app.normFor(st.id) : 0)}</Td>
+                        <Td align="right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={setsFor(st.id)}
+                            data-cycle-sets
+                            onChange={(e) => applySets(st.id, Math.max(0, Math.min(99, Number(e.target.value) || 0)))}
+                            className="w-14 border border-line bg-raised px-2 py-1 text-sm text-ink text-right num"
+                          />
+                        </Td>
                         <Td align="right" className="num" style={mine > 0 ? { color: "var(--brand)" } : undefined}>
                           {mine || "—"}
                         </Td>
@@ -455,7 +508,7 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
                       </tr>
                       {expanded && (
                         <tr data-size-panel>
-                          <Td colSpan={7}>
+                          <Td colSpan={8}>
                             <div className="flex gap-2 flex-wrap py-1">
                               {style.sizes.map((sz) => {
                                 const wh = bySize.find((b) => b.size === sz)?.units ?? 0;

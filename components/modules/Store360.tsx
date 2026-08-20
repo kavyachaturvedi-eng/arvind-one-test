@@ -12,11 +12,13 @@
 import React, { useMemo } from "react";
 import { Card, Chip, Meter, SectionTitle, SortTh, Stat, StatusDot, Table, Tabs, Td, Th, useSort } from "@/components/ui";
 import EstateFilterBar from "@/components/EstateFilterBar";
+import DropBar from "@/components/DropBar";
 import {
   PERIOD_LABEL,
   PLANNING_BRAND,
   estateSummary,
   filterStores,
+  istDiscipline,
   planningStores,
   storeRows,
   type Period,
@@ -24,7 +26,7 @@ import {
 import { useApp } from "@/lib/state";
 import { inr, pct } from "@/lib/rules";
 
-type StoreSort = "name" | "cluster" | "grade" | "sales" | "ach" | "fill" | "st" | "core" | "broken" | "risk" | "asks";
+type StoreSort = "name" | "cluster" | "grade" | "sales" | "ach" | "fill" | "st" | "core" | "broken" | "risk" | "ist" | "asks";
 
 export default function Store360() {
   const app = useApp();
@@ -48,6 +50,7 @@ export default function Store360() {
       case "core": return r.corePct;
       case "broken": return r.brokenStuds;
       case "risk": return r.valueAtRisk;
+      case "ist": return istDiscipline(r.store.id).share;
       case "asks": return r.openAsks;
     }
   });
@@ -74,6 +77,8 @@ export default function Store360() {
       </div>
 
       <EstateFilterBar />
+
+      <DropBar />
 
       {stores.length === 0 ? (
         <Card>
@@ -187,6 +192,7 @@ export default function Store360() {
                   <SortTh sortKey="core" sorter={sorter} align="right">Core</SortTh>
                   <SortTh sortKey="broken" sorter={sorter} align="right">Broken studs</SortTh>
                   <SortTh sortKey="risk" sorter={sorter} align="right">At risk</SortTh>
+                  <SortTh sortKey="ist" sorter={sorter} align="right">IST sold in 2d</SortTh>
                   <SortTh sortKey="asks" sorter={sorter} align="right">Asks</SortTh>
                 </tr>
               </thead>
@@ -222,6 +228,7 @@ export default function Store360() {
                       )}
                     </Td>
                     <Td align="right" className="num">{r.valueAtRisk > 0 ? inr(r.valueAtRisk, { compact: true }) : "—"}</Td>
+                    <Td align="right" className="num">{pct(istDiscipline(r.store.id).share)}</Td>
                     <Td align="right">{r.openAsks > 0 ? <Chip tone="warn">{r.openAsks}</Chip> : <span className="text-muted">—</span>}</Td>
                   </tr>
                 ))}

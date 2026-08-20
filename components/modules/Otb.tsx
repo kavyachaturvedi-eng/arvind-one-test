@@ -11,6 +11,7 @@ import { Card, Chip, Meter, SectionTitle, Stat, StatusDot, Table, Td, Th } from 
 import { CURRENT_SEASON, OTB, STYLES } from "@/lib/seed";
 import { PLANNING_BRAND } from "@/lib/engine";
 import { useApp } from "@/lib/state";
+import DropBar from "@/components/DropBar";
 import { HOLDBACK_SHARE, inr, otbRemaining, pct } from "@/lib/rules";
 
 export default function Otb() {
@@ -42,6 +43,8 @@ export default function Otb() {
           </button>
         </div>
       </div>
+
+      <DropBar />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat

@@ -152,7 +152,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: "reports", label: "Reports" },
       { id: "log", label: "Activity log" },
       { id: "governance", label: "Metric Registry" },
-      { id: "planset", label: "Settings" },
+      { id: "rules", label: "Rules" },
+      { id: "planset", label: "Assumptions" },
     ],
   },
   {

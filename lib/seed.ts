@@ -13,8 +13,10 @@ import type {
   Cluster,
   Drop,
   OtbLine,
+  HqAssignment,
   ProductType,
   Season,
+  StockMove,
   MetricDef,
   OmniOrder,
   OutwardBatch,
@@ -299,6 +301,9 @@ const STYLE_SPECS: Array<[string, Category, Brand, string, string, number]> = [
 // fashion is seasonal and drives floor freshness. NOS is a subset of core.
 const CORE_LEANING: Category[] = ["Polo", "Shirts", "T-Shirts", "Denim", "Trousers", "Accessories"];
 
+/** Drop ids, declared before STYLES so each style can be assigned to one. */
+const DROP_IDS = ["AW26-D1", "AW26-D2", "AW26-D3"];
+
 function coreOrFashion(isNOS: boolean, story: string, category: Category, roll: number): ProductType {
   if (isNOS || story === "Core NOS") return "core";
   return CORE_LEANING.includes(category) && roll < 0.42 ? "core" : "fashion";
@@ -326,6 +331,9 @@ export const STYLES: Style[] = STYLE_SPECS.map(([name, category, brand, colour, 
     bought: int(r, 4200, 21000),
     isNOS: nos,
     productType: coreOrFashion(nos, story, category, r()),
+    // Core carries from the launch drop; fashion is spread across the later
+    // drops, which is what keeps the floor changing through the season.
+    dropId: DROP_IDS[nos ? 0 : int(r, 0, DROP_IDS.length - 1)],
     launchedDaysAgo: int(r, 12, 132),
   };
 });
@@ -1093,3 +1101,71 @@ export function createStore(input: NewStoreInput): Store {
   storeAddedListener?.(store, rows);
   return store;
 }
+
+// ── Movements already on the record ──────────────────────────────────────────
+//
+// The movement log should not open empty: a planner arriving on Tuesday needs
+// to see what the last few days moved before they add to it.
+
+function hashStr(str: string): number {
+  let h = 7;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+export const SEEDED_MOVES: StockMove[] = (() => {
+  const tommy = STORES.filter((s) => s.brand === "Tommy Hilfiger");
+  const styles = STYLES.filter((s) => s.brand === "Tommy Hilfiger");
+  if (tommy.length < 3 || styles.length < 6) return [];
+  const who = ["Retail Planning", "Retail Planning", "Buying team", "Retail Planning", "Retail Planning", "Buying team"];
+  const reasons = [
+    "Replenishment run",
+    "Moved by planning",
+    "Allocation cycle CY-AL-0",
+    "Replenishment run",
+    "Pull-back cycle CY-PB-0",
+    "Moved by planning",
+  ];
+  return Array.from({ length: 6 }, (_, i) => {
+    const r = rng(hashStr(`seedmove-${i}`));
+    const style = styles[int(r, 0, styles.length - 1)];
+    const to = tommy[int(r, 0, tommy.length - 1)];
+    const pull = reasons[i].startsWith("Pull-back");
+    return {
+      id: `MV-S${i + 1}`,
+      at: NOW - (i + 1) * 7 * HOUR,
+      by: who[i],
+      from: pull ? to.id : i % 3 === 1 ? tommy[(i + 1) % tommy.length].id : "warehouse",
+      toStoreId: pull ? "warehouse" : to.id,
+      styleId: style.id,
+      size: style.coreSizes[int(r, 0, style.coreSizes.length - 1)],
+      units: int(r, 3, 28),
+      reason: reasons[i],
+    };
+  });
+})();
+
+/** Tasks head office raised before this session, so the list opens with history. */
+export const SEEDED_HQ_TASKS: HqAssignment[] = (() => {
+  const tommy = STORES.filter((s) => s.brand === "Tommy Hilfiger");
+  if (tommy.length === 0) return [];
+  const specs: Array<[string, string, number, number, boolean]> = [
+    ["Install the AW26 launch window kit", "VM", -3 * DAY, 48, true],
+    ["Confirm festive roster and send it up", "Retail Ops", -5 * DAY, 24, false],
+    ["Re-tag the 11 styles on the new price list", "Commercial", -1 * DAY, 24, true],
+    ["Quarterly fire-safety self-audit", "Admin", 2 * DAY, 72, false],
+    ["Complete the AW26 product training module", "Training", 4 * DAY, 96, false],
+    ["Photograph the denim wall after the reset", "VM", -8 * HOUR, 8, true],
+  ];
+  return specs.map(([title, from, dueOffset, sla, photo], i) => ({
+    id: `HQA-S${i + 1}`,
+    title,
+    from,
+    storeIds: i % 3 === 0 ? tommy.map((s) => s.id) : tommy.slice(0, 2 + (i % 3)).map((s) => s.id),
+    dueAt: NOW + dueOffset,
+    slaHours: sla,
+    needsPhoto: photo,
+    raisedBy: from === "Training" ? "Buying team" : "Retail Planning",
+    raisedAt: NOW + dueOffset - sla * HOUR,
+  }));
+})();

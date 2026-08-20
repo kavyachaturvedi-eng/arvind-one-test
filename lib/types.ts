@@ -155,6 +155,8 @@ export interface Style {
    * season and is never discounted; fashion is seasonal and drives freshness.
    */
   productType: ProductType;
+  /** The drop this style was bought into — buying works drop by drop. */
+  dropId: string;
   launchedDaysAgo: number;
 }
 

@@ -36,6 +36,8 @@ import {
   mixVerdict,
   qualifiesForRun,
   replenishmentDecision,
+  DEFAULT_THRESHOLDS,
+  type RunThresholds,
   sellThrough,
   sizeSetHealth,
   splitReplenRenew,
@@ -52,6 +54,7 @@ import type {
   Brand,
   Category,
   Cluster,
+  Drop,
   ProductType,
   Region,
   ReplenLine,
@@ -106,11 +109,19 @@ export function stylesAtStore(storeId: string): Style[] {
 
 const dcStock = new Map<string, number>();
 for (const style of STYLES) {
+  // Roughly a third of the range sits at the warehouse as a complete size run:
+  // freshly received, not yet picked over. Those are the styles that can be
+  // allocated as whole sets. The rest have been drawn down unevenly and some of
+  // their sizes are genuinely exhausted — which is what forces an inter-store
+  // transfer instead of a simple replenishment.
+  const fullRun = hash(style.id) % 3 === 0;
   style.sizes.forEach((size, i) => {
     const r = rng(hash(style.id) + i * 7);
     const held = Math.round((style.bought * 0.2) / style.sizes.length);
-    // Some SKUs are genuinely exhausted at the warehouse — that is what forces
-    // an inter-store transfer instead of a simple replenishment.
+    if (fullRun) {
+      dcStock.set(`${style.id}|${size}`, Math.round(held * (0.6 + r() * 0.5)));
+      return;
+    }
     dcStock.set(`${style.id}|${size}`, r() < 0.34 ? 0 : Math.round(held * (0.15 + r() * 0.5)));
   });
 }
@@ -1143,7 +1154,7 @@ export function warehouseHeld(): { units: number; share: number; goalUnits: numb
  * on fill rate or brokenness; its gap to norm is then split between the same
  * style returning and a new style arriving, per that store's replenish share.
  */
-export function replenRun(at: number, pausedStores: string[] = []): ReplenRun {
+export function replenRun(at: number, pausedStores: string[] = [], thresholds: RunThresholds = DEFAULT_THRESHOLDS): ReplenRun {
   const triggered: ReplenRun["triggered"] = [];
   const lines: ReplenLine[] = [];
   const paused = new Set(pausedStores);
@@ -1154,7 +1165,7 @@ export function replenRun(at: number, pausedStores: string[] = []): ReplenRun {
     const v = vitalsFor(store.id);
     const carried = stylesAtStore(store.id).length;
     const brokenShare = carried > 0 ? (v.brokenStyles + v.atRiskStyles) / carried : 0;
-    const check = qualifiesForRun({ fillRate: v.fillRate, brokenShare });
+    const check = qualifiesForRun({ fillRate: v.fillRate, brokenShare }, thresholds);
     if (!check.qualifies) return;
     triggered.push({ storeId: store.id, reason: check.reason });
 
@@ -1808,4 +1819,83 @@ export function applyMove(m: MoveRequest): boolean {
 
   vitalsCache = null;
   return true;
+}
+
+// ── Drop context ─────────────────────────────────────────────────────────────
+//
+// Buying works drop by drop, so every planning screen can be read for one drop
+// rather than for a whole season averaged into meaninglessness.
+
+export interface DropPerformance {
+  drop: Drop;
+  styles: number;
+  coreStyles: number;
+  bought: number;
+  onFloor: number;
+  warehouse: number;
+  sellThrough: number;
+  valueAtRisk: number;
+  brokenStuds: number;
+  /** Days until it lands, or negative once it has. */
+  daysOut: number;
+}
+
+export function stylesInDrop(dropId: string, brand: Brand = PLANNING_BRAND): Style[] {
+  return STYLES.filter((s) => s.brand === brand && s.dropId === dropId);
+}
+
+export function dropPerformance(dropId: string, stores: Store[]): DropPerformance | null {
+  const drop = DROPS.find((d) => d.id === dropId);
+  if (!drop) return null;
+  const styles = stylesInDrop(dropId);
+  const ids = new Set(styles.map((s) => s.id));
+  const storeIds = new Set(stores.map((s) => s.id));
+
+  const rows = STOCK.filter((r) => storeIds.has(r.storeId) && ids.has(r.styleId));
+  const onFloor = rows.reduce((a, r) => a + sellable(r), 0);
+  const fullPrice = rows.reduce((a, r) => a + Math.max(0, r.sold28 - r.soldOnMarkdown28), 0);
+
+  let risk = 0;
+  let studs = 0;
+  stores.forEach((store) => {
+    gradedStyles(store.id, 80)
+      .filter((g) => ids.has(g.signal.style.id))
+      .forEach((g) => {
+        if (g.signal.health.status !== "healthy") risk += g.signal.valueAtRisk;
+        if (g.grade === "stud" && g.signal.health.status !== "healthy") studs++;
+      });
+  });
+
+  return {
+    drop,
+    styles: styles.length,
+    coreStyles: styles.filter((s) => s.productType === "core").length,
+    bought: styles.reduce((a, s) => a + s.bought, 0),
+    onFloor,
+    warehouse: styles.reduce((a, s) => a + warehouseTotal(s.id), 0),
+    sellThrough: sellThrough(fullPrice, Math.max(1, fullPrice + onFloor)),
+    valueAtRisk: risk,
+    brokenStuds: studs,
+    daysOut: Math.round((drop.landsAt - NOW) / 86_400_000),
+  };
+}
+
+export function allDropPerformance(stores: Store[]): DropPerformance[] {
+  return DROPS.map((d) => dropPerformance(d.id, stores)).filter((d): d is DropPerformance => d !== null);
+}
+
+/**
+ * How well a store uses the transfers it asks for: units received on an IST and
+ * sold inside two days. A store that pulls stock in and sits on it is taking it
+ * off a floor that would have sold it.
+ */
+export function istDiscipline(storeId: string): { received: number; soldIn2Days: number; share: number } {
+  const r = rng(hash(`ist-${storeId}`));
+  const v = vitalsFor(storeId);
+  // Scaled to how the door trades, so a fast store shows better discipline than
+  // a slow one — deterministic, like every other figure here.
+  const received = 8 + Math.round(r() * 22);
+  const base = 0.42 + v.sellThrough * 0.5;
+  const soldIn2Days = Math.min(received, Math.round(received * Math.min(0.97, base + r() * 0.12)));
+  return { received, soldIn2Days, share: received > 0 ? soldIn2Days / received : 0 };
 }

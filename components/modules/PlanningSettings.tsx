@@ -17,34 +17,29 @@ import { ASSUMPTIONS, coreShareTarget, pct } from "@/lib/rules";
 export default function PlanningSettings() {
   const app = useApp();
   const stores = planningStores();
-  const invented = ASSUMPTIONS.filter((a) => a.basis === "invented");
+  const invented = ASSUMPTIONS.filter((a) => a.basis === "invented").length;
   const confirmed = ASSUMPTIONS.filter((a) => a.basis === "confirmed");
 
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Settings</h1>
+          <h1 className="text-xl font-semibold text-ink">Assumptions</h1>
           <p className="text-xs text-ink2 mt-1">{CURRENT_SEASON.name}</p>
         </div>
-        <Chip tone={invented.length > 0 ? "warn" : "good"}>{invented.length} still invented</Chip>
+        <Chip tone={invented > 0 ? "warn" : "good"}>{invented} still invented</Chip>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Confirmed by AFL" value={String(confirmed.length)} tone="good" emphasis />
-        <Stat label="Invented by us" value={String(invented.length)} tone="warn" />
+        <Stat label="Invented by us" value={String(invented)} tone="warn" />
         <Stat label="Clusters" value={String(CLUSTERS.filter((c) => stores.some((s) => s.clusterId === c.id)).length)} sub={`${stores.length} stores`} />
-        <Stat label="Run days" value="Tue · Fri" />
+        <Stat label="Waiting on Vector" value={String(invented)} />
       </div>
 
-      <Callout tone="warn" title="These are settings, not AFL's numbers">
-        Praveen offered the Vector replenishment and IST documentation, plus a portal walkthrough. Every
-        row marked invented below is a placeholder until that lands. PLANNING-ASSUMPTIONS.md in the repo
-        carries the same list with the reasoning.
-      </Callout>
 
       <Card>
-        <SectionTitle title="Thresholds the planning layer runs on" />
+        <SectionTitle title="Where every number comes from" />
         <Table>
           <thead>
             <tr>
@@ -76,39 +71,6 @@ export default function PlanningSettings() {
         </Table>
       </Card>
 
-      <Card>
-        <SectionTitle title="Per-store settings" right={<Chip>{Object.keys(app.norms).length} norms changed this session</Chip>} />
-        <Table>
-          <thead>
-            <tr>
-              <Th>Store</Th>
-              <Th>Cluster</Th>
-              <Th>Grade</Th>
-              <Th align="right">Norm</Th>
-              <Th align="right">Replenish share</Th>
-              <Th align="right">Core target</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {stores.map((s) => {
-              const changed = app.norms[s.id] !== undefined;
-              return (
-                <tr key={s.id} data-store-setting>
-                  <Td>{s.name}</Td>
-                  <Td className="text-ink2">{CLUSTERS.find((c) => c.id === s.clusterId)?.name}</Td>
-                  <Td>{s.grade}</Td>
-                  <Td align="right" className="num">
-                    {app.normFor(s.id).toLocaleString("en-IN")}
-                    {changed && <span className="text-2xs text-muted ml-1.5">was {s.norm.toLocaleString("en-IN")}</span>}
-                  </Td>
-                  <Td align="right" className="num">{pct(s.replenShare)}</Td>
-                  <Td align="right" className="num">{pct(coreShareTarget(s.grade))}</Td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </Table>
-      </Card>
 
       <Card>
         <SectionTitle title="Clusters" />

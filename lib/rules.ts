@@ -575,15 +575,22 @@ export function nextRunAt(ms: number): number {
  * Does this store qualify for the run? Two triggers, and the reason is the
  * sentence a planner reads — never a code.
  */
-export function qualifiesForRun(input: { fillRate: number; brokenShare: number }): {
-  qualifies: boolean;
-  reason: string;
-} {
-  const thin = input.fillRate < FILL_TRIGGER;
-  const broken = input.brokenShare > BROKEN_TRIGGER;
+export interface RunThresholds {
+  fillTrigger: number;
+  brokenTrigger: number;
+}
+
+export const DEFAULT_THRESHOLDS: RunThresholds = { fillTrigger: FILL_TRIGGER, brokenTrigger: BROKEN_TRIGGER };
+
+export function qualifiesForRun(
+  input: { fillRate: number; brokenShare: number },
+  t: RunThresholds = DEFAULT_THRESHOLDS,
+): { qualifies: boolean; reason: string } {
+  const thin = input.fillRate < t.fillTrigger;
+  const broken = input.brokenShare > t.brokenTrigger;
   if (thin && broken)
     return { qualifies: true, reason: `Fill rate ${pct(input.fillRate)} of norm and ${pct(input.brokenShare)} of styles unhealthy` };
-  if (thin) return { qualifies: true, reason: `Fill rate ${pct(input.fillRate)} of norm, below the ${pct(FILL_TRIGGER)} trigger` };
+  if (thin) return { qualifies: true, reason: `Fill rate ${pct(input.fillRate)} of norm, below the ${pct(t.fillTrigger)} trigger` };
   if (broken) return { qualifies: true, reason: `${pct(input.brokenShare)} of carried styles have a broken or at-risk size set` };
   return { qualifies: false, reason: "Inside norm and size sets are holding" };
 }
@@ -677,4 +684,70 @@ export function asp(sales: number, qty: number): number {
 /** Growth against last year, as a signed ratio. */
 export function growth(cy: number, ly: number): number {
   return ly > 0 ? (cy - ly) / ly : 0;
+}
+
+// ── Size curves and sets ─────────────────────────────────────────────────────
+//
+// Allocation is rarely one size at a time. A store gets a *set*: a ratio across
+// the run that matches how people are shaped, heaviest on the pivotal sizes.
+// One set of a six-size apparel run is 1 XS, 2 S, 3 M, 4 L, 2 XL, 1 XXL.
+
+export interface CurveStep {
+  size: Size;
+  ratio: number;
+  pivotal: boolean;
+}
+
+const APPAREL_CURVE = [1, 2, 3, 4, 2, 1];
+const WAIST_CURVE = [1, 2, 3, 3, 2, 1];
+const SHORT_CURVE = [1, 2, 1];
+
+/**
+ * The ratio for one set of a style, by its size run. Shaped, not flat: the
+ * pivotal sizes carry the weight, the ends carry one each.
+ */
+export function sizeCurve(sizes: Size[], pivotal: Size[]): CurveStep[] {
+  const base = sizes.length === 6 ? (sizes[0] === "XS" ? APPAREL_CURVE : WAIST_CURVE) : sizes.length === 3 ? SHORT_CURVE : null;
+  return sizes.map((size, i) => ({
+    size,
+    // An unrecognised run falls back to the pivotal split, so a new size run
+    // never produces a flat curve by accident.
+    ratio: base ? base[i] : pivotal.includes(size) ? 3 : 1,
+    pivotal: pivotal.includes(size),
+  }));
+}
+
+/** Units in one set. */
+export function unitsPerSet(curve: CurveStep[]): number {
+  return curve.reduce((a, c) => a + c.ratio, 0);
+}
+
+/** What N sets means size by size. */
+export function setsToUnits(curve: CurveStep[], sets: number): Partial<Record<Size, number>> {
+  const out: Partial<Record<Size, number>> = {};
+  if (sets <= 0) return out;
+  curve.forEach((c) => {
+    out[c.size] = c.ratio * sets;
+  });
+  return out;
+}
+
+/**
+ * How many whole sets a size-by-size allocation amounts to, and what is left
+ * over. Lets a planner who typed sizes by hand see it in the unit they think in.
+ */
+export function unitsToSets(curve: CurveStep[], units: Partial<Record<Size, number>>): { sets: number; remainder: number } {
+  const total = Object.values(units).reduce((a, n) => a + (n ?? 0), 0);
+  const per = unitsPerSet(curve);
+  if (per === 0) return { sets: 0, remainder: total };
+  // Whole sets is bounded by the tightest size, not by the total — 20 units all
+  // in size L is not a set.
+  const sets = Math.min(...curve.map((c) => Math.floor((units[c.size] ?? 0) / c.ratio)));
+  return { sets: Number.isFinite(sets) ? sets : 0, remainder: total - (Number.isFinite(sets) ? sets : 0) * per };
+}
+
+/** The most sets the given per-size availability can actually fill. */
+export function maxSets(curve: CurveStep[], available: Partial<Record<Size, number>>): number {
+  const per = curve.map((c) => Math.floor((available[c.size] ?? 0) / c.ratio));
+  return per.length ? Math.max(0, Math.min(...per)) : 0;
 }

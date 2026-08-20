@@ -251,32 +251,6 @@ export default function StrategicMoves() {
       </Card>
 
       {/* ── Constraints ──────────────────────────────────────────────────── */}
-      <Card>
-        <SectionTitle title="Rules the engine respected" />
-        <ul className="space-y-2">
-          {[
-            ["Donor stays above its norm floor", "A store is never asked to give up stock it is selling at least as fast as the receiver. Moving the problem is not solving it."],
-            [`Inside the ${SAME_DAY_KM} km same-day lane, or flagged`, `Moves under ${SAME_DAY_KM} km go on the same-day courier lane. Longer lanes are still proposed — they are simply marked, and they carry the sign-off.`],
-            ["Unit must be saleable", "Defective units and units already staged for outward are excluded before ranking, so an approved move cannot fail at the pick."],
-            ["No duplicate lane in flight", "One open request per SKU per lane. The queue will not propose the same transfer twice while the first is moving."],
-          ].map(([title, body]) => (
-            <li key={title} className="flex items-start gap-2.5">
-              <span className="mt-1.5"><StatusDot tone="good" /></span>
-              <div>
-                <div className="text-xs font-semibold text-ink">{title}</div>
-                <div className="text-xs text-ink2 leading-relaxed mt-0.5">{body}</div>
-              </div>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-3">
-          <Callout tone="brand" title="Rejections feed the next run">
-            Every rejection is stored with its reason. A move turned down because the donor needed it is a different
-            signal from one turned down on logistics cost — the first tunes the norm floor, the second tunes the lane
-            radius.
-          </Callout>
-        </div>
-      </Card>
     </div>
   );
 }

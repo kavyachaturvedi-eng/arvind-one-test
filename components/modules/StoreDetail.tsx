@@ -14,6 +14,7 @@ import {
   dcAvailable,
   estateSummary,
   gradedStyles,
+  istDiscipline,
   mixForStore,
   planningStores,
   applyMove,
@@ -42,6 +43,8 @@ export default function StoreView() {
   const summary = useMemo(() => estateSummary([store], period), [store, period]);
   const graded = useMemo(() => gradedStyles(storeId, 60), [storeId]);
   const mix = useMemo(() => mixForStore(storeId), [storeId]);
+  // Does this door actually sell what it asks other stores for?
+  const ist = useMemo(() => istDiscipline(storeId), [storeId]);
 
   // A brief "opening" beat so arriving at a store reads as going somewhere,
   // rather than the whole page swapping under you. Client-only, so it never
@@ -165,7 +168,7 @@ export default function StoreView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <Stat
           label="Fill rate"
           value={pct(fill)}
@@ -195,6 +198,12 @@ export default function StoreView() {
           value={String(summary.brokenStuds)}
           sub={summary.brokenStuds > 0 ? inr(summary.brokenStudValue, { compact: true }) : undefined}
           tone={summary.brokenStuds > 0 ? "critical" : "good"}
+        />
+        <Stat
+          label="IST sold in 2 days"
+          value={pct(ist.share)}
+          sub={`${ist.soldIn2Days} of ${ist.received}`}
+          tone={ist.share >= 0.7 ? "good" : ist.share >= 0.5 ? "warn" : "critical"}
         />
       </div>
 

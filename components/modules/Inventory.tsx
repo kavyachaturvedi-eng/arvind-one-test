@@ -24,6 +24,7 @@ import {
 import { NOW as _NOW, STYLES } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import EstateFilterBar from "@/components/EstateFilterBar";
+import DropBar from "@/components/DropBar";
 import { HOLDBACK_GOAL, inr, pct } from "@/lib/rules";
 
 type Cut = "category" | "cluster" | "type";
@@ -93,6 +94,8 @@ export default function Inventory() {
       </div>
 
       <EstateFilterBar />
+
+      <DropBar />
 
       <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
         <Stat
@@ -195,9 +198,9 @@ export default function Inventory() {
               onChange={setStyleCut}
               options={[
                 { id: "all", label: "All", count: styles.length },
-                { id: "risk", label: "At risk", count: styles.filter((s) => s.valueAtRisk > 0).length },
-                { id: "thin", label: "Under 3 weeks", count: styles.filter((s) => s.cover < 21).length },
-                { id: "heavy", label: "Over 4 months", count: styles.filter((s) => s.cover > 120).length },
+                { id: "risk", label: "Broken set", count: styles.filter((s) => s.valueAtRisk > 0).length },
+                { id: "thin", label: "Cover under 3 weeks", count: styles.filter((s) => s.cover < 21).length },
+                { id: "heavy", label: "Cover over 4 months", count: styles.filter((s) => s.cover > 120).length },
               ]}
             />
           }

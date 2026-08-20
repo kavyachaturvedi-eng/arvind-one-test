@@ -75,12 +75,6 @@ export default function Stores() {
         <Stat label="Planned units" value={STORES.reduce((a, s) => a + app.normFor(s.id), 0).toLocaleString("en-IN")} />
       </div>
 
-      {openedThisSession > 0 && (
-        <Callout tone="good" title="New stores are live in planning" >
-          They carry an assortment, a norm and a cluster, so Store 360, the run and the drop allocation
-          already include them. Rate of sale stays zero until the door trades.
-        </Callout>
-      )}
 
       <Card>
         <SectionTitle title="The estate" />
