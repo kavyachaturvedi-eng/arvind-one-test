@@ -13,7 +13,6 @@ import {
   PERIOD_LABEL,
   dcAvailable,
   estateSummary,
-  estateTrend,
   gradedStyles,
   mixForStore,
   planningStores,
@@ -43,7 +42,6 @@ export default function StoreView() {
   const summary = useMemo(() => estateSummary([store], period), [store, period]);
   const graded = useMemo(() => gradedStyles(storeId, 60), [storeId]);
   const mix = useMemo(() => mixForStore(storeId), [storeId]);
-  const spark = useMemo(() => estateTrend([store]), [store]);
 
   // A brief "opening" beat so arriving at a store reads as going somewhere,
   // rather than the whole page swapping under you. Client-only, so it never
@@ -180,7 +178,6 @@ export default function StoreView() {
           value={inr(summary.sales, { compact: true })}
           sub={`${pct(summary.achievement)} of target`}
           tone={summary.achievement >= 1 ? "good" : summary.achievement >= 0.92 ? "warn" : "critical"}
-          spark={spark}
         />
         <Stat
           label="Full-price sell-through"

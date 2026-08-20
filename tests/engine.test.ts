@@ -34,8 +34,10 @@ import {
   dropAllocation,
   dropUnitsFor,
   applyMove,
+  applyPullback,
   brokenStuds,
   unitsAt,
+  validatePullback,
   validateMove,
   NO_FILTERS,
   PLANNING_BRAND,
@@ -1336,5 +1338,67 @@ describe("broken studs", () => {
     const stores = planningStores();
     const perStore = storeRows(stores, "week").reduce((a, r) => a + r.brokenStuds, 0);
     expect(perStore).toBe(estateSummary(stores, "week").brokenStuds);
+  });
+});
+
+describe("pulling stock back", () => {
+  it("refuses more than the floor holds, and says how many there are", () => {
+    const st = planningStores()[0];
+    const style = stylesAtStore(st.id).find((x) => x.brand === st.brand)!;
+    const size = style.coreSizes[0];
+    const errs = validatePullback({ fromStoreId: st.id, styleId: style.id, size, units: 99_999 });
+    expect(errs.length).toBeGreaterThan(0);
+    expect(errs[0]).toMatch(/has \d+ of size/);
+    expect(validatePullback({ fromStoreId: st.id, styleId: style.id, size, units: 0 })).toContain("Nothing to pull back.");
+  });
+
+  it("takes units off the floor and puts them back in the warehouse", () => {
+    const st = planningStores()[0];
+    const style = stylesAtStore(st.id).find((x) => x.brand === st.brand && unitsAt(st.id, x.id, x.coreSizes[0]) > 3)!;
+    const size = style.coreSizes[0];
+    const floorBefore = unitsAt(st.id, style.id, size);
+    const whBefore = dcAvailable(style.id, size);
+
+    expect(applyPullback({ fromStoreId: st.id, styleId: style.id, size, units: 3 })).toBe(true);
+
+    expect(unitsAt(st.id, style.id, size)).toBe(floorBefore - 3);
+    expect(dcAvailable(style.id, size)).toBe(whBefore + 3);
+  });
+
+  it("conserves units — a pull-back is the exact reverse of a warehouse move", () => {
+    const st = planningStores()[1];
+    const style = stylesAtStore(st.id).find((x) => x.brand === st.brand && unitsAt(st.id, x.id, x.coreSizes[0]) > 2)!;
+    const size = style.coreSizes[0];
+    const before = unitsAt(st.id, style.id, size) + dcAvailable(style.id, size);
+    applyPullback({ fromStoreId: st.id, styleId: style.id, size, units: 2 });
+    expect(unitsAt(st.id, style.id, size) + dcAvailable(style.id, size)).toBe(before);
+    // And back again.
+    applyMove({ from: "warehouse", toStoreId: st.id, styleId: style.id, size, units: 2 });
+    expect(unitsAt(st.id, style.id, size) + dcAvailable(style.id, size)).toBe(before);
+  });
+
+  it("drops the estate cache, so the floor figure moves straight away", () => {
+    const st = planningStores()[0];
+    const style = stylesAtStore(st.id).find((x) => x.brand === st.brand && unitsAt(st.id, x.id, x.coreSizes[0]) > 2)!;
+    const size = style.coreSizes[0];
+    const before = estateSummary([st], "week").sellableUnits;
+    applyPullback({ fromStoreId: st.id, styleId: style.id, size, units: 2 });
+    expect(estateSummary([st], "week").sellableUnits).toBe(before - 2);
+  });
+});
+
+describe("a deeper assortment", () => {
+  it("gives the planning brand enough options to look like a real range", () => {
+    const own = STYLES.filter((s) => s.brand === PLANNING_BRAND);
+    expect(own.length).toBeGreaterThanOrEqual(30);
+    // Every category the brand sells is represented.
+    expect(new Set(own.map((s) => s.category)).size).toBeGreaterThanOrEqual(6);
+    // And both product types.
+    expect(own.some((s) => s.productType === "core")).toBe(true);
+    expect(own.some((s) => s.productType === "fashion")).toBe(true);
+  });
+
+  it("keeps every style id unique after the range was extended", () => {
+    expect(new Set(STYLES.map((s) => s.id)).size).toBe(STYLES.length);
   });
 });

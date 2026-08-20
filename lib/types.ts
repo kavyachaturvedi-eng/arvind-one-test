@@ -602,9 +602,11 @@ export interface HqAssignment {
 //   · Renewal is per SKU per store, so it is created (or suggested) and needs
 //     someone to say yes before anything ships.
 //   · An allocation is one unit spread across stores, at planning's discretion.
+//   · A pull-back is the reverse: planning decides what comes off the floors and
+//     goes back to the warehouse, which is what happens after EOSS.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type CycleKind = "replenishment" | "renewal" | "allocation";
+export type CycleKind = "replenishment" | "renewal" | "allocation" | "pullback";
 
 export type CycleStatus =
   | "running"             // replenishment: fired on its own
@@ -644,6 +646,7 @@ export interface StockMove {
   at: number;
   by: string;
   from: string;          // "warehouse" or a store id
+  /** A store id, or "warehouse" when stock is being pulled back. */
   toStoreId: string;
   styleId: string;
   size: Size;

@@ -13,7 +13,8 @@ import { PLANNING_BRAND, applyMove, planningStores, unitsAt, validateMove, wareh
 import { NOW, STYLES, storeById, styleById } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import { inr } from "@/lib/rules";
-import { CycleBuilder } from "@/components/modules/Renewal";
+import { CycleBuilder, CycleCard } from "@/components/modules/Renewal";
+import PullbackBuilder from "@/components/modules/PullbackBuilder";
 import type { Size, StockMove } from "@/lib/types";
 
 type MoveSort = "at" | "from" | "to" | "style" | "units";
@@ -29,6 +30,7 @@ export default function MoveStock() {
   const [size, setSize] = useState<Size | "">("");
   const [units, setUnits] = useState(0);
   const [spread, setSpread] = useState(false);
+  const [pull, setPull] = useState(false);
 
   const style = styleById(styleId);
   const bySize = useMemo(() => warehouseBySize(styleId), [styleId]);
@@ -62,12 +64,15 @@ export default function MoveStock() {
     setUnits(0);
   }
 
+  // Allocation and pull-back cycles are raised here, so they are decided here.
+  const cycles = app.cycles.filter((c) => c.kind === "allocation" || c.kind === "pullback");
+
   const sorter = useSort<MoveSort>("at");
   const sortedMoves = sorter.sort(app.moves, (m, key) => {
     switch (key) {
       case "at": return m.at;
       case "from": return m.from === "warehouse" ? "Warehouse" : storeById(m.from).name;
-      case "to": return storeById(m.toStoreId).name;
+      case "to": return m.toStoreId === "warehouse" ? "Warehouse" : storeById(m.toStoreId).name;
       case "style": return styleById(m.styleId).name;
       case "units": return m.units;
     }
@@ -80,9 +85,14 @@ export default function MoveStock() {
           <h1 className="text-xl font-semibold text-ink">Move stock</h1>
           <p className="text-xs text-ink2 mt-1">Warehouse to a store, or store to store, on your call</p>
         </div>
-        <button className="btn" data-spread onClick={() => setSpread(true)}>
-          Allocate one unit across stores
-        </button>
+        <div className="flex items-center gap-2">
+          <button className="btn" data-pullback onClick={() => setPull(true)}>
+            Pull back
+          </button>
+          <button className="btn" data-spread onClick={() => setSpread(true)}>
+            Allocate
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -180,6 +190,17 @@ export default function MoveStock() {
         )}
       </Card>
 
+      {cycles.length > 0 && (
+        <Card>
+          <SectionTitle title="Cycles waiting on a decision" />
+          <div className="space-y-3">
+            {cycles.map((c) => (
+              <CycleCard key={c.id} cycle={c} />
+            ))}
+          </div>
+        </Card>
+      )}
+
       <Card>
         <SectionTitle title="Movement log" />
         {app.moves.length === 0 ? (
@@ -204,7 +225,7 @@ export default function MoveStock() {
                 <tr key={m.id} data-move-row>
                   <Td className="num text-xs whitespace-nowrap">{fmtDateTime(m.at)}</Td>
                   <Td className="text-ink2">{m.from === "warehouse" ? "Warehouse" : storeById(m.from).name}</Td>
-                  <Td className="text-ink">{storeById(m.toStoreId).name}</Td>
+                  <Td className="text-ink">{m.toStoreId === "warehouse" ? "Warehouse" : storeById(m.toStoreId).name}</Td>
                   <Td className="num text-xs text-ink2">{m.styleId}</Td>
                   <Td>{styleById(m.styleId).name}</Td>
                   <Td className="num">{m.size}</Td>
@@ -219,6 +240,7 @@ export default function MoveStock() {
       </Card>
 
       <CycleBuilder open={spread} onClose={() => setSpread(false)} kind="allocation" />
+      <PullbackBuilder open={pull} onClose={() => setPull(false)} />
     </div>
   );
 }

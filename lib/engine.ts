@@ -1709,6 +1709,43 @@ export function unitsAt(storeId: string, styleId: string, size: Size): number {
   return row ? sellable(row) : 0;
 }
 
+/** Put units back into the warehouse pool — the other direction of a move. */
+export function returnToWarehouse(styleId: string, size: Size, units: number) {
+  const key = `${styleId}|${size}`;
+  dcStock.set(key, (dcStock.get(key) ?? 0) + units);
+}
+
+export interface PullbackRequest {
+  fromStoreId: string;
+  styleId: string;
+  size: Size;
+  units: number;
+}
+
+export function validatePullback(p: PullbackRequest): string[] {
+  const errors: string[] = [];
+  if (p.units <= 0) errors.push("Nothing to pull back.");
+  const available = unitsAt(p.fromStoreId, p.styleId, p.size);
+  if (p.units > available) {
+    errors.push(`${storeById(p.fromStoreId).name} has ${available} of size ${p.size} on the floor, not ${p.units}.`);
+  }
+  return errors;
+}
+
+/**
+ * Pull units off a store's floor and back into the warehouse. This is what
+ * happens after EOSS: planning decides what comes back, the store ships it.
+ */
+export function applyPullback(p: PullbackRequest): boolean {
+  if (validatePullback(p).length > 0) return false;
+  const row = skuRow(p.fromStoreId, p.styleId, p.size);
+  if (!row) return false;
+  row.onHand = Math.max(0, row.onHand - p.units);
+  returnToWarehouse(p.styleId, p.size, p.units);
+  vitalsCache = null;
+  return true;
+}
+
 export interface MoveRequest {
   from: string; // "warehouse" or a store id
   toStoreId: string;

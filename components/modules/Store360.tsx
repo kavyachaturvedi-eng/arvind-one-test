@@ -16,7 +16,6 @@ import {
   PERIOD_LABEL,
   PLANNING_BRAND,
   estateSummary,
-  estateTrend,
   filterStores,
   planningStores,
   storeRows,
@@ -34,7 +33,6 @@ export default function Store360() {
   const stores = useMemo(() => filterStores(filters), [filters]);
   const summary = useMemo(() => estateSummary(stores, period), [stores, period]);
   const rows = useMemo(() => storeRows(stores, period, app.requests), [stores, period, app.requests]);
-  const spark = useMemo(() => (stores.length ? estateTrend(stores) : []), [stores]);
 
 
   const sorter = useSort<StoreSort>("risk");
@@ -96,7 +94,6 @@ export default function Store360() {
               value={inr(summary.sales, { compact: true })}
               sub={`${pct(summary.achievement)} of target`}
               tone={summary.achievement >= 1 ? "good" : summary.achievement >= 0.92 ? "warn" : "critical"}
-              spark={spark}
             />
             <Stat
               label="Full-price sell-through"
@@ -183,7 +180,7 @@ export default function Store360() {
                   <SortTh sortKey="name" sorter={sorter}>Store</SortTh>
                   <SortTh sortKey="cluster" sorter={sorter}>Cluster</SortTh>
                   <SortTh sortKey="grade" sorter={sorter}>Grade</SortTh>
-                  <SortTh sortKey="sales" sorter={sorter} align="right">Sales</SortTh>
+                  <SortTh sortKey="sales" sorter={sorter} align="right">Sales · {PERIOD_LABEL[period].toLowerCase()}</SortTh>
                   <SortTh sortKey="ach" sorter={sorter} align="right">vs target</SortTh>
                   <SortTh sortKey="fill" sorter={sorter} align="right">Fill rate</SortTh>
                   <SortTh sortKey="st" sorter={sorter} align="right">Sell-through</SortTh>

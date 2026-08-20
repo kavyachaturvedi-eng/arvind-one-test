@@ -9,6 +9,7 @@
 import React, { useMemo, useState } from "react";
 import { BarChart, Card, SectionTitle, SortTh, Stat, StatusDot, Swatch, Table, Tabs, Td, Th, useSort } from "@/components/ui";
 import {
+  PLANNING_BRAND,
   estateSummary,
   filterStores,
   planningStores,
@@ -20,6 +21,7 @@ import {
   warehouseHeld,
   type InventoryLine,
 } from "@/lib/engine";
+import { NOW as _NOW, STYLES } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import EstateFilterBar from "@/components/EstateFilterBar";
 import { HOLDBACK_GOAL, inr, pct } from "@/lib/rules";
@@ -39,6 +41,8 @@ export default function Inventory() {
   const byCluster = useMemo(() => inventoryByCluster(stores), [stores]);
   const byType = useMemo(() => inventoryByType(stores), [stores]);
   const styles = useMemo(() => styleInventory(stores), [stores]);
+  // The brand's whole range, so "11 styles" reads as a share rather than a total.
+  const brandStyles = useMemo(() => STYLES.filter((s) => s.brand === PLANNING_BRAND).length, []);
 
   const lines: InventoryLine[] = cut === "category" ? byCategory : cut === "cluster" ? byCluster : byType;
   const held = warehouseHeld();
@@ -83,7 +87,7 @@ export default function Inventory() {
         <div>
           <h1 className="text-xl font-semibold text-ink">Inventory</h1>
           <p className="text-xs text-ink2 mt-1">
-            {stores.length} of {planningStores().length} stores · {styles.length} styles
+            {stores.length} of {planningStores().length} stores · {styles.length} of {brandStyles} styles carried
           </p>
         </div>
       </div>
@@ -97,7 +101,6 @@ export default function Inventory() {
           sub={`${pct(summary.fillRate)} of norm`}
           tone={summary.band === "healthy" ? "good" : summary.band === "thin" ? "critical" : "warn"}
           emphasis
-          spark={unitsTrend}
         />
         <Stat label="Floor value at MRP" value={inr(floorValue, { compact: true })} />
         <Stat label="In transit" value={summary.inTransit.toLocaleString("en-IN")} />

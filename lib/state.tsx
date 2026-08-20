@@ -201,6 +201,7 @@ export const CYCLE_LABEL: Record<CycleKind, string> = {
   replenishment: "Replenishment",
   renewal: "Renewal",
   allocation: "Allocation",
+  pullback: "Pull-back",
 };
 
 /** How each kind of store ask reads on screen and in the audit trail. */

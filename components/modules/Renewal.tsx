@@ -9,7 +9,7 @@
 
 import React, { useMemo, useState } from "react";
 import { Callout, Card, Chip, Modal, SectionTitle, Stat, StatusDot, Swatch, Table, Tabs, Td, Th, relTime } from "@/components/ui";
-import { applyMove, dcAvailable, gradedStyles, planningStores, replenRun, unitsAt, warehouseBySize, warehouseTotal } from "@/lib/engine";
+import { applyMove, applyPullback, dcAvailable, gradedStyles, planningStores, replenRun, unitsAt, warehouseBySize, warehouseTotal } from "@/lib/engine";
 import { NOW, STYLES, storeById, styleById } from "@/lib/seed";
 import { CYCLE_LABEL, useApp } from "@/lib/state";
 import { PLANNING_BRAND } from "@/lib/engine";
@@ -139,14 +139,18 @@ export function CycleCard({ cycle }: { cycle: Cycle }) {
     const moves: StockMove[] = [];
     cycle.lines.forEach((l) => {
       const size = l.size ?? styleById(l.styleId).coreSizes[0];
-      const ok = applyMove({ from: cycle.source, toStoreId: l.storeId, styleId: l.styleId, size, units: l.units });
+      // A pull-back runs the other way: off the floor, back to the warehouse.
+      const ok =
+        cycle.kind === "pullback"
+          ? applyPullback({ fromStoreId: l.storeId, styleId: l.styleId, size, units: l.units })
+          : applyMove({ from: cycle.source, toStoreId: l.storeId, styleId: l.styleId, size, units: l.units });
       if (ok) {
         moves.push({
           id: `MV-${cycle.id}-${l.id}`,
           at: NOW,
           by: app.actorName,
-          from: cycle.source,
-          toStoreId: l.storeId,
+          from: cycle.kind === "pullback" ? l.storeId : cycle.source,
+          toStoreId: cycle.kind === "pullback" ? "warehouse" : l.storeId,
           styleId: l.styleId,
           size,
           units: l.units,
@@ -242,10 +246,11 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
   // and "what does this store need?".
   const [mode, setMode] = useState<"unit" | "store">("unit");
 
-  // By unit: one SKU and size, spread across stores.
+  // By unit: one SKU, allocated store by store and size by size. Size is not a
+  // filter — a store needs a size breakdown, not one size at a time.
   const [styleId, setStyleId] = useState(styles[0]?.id ?? "");
-  const [size, setSize] = useState<Size | "">("");
-  const [byStore, setByStore] = useState<Record<string, number>>({});
+  const [byStore, setByStore] = useState<Record<string, Partial<Record<Size, number>>>>({});
+  const [openRow, setOpenRow] = useState<string | null>(null);
 
   // By store: one store, several SKUs.
   const [storeId, setStoreId] = useState(stores[0]?.id ?? "");
@@ -254,21 +259,42 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
   const style = styleById(styleId);
   const bySize = useMemo(() => warehouseBySize(styleId), [styleId]);
   const total = useMemo(() => warehouseTotal(styleId), [styleId]);
-  const deepest = useMemo(() => [...bySize].sort((a, b) => b.units - a.units)[0]?.size ?? style.coreSizes[0], [bySize, style.coreSizes]);
-  const chosenSize = (size || deepest) as Size;
-  const availableInSize = bySize.find((b) => b.size === chosenSize)?.units ?? 0;
 
-  const unitAllocated = Object.values(byStore).reduce((a, n) => a + n, 0);
+  // What has been asked for, size by size, across every store.
+  const perSize = useMemo(() => {
+    const t: Partial<Record<Size, number>> = {};
+    Object.values(byStore).forEach((m) =>
+      Object.entries(m ?? {}).forEach(([sz, n]) => {
+        t[sz as Size] = (t[sz as Size] ?? 0) + (n ?? 0);
+      }),
+    );
+    return t;
+  }, [byStore]);
+
+  const overSizes = bySize.filter((b) => (perSize[b.size] ?? 0) > b.units);
+  const unitAllocated = Object.values(perSize).reduce((a, n) => a + (n ?? 0), 0);
   const storeAllocated = Object.values(byStyle).reduce((a, p) => a + p.units, 0);
   const allocated = mode === "unit" ? unitAllocated : storeAllocated;
-  const over = mode === "unit" && allocated > availableInSize;
+  const over = mode === "unit" && overSizes.length > 0;
+
+  const storesTouched = mode === "unit" ? Object.values(byStore).filter((m) => Object.values(m ?? {}).some((n) => (n ?? 0) > 0)).length : 1;
+
+  function setQty(sid: string, sz: Size, units: number) {
+    setByStore({ ...byStore, [sid]: { ...(byStore[sid] ?? {}), [sz]: Math.max(0, units) } });
+  }
+
+  function storeTotal(sid: string) {
+    return Object.values(byStore[sid] ?? {}).reduce((a, n) => a + (n ?? 0), 0);
+  }
 
   function submit() {
     const lines: CycleLine[] =
       mode === "unit"
-        ? Object.entries(byStore)
-            .filter(([, units]) => units > 0)
-            .map(([sid, units], i) => ({ id: `CL-${i}`, storeId: sid, styleId, size: chosenSize, units }))
+        ? Object.entries(byStore).flatMap(([sid, sizes]) =>
+            Object.entries(sizes ?? {})
+              .filter(([, n]) => (n ?? 0) > 0)
+              .map(([sz, n], i) => ({ id: `CL-${sid}-${sz}-${i}`, storeId: sid, styleId, size: sz as Size, units: n as number })),
+          )
         : Object.entries(byStyle)
             .filter(([, p]) => p.units > 0)
             .map(([sty, p], i) => ({ id: `CL-${i}`, storeId, styleId: sty, size: p.size, units: p.units }));
@@ -282,7 +308,7 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
       createdBy: app.actorName,
       source: "warehouse",
       lines,
-      note: mode === "unit" ? `${style.name} · size ${chosenSize}` : `${storeById(storeId).name} · ${lines.length} styles`,
+      note: mode === "unit" ? `${style.name} · ${lines.length} store-size lines` : `${storeById(storeId).name} · ${lines.length} styles`,
     };
     app.dispatch({ type: "cycle:create", cycle });
     app.toastNow(`${CYCLE_LABEL[kind]} cycle created · ${allocated} units`, "good");
@@ -296,11 +322,13 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
       open={open}
       onClose={onClose}
       wide
-      title={`Create a ${kind} cycle`}
+      title={kind === "renewal" ? "Create a renewal cycle" : "Allocate"}
       footer={
         <div className="flex items-center justify-between w-full gap-3">
           <span className="text-xs num" style={{ color: over ? "var(--status-critical)" : "var(--text-secondary)" }}>
-            {mode === "unit" ? `${allocated} of ${availableInSize} available in size ${chosenSize}` : `${allocated} units across ${Object.values(byStyle).filter((p) => p.units > 0).length} styles`}
+            {mode === "unit"
+              ? `${allocated} units across ${storesTouched} ${storesTouched === 1 ? "store" : "stores"} · ${total} in the warehouse`
+              : `${allocated} units across ${Object.values(byStyle).filter((p) => p.units > 0).length} styles`}
           </span>
           <button className="btn-primary" data-cycle-submit disabled={allocated === 0 || over} onClick={submit}>
             Send for approval
@@ -320,106 +348,141 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
 
         {mode === "unit" ? (
           <>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <div>
-                <div className="label mb-1">Unit</div>
-                <select
-                  value={styleId}
-                  data-cycle-style
-                  onChange={(e) => {
-                    setStyleId(e.target.value);
-                    setSize("");
-                    setByStore({});
-                  }}
-                  className={inputCls}
-                >
-                  {styles.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.id} · {s.name} · {s.colour}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <div className="label mb-1">Size</div>
-                <select
-                  value={chosenSize}
-                  data-cycle-size
-                  onChange={(e) => {
-                    setSize(e.target.value as Size);
-                    setByStore({});
-                  }}
-                  className={inputCls}
-                >
-                  {bySize.map((b) => (
-                    <option key={b.size} value={b.size}>
-                      {b.size}
-                      {style.coreSizes.includes(b.size) ? " · pivotal" : ""} — {b.units} available
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <div className="label mb-1">Unit</div>
+              <select
+                value={styleId}
+                data-cycle-style
+                onChange={(e) => {
+                  setStyleId(e.target.value);
+                  setByStore({});
+                  setOpenRow(null);
+                }}
+                className={inputCls}
+              >
+                {styles.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.id} · {s.name} · {s.colour}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="flex items-center gap-3 flex-wrap text-xs">
               <Swatch hex={style.colourHex} label={style.colour} />
               <span className="text-ink2">{style.category}</span>
               <span className="num text-ink2">MRP {inr(style.mrp)}</span>
-              <span className="num text-ink">
-                Warehouse total {total.toLocaleString("en-IN")} · size {chosenSize}: {availableInSize}
-              </span>
             </div>
 
-            {over && <Callout tone="critical" title={`Over the warehouse by ${allocated - availableInSize} units in size ${chosenSize}`} />}
+            {/* Warehouse depth by size, and what is already spoken for. */}
+            <div className="border border-line">
+              <div className="px-3 pt-2.5 label">In the warehouse</div>
+              <div className="p-3 pt-2 flex gap-2 flex-wrap">
+                {bySize.map((b) => {
+                  const asked = perSize[b.size] ?? 0;
+                  const short = asked > b.units;
+                  return (
+                    <div
+                      key={b.size}
+                      data-size-chip={short ? "over" : "ok"}
+                      className="border px-2.5 py-1.5 min-w-[86px]"
+                      style={{ borderColor: short ? "var(--status-critical)" : "var(--line)" }}
+                    >
+                      <div className="text-xs num text-ink">
+                        {b.size}
+                        {style.coreSizes.includes(b.size) ? " ·pivotal" : ""}
+                      </div>
+                      <div className="text-2xs num" style={{ color: short ? "var(--status-critical)" : "var(--text-muted)" }}>
+                        {asked > 0 ? `${asked} of ${b.units}` : `${b.units} free`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {over && (
+              <Callout
+                tone="critical"
+                title={`Over the warehouse in ${overSizes.map((b) => `size ${b.size}`).join(", ")}`}
+              />
+            )}
 
             <Table>
               <thead>
                 <tr>
                   <Th>Store</Th>
                   <Th>Grade</Th>
-                  <Th align="right">Has this size</Th>
                   <Th align="right">Has this style</Th>
                   <Th>Set</Th>
                   <Th align="right">Fill rate</Th>
-                  <Th align="right">Allocate</Th>
+                  <Th align="right">Allocating</Th>
+                  <Th align="right">Sizes</Th>
                 </tr>
               </thead>
               <tbody>
                 {stores.map((st) => {
-                  const carried = gradedStyles(st.id, 60).find((g) => g.signal.style.id === styleId);
-                  const hasSize = unitsAt(st.id, styleId, chosenSize);
+                  const carried = gradedStyles(st.id, 80).find((g) => g.signal.style.id === styleId);
+                  const mine = storeTotal(st.id);
+                  const expanded = openRow === st.id;
                   return (
-                    <tr key={st.id}>
-                      <Td className="text-ink">{st.name}</Td>
-                      <Td>{st.grade}</Td>
-                      <Td align="right" className="num" style={hasSize === 0 ? { color: "var(--status-critical)" } : undefined}>
-                        {hasSize}
-                      </Td>
-                      <Td align="right" className="num">{carried ? carried.signal.sellable : 0}</Td>
-                      <Td>
-                        {carried ? (
-                          <span className="inline-flex items-center gap-1.5">
-                            <StatusDot tone={carried.signal.health.status === "healthy" ? "good" : carried.signal.health.status === "broken" ? "critical" : "warn"} />
-                            <span className="text-xs text-ink2">
-                              {carried.signal.health.status === "healthy" ? "Healthy" : carried.signal.health.status === "broken" ? "Broken" : "At risk"}
+                    <React.Fragment key={st.id}>
+                      <tr data-cycle-store-row>
+                        <Td className="text-ink">{st.name}</Td>
+                        <Td>{st.grade}</Td>
+                        <Td align="right" className="num">{carried ? carried.signal.sellable : 0}</Td>
+                        <Td>
+                          {carried ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <StatusDot tone={carried.signal.health.status === "healthy" ? "good" : carried.signal.health.status === "broken" ? "critical" : "warn"} />
+                              <span className="text-xs text-ink2">
+                                {carried.signal.health.status === "healthy" ? "Healthy" : carried.signal.health.status === "broken" ? "Broken" : "At risk"}
+                              </span>
                             </span>
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted">Not carried</span>
-                        )}
-                      </Td>
-                      <Td align="right" className="num">{pct(app.normFor(st.id) > 0 ? (carried?.signal.sellable ?? 0) / app.normFor(st.id) : 0)}</Td>
-                      <Td align="right">
-                        <input
-                          type="number"
-                          min={0}
-                          value={byStore[st.id] ?? 0}
-                          data-cycle-qty
-                          onChange={(e) => setByStore({ ...byStore, [st.id]: Math.max(0, Number(e.target.value) || 0) })}
-                          className="w-16 border border-line bg-raised px-2 py-1 text-sm text-ink text-right num"
-                        />
-                      </Td>
-                    </tr>
+                          ) : (
+                            <span className="text-xs text-muted">Not carried</span>
+                          )}
+                        </Td>
+                        <Td align="right" className="num">{pct(app.normFor(st.id) > 0 ? (carried?.signal.sellable ?? 0) / app.normFor(st.id) : 0)}</Td>
+                        <Td align="right" className="num" style={mine > 0 ? { color: "var(--brand)" } : undefined}>
+                          {mine || "—"}
+                        </Td>
+                        <Td align="right">
+                          <button className="btn !py-1 !text-2xs" data-open-sizes onClick={() => setOpenRow(expanded ? null : st.id)}>
+                            {expanded ? "Hide" : "Sizes"}
+                          </button>
+                        </Td>
+                      </tr>
+                      {expanded && (
+                        <tr data-size-panel>
+                          <Td colSpan={7}>
+                            <div className="flex gap-2 flex-wrap py-1">
+                              {style.sizes.map((sz) => {
+                                const wh = bySize.find((b) => b.size === sz)?.units ?? 0;
+                                const here = unitsAt(st.id, styleId, sz);
+                                return (
+                                  <div key={sz} className="border border-line px-2 py-1.5">
+                                    <div className="text-2xs num text-ink2 mb-1">
+                                      {sz}
+                                      {style.coreSizes.includes(sz) ? " ·piv" : ""} · has {here}
+                                    </div>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={wh}
+                                      value={byStore[st.id]?.[sz] ?? 0}
+                                      data-cycle-qty
+                                      onChange={(e) => setQty(st.id, sz, Math.min(wh, Number(e.target.value) || 0))}
+                                      className="w-14 border border-line bg-raised px-1.5 py-1 text-sm text-ink text-right num"
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </Td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -460,9 +523,9 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
                 </tr>
               </thead>
               <tbody>
-                {styles.slice(0, 14).map((sty) => {
+                {styles.slice(0, 16).map((sty) => {
                   const line = byStyle[sty.id] ?? { size: sty.coreSizes[0], units: 0 };
-                  const carried = gradedStyles(storeId, 60).find((g) => g.signal.style.id === sty.id);
+                  const carried = gradedStyles(storeId, 80).find((g) => g.signal.style.id === sty.id);
                   const wh = dcAvailable(sty.id, line.size);
                   return (
                     <tr key={sty.id}>

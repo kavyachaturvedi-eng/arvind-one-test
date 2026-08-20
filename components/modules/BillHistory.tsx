@@ -5,7 +5,7 @@
 // The manager sees how many returns and exchanges the store did.
 
 import React, { useMemo, useState } from "react";
-import { NOW, STYLES, rng } from "@/lib/seed";
+import { NOW, STYLES, rng, styleById } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import { Card, Chip, Empty, Modal, SectionTitle, Stat, StatusDot, Table, Td, Th, inr } from "@/components/ui";
 
@@ -108,10 +108,30 @@ export default function BillHistory() {
     const withDecisions = base.map((b) => (decided[b.id] ? { ...b, status: decided[b.id].kind, reason: decided[b.id].reason } : b));
     const q = query.trim().toLowerCase();
     if (!q) return withDecisions;
+    // Item name too: at the counter, the customer usually names the thing they
+    // bought long before they find the bill number.
     return withDecisions.filter(
-      (b) => b.phone.includes(q) || b.id.toLowerCase().includes(q) || b.customer.toLowerCase().includes(q)
+      (b) =>
+        b.phone.includes(q) ||
+        b.id.toLowerCase().includes(q) ||
+        b.customer.toLowerCase().includes(q) ||
+        b.items.some((i) => i.name.toLowerCase().includes(q)),
     );
   }, [base, decided, query]);
+
+  // Online orders this store fulfilled belong in the same place: "past orders
+  // in my store" is one question, not one per channel.
+  const onlineRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return app.omni
+      .filter((o) => o.storeId === app.storeId)
+      .filter((o) => {
+        if (!q) return true;
+        const style = styleById(o.styleId);
+        return o.id.toLowerCase().includes(q) || o.channel.toLowerCase().includes(q) || style.name.toLowerCase().includes(q);
+      })
+      .sort((a, b) => b.placedAt - a.placedAt);
+  }, [app.omni, app.storeId, query]);
 
   const returned = rows.filter((b) => b.status === "returned");
   const exchanged = rows.filter((b) => b.status === "exchanged");
@@ -181,7 +201,7 @@ export default function BillHistory() {
             data-bill-search
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Scan the bill barcode, or type the phone number or bill no."
+            placeholder="Scan the bill, or type a phone number, bill no., order id or item"
             className="flex-1 rounded-lg border border-line bg-raised px-3 py-3 text-base text-ink placeholder:text-muted"
           />
         </div>
@@ -251,6 +271,50 @@ export default function BillHistory() {
             </Table>
           )}
         </div>
+      </Card>
+
+      <Card>
+        <SectionTitle
+          title="Online orders from this store"
+          right={<Chip>{onlineRows.length}</Chip>}
+        />
+        {onlineRows.length === 0 ? (
+          <div className="text-sm text-ink2">Nothing matches.</div>
+        ) : (
+          <Table>
+            <thead>
+              <tr>
+                <Th>Order</Th>
+                <Th>Channel</Th>
+                <Th>SKU</Th>
+                <Th>Item</Th>
+                <Th>Size</Th>
+                <Th align="right">Qty</Th>
+                <Th align="right">Value</Th>
+                <Th>Status</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {onlineRows.map((o) => {
+                const style = styleById(o.styleId);
+                return (
+                  <tr key={o.id} data-online-order>
+                    <Td className="num text-xs text-ink2">{o.id}</Td>
+                    <Td>{o.channel}</Td>
+                    <Td className="num text-xs text-ink2">{style.id}</Td>
+                    <Td className="text-ink">{style.name}</Td>
+                    <Td className="num">{o.size}</Td>
+                    <Td align="right" className="num">{o.qty}</Td>
+                    <Td align="right" className="num">{inr(o.value)}</Td>
+                    <Td>
+                      <span className="text-xs text-ink2">{o.status.replace(/_/g, " ")}</span>
+                    </Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+        )}
       </Card>
 
       {acting && (
