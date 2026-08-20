@@ -7,12 +7,14 @@ import { sizeSetExceptions } from "@/lib/engine";
 import { NAV_GROUPS, SECTION_ORDER, type NavChild } from "@/lib/nav";
 import { useApp } from "@/lib/state";
 import CommandPalette from "./CommandPalette";
-import { Freshness, Toast } from "./ui";
+import { EndShiftDialog } from "./EndShift";
+import { Chip, Freshness, Toast } from "./ui";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const app = useApp();
   const [navOpen, setNavOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [endShiftOpen, setEndShiftOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const role = ROLES.find((r) => r.id === app.role)!;
 
@@ -117,6 +119,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
           >
             ⌕
           </button>
+
+          {/* The floor's last action of the day, always in reach. */}
+          {app.role === "staff" &&
+            (app.handovers.some((h) => h.from === app.actorName) ? (
+              <Chip tone="good">● Shift handed over</Chip>
+            ) : (
+              <button data-end-shift-cta className="btn-primary !py-2 !text-xs" onClick={() => setEndShiftOpen(true)}>
+                End my shift
+              </button>
+            ))}
 
           <RoleSwitcher />
           <button className="btn-ghost !px-2 text-xs hidden sm:inline-flex" onClick={() => app.dispatch({ type: "logout" })} title="Sign out">
@@ -242,6 +254,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <EndShiftDialog open={endShiftOpen} onClose={() => setEndShiftOpen(false)} />
       {app.toast && <Toast key={app.toast.id} message={app.toast.message} tone={app.toast.tone} onDone={() => app.dispatch({ type: "toast:clear" })} />}
     </div>
   );

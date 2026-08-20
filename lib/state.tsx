@@ -63,6 +63,7 @@ export type ModuleId =
   | "lookup"
   | "shift"
   | "bills"
+  | "attendance"
 ;
 
 interface AppState {
@@ -84,9 +85,22 @@ interface AppState {
   leaves: LeaveRequest[];
   /** The trading day: opened once each morning by the manager or first staff in. */
   dayOpen: boolean;
+  dayClosed: boolean;
+  /** Cash counted into the drawer at day open. */
+  openFloat: number;
+  /** Shift handovers at this counter, newest last. */
+  handovers: Handover[];
   audit: AuditEntry[];
   toast: { id: number; message: string; tone: "good" | "warn" | "info" } | null;
   clockOffsetMinutes: number;
+}
+
+export interface Handover {
+  id: string;
+  from: string;
+  to: string;
+  cash: number;
+  atLabel: string;
 }
 
 export interface LeaveRequest {
@@ -114,7 +128,10 @@ type Action =
   | { type: "task:create"; task: Task }
   | { type: "training:create"; training: TrainingItem }
   | { type: "cash:update"; id: string; patch: Partial<CashException> }
-  | { type: "day:open"; by: string }
+  | { type: "day:open"; by: string; float?: number }
+  | { type: "day:close"; by: string }
+  | { type: "day:reopen" }
+  | { type: "shift:handover"; from: string; to: string; cash: number }
   | { type: "leave:apply"; leave: LeaveRequest }
   | { type: "leave:decide"; id: string; status: "approved" | "declined"; by: string }
   | { type: "audit"; entry: AuditEntry }
@@ -246,6 +263,10 @@ const initial: AppState = {
   cash: CASH_EXCEPTIONS,
   leaves: [{ id: "LV-1", who: "Kiran Joshi", date: "Sun 16 Aug", reason: "Family function", status: "pending" }],
   dayOpen: false,
+  dayClosed: false,
+  openFloat: 8000,
+  // Yesterday's late-shift handover, so the pattern is visible from the start.
+  handovers: [{ id: "HO-1", from: "Kiran Joshi", to: "Sana Qureshi", cash: 14600, atLabel: "Yesterday · 15:00" }],
   audit: [
     { at: NOW - 64 * 60_000, actor: "Commercial", action: "Price revision published", object: "11 styles", system: "Arvind One" },
     { at: NOW - 63 * 60_000, actor: "Arvind One", action: "Created reprint job TK-8803", object: "41 units", system: "Arvind One" },
@@ -282,7 +303,29 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         dayOpen: true,
-        audit: [{ at: NOW, actor: action.by, action: "Day opened — floor checklist started, till float confirmed", object: "day-open", system: "Arvind One" }, ...state.audit],
+        dayClosed: false,
+        openFloat: action.float ?? state.openFloat,
+        audit: [{ at: NOW, actor: action.by, action: "Day opened, floor checklist started and till float confirmed", object: "day-open", system: "Arvind One" }, ...state.audit],
+      };
+    case "day:close":
+      return {
+        ...state,
+        dayClosed: true,
+        audit: [{ at: NOW, actor: action.by, action: "Day closed, summary posted to SAP Finance", object: "day-close", system: "Arvind One" }, ...state.audit],
+      };
+    case "day:reopen":
+      return { ...state, dayClosed: false };
+    case "shift:handover":
+      return {
+        ...state,
+        handovers: [
+          ...state.handovers,
+          { id: `HO-${state.handovers.length + 1}`, from: action.from, to: action.to, cash: action.cash, atLabel: "Today · 11:42" },
+        ],
+        audit: [
+          { at: NOW, actor: action.from, action: `Shift ended, till handed to ${action.to} with ${action.cash} counted`, object: "shift", system: "Arvind One" },
+          ...state.audit,
+        ],
       };
     case "leave:apply":
       return {

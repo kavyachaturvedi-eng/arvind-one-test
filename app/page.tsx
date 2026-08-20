@@ -34,6 +34,7 @@ import Team from "@/components/modules/Team";
 import MerchMoves from "@/components/modules/MerchMoves";
 import StockLookup from "@/components/modules/StockLookup";
 import MyShift from "@/components/modules/MyShift";
+import Attendance from "@/components/modules/Attendance";
 import BillHistory from "@/components/modules/BillHistory";
 
 function Router() {
@@ -95,6 +96,8 @@ function Router() {
       return <StockLookup />;
     case "shift":
       return <MyShift />;
+    case "attendance":
+      return <Attendance />;
     case "bills":
       return <BillHistory />;
     default:

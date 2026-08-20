@@ -18,7 +18,7 @@ const ROLES = [
 ];
 const MODULES_BY_ROLE = {
   store: ["pos", "bills", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "reports", "agents", "ask"],
-  staff: ["pos", "bills", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift"],
+  staff: ["pos", "bills", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift", "attendance"],
   planner: ["live", "performance", "tickets", "allocate", "merch", "moves", "catchment", "trainings", "truth", "reports", "governance", "agents", "ask"],
   leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "agents", "ask"],
 };
@@ -372,14 +372,26 @@ async function expandNav(page) {
     else fail("past-orders panel missing for a known customer");
   } else fail("customer profile popup did not open on a known number");
 
-  // Held bills: hold the current empty-cart flow is not possible, so just
-  // confirm the drawer opens and reads honestly.
+  // Held bills: confirm the drawer opens and reads honestly.
   await page.locator("[data-held]").click();
   await page.waitForTimeout(260);
   if (/Held bills/.test(await page.locator("body").innerText())) pass("held-bills drawer opens from the till bar");
   else fail("held-bills drawer did not open");
   await page.keyboard.press("Escape");
   await page.waitForTimeout(200);
+
+  // Day end from the till, then reopen so the rest of the run can bill.
+  await page.locator("[data-day-end]").click();
+  await page.waitForTimeout(280);
+  if ((await page.locator("[data-day-end-confirm]").count()) === 0) fail("day-end dialog missing on the till");
+  else {
+    await page.locator("[data-day-end-confirm]").click();
+    await page.waitForTimeout(320);
+    if (/Day closed/.test(await page.locator("body").innerText())) pass("day closed from the billing screen");
+    else fail("day close did not take");
+    await page.locator("main button", { hasText: /Reopen the till/ }).click();
+    await page.waitForTimeout(260);
+  }
 
   await exitTillIfOpen(page);
   await expandNav(page);
@@ -418,23 +430,40 @@ async function expandNav(page) {
   } else fail("return modal did not open");
   await page.screenshot({ path: `${SHOTS}/bills.png`, fullPage: true });
 
+  // Attendance: days present, holiday calendar, ask for leave.
+  await page.locator('nav [data-module="attendance"]').first().click();
+  await page.waitForTimeout(320);
+  const attText = await page.locator("main").innerText();
+  if (/Days present/i.test(attText) && /Onam/.test(attText)) pass("attendance shows days present and the holiday calendar");
+  else fail("attendance screen incomplete");
+  await page.locator("[data-apply-leave]").click();
+  await page.waitForTimeout(260);
+  if (/waiting for manager/i.test(await page.locator("main").innerText())) pass("leave asked from Attendance");
+  else fail("leave request missing");
+  await page.screenshot({ path: `${SHOTS}/attendance.png`, fullPage: true });
+
+  // Shifts: now, upcoming, cash at the counter, then end the shift from the
+  // top-bar CTA with a counted handover.
   await page.locator('nav [data-module="shift"]').first().click();
   await page.waitForTimeout(320);
-  await page.locator("[data-day-report]").click();
-  await page.waitForTimeout(240);
-  await page.locator("[data-apply-leave]").click();
-  await page.waitForTimeout(240);
   const shiftText = await page.locator("main").innerText();
-  if (/Day report sent/i.test(shiftText)) pass("staff day report sent");
-  else fail("day report did not send");
-  if (/waiting for manager/i.test(shiftText)) pass("leave request submitted");
-  else fail("leave request missing");
-  await page.locator("main input[type='checkbox']").first().check();
-  await page.locator("[data-end-shift]").click();
-  await page.waitForTimeout(260);
-  if (/Shift ended/i.test(await page.locator("main").innerText())) pass("shift ended with handover");
-  else fail("shift did not end");
-  await page.screenshot({ path: `${SHOTS}/myshift.png`, fullPage: true });
+  if (/Upcoming shifts/i.test(shiftText) && /Cash at this counter/i.test(shiftText)) pass("shifts screen shows now, upcoming and cash operations");
+  else fail("shifts screen incomplete");
+  if (/handed/i.test(shiftText)) pass("shift-change cash movements listed");
+  else fail("handover history missing");
+  await page.screenshot({ path: `${SHOTS}/shifts.png`, fullPage: true });
+
+  await page.locator("[data-end-shift-cta]").click();
+  await page.waitForTimeout(300);
+  if ((await page.locator("[data-handover-count]").count()) === 0) fail("end-shift dialog did not ask for cash");
+  else {
+    pass("end-shift CTA in the top bar asks for the cash count");
+    await page.locator("[data-handover]").click();
+    await page.waitForTimeout(320);
+    const afterShift = await page.locator("body").innerText();
+    if (/Shift handed over/i.test(afterShift)) pass("shift handed over with cash, CTA turns into a status");
+    else fail("handover did not complete");
+  }
 
   // Manager sees and approves the leave.
   await page.locator('[data-role="store"]').first().click();

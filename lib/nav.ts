@@ -75,8 +75,11 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    key: "shiftg", label: "My Shift", glyph: "◷", roles: ["staff"], section: "Operations",
-    children: [{ id: "shift", label: "Shift & Attendance" }],
+    key: "shiftg", label: "Me", glyph: "◷", roles: ["staff"], section: "Operations",
+    children: [
+      { id: "shift", label: "Shifts" },
+      { id: "attendance", label: "Attendance" },
+    ],
   },
   {
     key: "teamg", label: "Team", glyph: "◔", roles: ["store"], section: "Operations",
@@ -189,7 +192,8 @@ export const NAV_ACTIONS: NavAction[] = [
   { label: "Return or exchange a bill", hint: "Last 30 days, with a reason", id: "bills", roles: ["staff", "store"] },
   { label: "Add a member", hint: "Name and mobile, done", id: "crm", focus: "enrol", roles: ["staff", "store"] },
   { label: "Report a problem", hint: "Opens tickets", id: "tickets", roles: ["staff", "store"] },
-  { label: "End my shift", hint: "Handover and daily report", id: "shift", roles: ["staff"] },
+  { label: "End my shift", hint: "Count the cash and hand over", id: "shift", roles: ["staff"] },
+  { label: "Ask for leave", hint: "Attendance and the holiday calendar", id: "attendance", roles: ["staff"] },
   { label: "Pull stock from the warehouse", hint: "Replenishment", id: "replenish", roles: ["store"] },
   { label: "Plan next week's shifts", hint: "Staff & Shifts", id: "team", roles: ["store"] },
   { label: "Review smart stock moves", hint: "Festival & swap suggestions", id: "merch", roles: ["store", "planner"] },

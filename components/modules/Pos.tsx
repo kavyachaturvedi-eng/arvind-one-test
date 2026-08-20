@@ -133,6 +133,7 @@ export default function Pos() {
   // Opening the day at the counter, held bills, and the customer's profile.
   const [floatText, setFloatText] = useState("8000");
   const [heldOpen, setHeldOpen] = useState(false);
+  const [dayEndOpen, setDayEndOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ id: string; kind: "returned" | "exchanged" } | null>(null);
   const [settled, setSettled] = useState<Record<string, string>>({});
@@ -165,6 +166,9 @@ export default function Pos() {
   const gst = Math.round((subtotal * 12) / 112);
   const itemCount = cart.reduce((a, l) => a + l.qty, 0);
   const suggestion = attachSuggestion(cart, carried);
+
+  // Cash that leaves for the bank at day close, float stays behind.
+  const cashForDeposit = Math.round((salesToday * 0.26) / 10) * 10;
 
   // Carry bag and loyalty-point payment. One point is worth 25 paise.
   const bagValue = bag ? CARRY_BAG_PRICE : 0;
@@ -318,7 +322,15 @@ export default function Pos() {
         >
           ⏸ Held bills{parked.length ? ` · ${parked.length}` : ""}
         </button>
-        {app.dayOpen && <Chip tone="good">● Day open</Chip>}
+        {app.dayOpen && !app.dayClosed && (
+          <>
+            <Chip tone="good">● Day open</Chip>
+            <button data-day-end className="btn !py-1.5 !text-xs" onClick={() => setDayEndOpen(true)}>
+              Day end
+            </button>
+          </>
+        )}
+        {app.dayClosed && <Chip tone="neutral">Day closed</Chip>}
         <span className="text-2xs text-muted num hidden sm:inline">{inr(salesToday, { compact: true })} · {billCount} bills</span>
         <button className={`btn !py-1.5 !text-xs ${view === "day" ? "!border-[color:var(--brand)] !text-[color:var(--brand)]" : ""}`} onClick={() => setView(view === "till" ? "day" : "till")}>
           {view === "till" ? "Today's sales" : "Back to billing"}
@@ -332,6 +344,25 @@ export default function Pos() {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="max-w-[1200px] mx-auto">
             <DayView v={v} bills={bills} billCount={billCount} storeId={app.storeId} onReprint={(id) => app.toastNow(`${id} reprinted`, "info")} />
+          </div>
+        </div>
+      ) : app.dayClosed ? (
+        /* ── The day is closed: nothing bills until it is reopened ── */
+        <div className="flex-1 grid place-items-center p-6">
+          <div className="w-full max-w-sm text-center">
+            <div className="mx-auto w-14 h-14 grid place-items-center border-2 mb-4" style={{ borderColor: "var(--status-good)", color: "var(--status-good)" }}>
+              <span className="text-2xl">✓</span>
+            </div>
+            <h2 className="text-xl font-medium text-ink">Day closed</h2>
+            <div className="text-xs text-muted mt-1 num">
+              {billCount} bills · {inr(salesToday)} billed · {inr(cashForDeposit)} to the bank
+            </div>
+            <div className="text-xs text-ink2 mt-4 leading-relaxed">
+              The summary is with Finance and the deposit slip has printed. The till stays shut until tomorrow.
+            </div>
+            <button className="btn w-full mt-5 !py-3" onClick={() => app.dispatch({ type: "day:reopen" })}>
+              Reopen the till
+            </button>
           </div>
         </div>
       ) : !app.dayOpen ? (
@@ -370,7 +401,7 @@ export default function Pos() {
               className="btn-primary w-full mt-4 !py-4 !text-base"
               disabled={!floatText || Number(floatText) <= 0}
               onClick={() => {
-                app.dispatch({ type: "day:open", by: app.actorName });
+                app.dispatch({ type: "day:open", by: app.actorName, float: Number(floatText) });
                 app.dispatch({
                   type: "audit",
                   entry: { at: NOW, actor: app.actorName, action: `Till opened with ${inr(Number(floatText))} counted in the drawer`, object: "day-open", system: "POS" },
@@ -782,6 +813,66 @@ export default function Pos() {
           </div>
         </div>
       )}
+
+      {/* ── Day end, from the till ────────────────────────────────────────── */}
+      <Modal
+        open={dayEndOpen}
+        onClose={() => setDayEndOpen(false)}
+        title="Close the day"
+        sub={`${store.name} · ${billCount} bills · ${inr(salesToday)} billed`}
+        footer={
+          <>
+            <button className="btn" onClick={() => setDayEndOpen(false)}>Not yet</button>
+            <button
+              data-day-end-confirm
+              className="btn-primary"
+              onClick={() => {
+                app.dispatch({ type: "day:close", by: app.actorName });
+                app.dispatch({
+                  type: "audit",
+                  entry: {
+                    at: NOW,
+                    actor: app.actorName,
+                    action: `Day closed at the till: ${billCount} bills, ${inr(salesToday)} billed, ${inr(cashForDeposit)} cash for deposit`,
+                    object: "day-close",
+                    system: "POS",
+                  },
+                });
+                app.toastNow("Day closed. Deposit slip printed and the summary posted to Finance.", "good");
+                setDayEndOpen(false);
+              }}
+            >
+              Close the day
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="border border-line p-3">
+              <div className="label mb-1">Billed today</div>
+              <div className="text-2xl font-semibold num text-ink">{inr(salesToday)}</div>
+              <div className="text-2xs text-muted mt-0.5">{billCount} bills</div>
+            </div>
+            <div className="border border-line p-3">
+              <div className="label mb-1">Cash for deposit</div>
+              <div className="text-2xl font-semibold num" style={{ color: "var(--status-good)" }}>{inr(cashForDeposit)}</div>
+              <div className="text-2xs text-muted mt-0.5">Float {inr(app.openFloat)} stays in the till</div>
+            </div>
+          </div>
+          {parked.length > 0 && (
+            <div className="border-l-2 pl-3 py-1" style={{ borderColor: "var(--status-warning)" }}>
+              <div className="text-xs text-ink">
+                {parked.length} bill{parked.length === 1 ? "" : "s"} still on hold. Closing the day cancels them.
+              </div>
+            </div>
+          )}
+          <div className="text-2xs text-muted leading-relaxed">
+            One summary goes to Finance: sales by payment mode, the cash to bank, and any counting difference. Nothing
+            is emailed and nothing is typed twice.
+          </div>
+        </div>
+      </Modal>
 
       {/* ── Held bills ────────────────────────────────────────────────────── */}
       <Modal

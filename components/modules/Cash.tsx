@@ -22,7 +22,7 @@ export default function Cash() {
   const yesterdaySales = Math.round(v.todaySales * (0.9 + r() * 0.3));
   const cashShare = 0.24 + r() * 0.1;
   const depositedYesterday = Math.round(yesterdaySales * cashShare);
-  const openingFloat = 8000;
+  const openingFloat = app.openFloat;
 
   // Today so far, by payment mode.
   const upiShare = 0.42 + r() * 0.08;
@@ -37,7 +37,7 @@ export default function Cash() {
   const scoped = scopedRaw.length ? scopedRaw : app.cash;
   const open = scoped.filter((c) => c.status !== "auto_cleared");
 
-  const [closed, setClosed] = useState(false);
+  const closed = app.dayClosed;
 
   function clearOne(id: string) {
     app.dispatch({ type: "cash:update", id, patch: { status: "auto_cleared" } });
@@ -45,7 +45,7 @@ export default function Cash() {
   }
 
   function closeDay() {
-    setClosed(true);
+    app.dispatch({ type: "day:close", by: app.actorName });
     app.dispatch({
       type: "audit",
       entry: {
@@ -130,6 +130,26 @@ export default function Cash() {
           )}
         </Card>
       </div>
+
+      {/* Who handed what to whom, so a shortage has an owner. */}
+      <Card>
+        <SectionTitle title="Shift handovers today" right={<Chip>{app.handovers.length}</Chip>} />
+        <Table>
+          <thead>
+            <tr><Th>When</Th><Th>From</Th><Th>To</Th><Th align="right">Cash handed</Th></tr>
+          </thead>
+          <tbody>
+            {[...app.handovers].reverse().map((h) => (
+              <tr key={h.id}>
+                <Td className="text-xs text-ink2 whitespace-nowrap">{h.atLabel}</Td>
+                <Td className="text-sm text-ink">{h.from}</Td>
+                <Td className="text-sm text-ink">{h.to}</Td>
+                <Td align="right" className="num text-sm font-semibold text-ink">{inr(h.cash)}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </Card>
 
       <div className="text-2xs text-muted">
         Closing the day posts one summary to Finance. No emails, no justification notes, no hunting for deposit slips.
