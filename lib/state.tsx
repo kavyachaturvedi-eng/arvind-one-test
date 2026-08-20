@@ -436,7 +436,7 @@ function seedRequests(): PlanningRequest[] {
       note: "New wall went in after the fit-out. We can hold about 400 more units.",
       evidence: { fillRate: 1.02, sellable: 3180, ros: 0, coverDays: 0, sizeSetStatus: "healthy", valueAtRisk: 0 },
       status: "approved",
-      decidedBy: "Regional Planning",
+      decidedBy: "Retail Planning",
       decidedAt: NOW - 5 * DAY,
       decisionNote: "Approved after the fit-out photos. Norm raised from 3,120 to 3,540.",
     },
@@ -1001,9 +1001,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       case "staff":
         return "Store Staff";
       case "planner":
-        return "Regional Planning";
+        return "Retail Planning";
       case "catplan":
-        return "Category Planning";
+        return "Buying team";
       case "leadership":
         return "Super Admin";
     }

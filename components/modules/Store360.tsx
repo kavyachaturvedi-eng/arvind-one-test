@@ -25,7 +25,7 @@ import {
 import { useApp } from "@/lib/state";
 import { inr, pct } from "@/lib/rules";
 
-type StoreSort = "name" | "cluster" | "grade" | "sales" | "ach" | "fill" | "st" | "core" | "risk" | "asks";
+type StoreSort = "name" | "cluster" | "grade" | "sales" | "ach" | "fill" | "st" | "core" | "broken" | "risk" | "asks";
 
 export default function Store360() {
   const app = useApp();
@@ -48,6 +48,7 @@ export default function Store360() {
       case "fill": return r.fillRate;
       case "st": return r.sellThrough;
       case "core": return r.corePct;
+      case "broken": return r.brokenStuds;
       case "risk": return r.valueAtRisk;
       case "asks": return r.openAsks;
     }
@@ -82,7 +83,7 @@ export default function Store360() {
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <Stat
               label="Fill rate"
               value={pct(summary.fillRate)}
@@ -107,6 +108,12 @@ export default function Store360() {
               value={inr(summary.valueAtRisk, { compact: true })}
               sub={`${summary.brokenStyles} broken · ${summary.atRiskStyles} at risk`}
               tone={summary.valueAtRisk > 0 ? "critical" : "good"}
+            />
+            <Stat
+              label="Broken studs"
+              value={String(summary.brokenStuds)}
+              sub={summary.brokenStuds > 0 ? inr(summary.brokenStudValue, { compact: true }) : undefined}
+              tone={summary.brokenStuds > 0 ? "critical" : "good"}
             />
           </div>
 
@@ -181,6 +188,7 @@ export default function Store360() {
                   <SortTh sortKey="fill" sorter={sorter} align="right">Fill rate</SortTh>
                   <SortTh sortKey="st" sorter={sorter} align="right">Sell-through</SortTh>
                   <SortTh sortKey="core" sorter={sorter} align="right">Core</SortTh>
+                  <SortTh sortKey="broken" sorter={sorter} align="right">Broken studs</SortTh>
                   <SortTh sortKey="risk" sorter={sorter} align="right">At risk</SortTh>
                   <SortTh sortKey="asks" sorter={sorter} align="right">Asks</SortTh>
                 </tr>
@@ -206,6 +214,16 @@ export default function Store360() {
                     <Td align="right" className="num">{pct(r.fillRate)}</Td>
                     <Td align="right" className="num">{pct(r.sellThrough)}</Td>
                     <Td align="right" className="num">{pct(r.corePct)}</Td>
+                    <Td align="right" className="num">
+                      {r.brokenStuds > 0 ? (
+                        <span className="inline-flex items-center gap-1.5 justify-end">
+                          <StatusDot tone="critical" />
+                          {r.brokenStuds}
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </Td>
                     <Td align="right" className="num">{r.valueAtRisk > 0 ? inr(r.valueAtRisk, { compact: true }) : "—"}</Td>
                     <Td align="right">{r.openAsks > 0 ? <Chip tone="warn">{r.openAsks}</Chip> : <span className="text-muted">—</span>}</Td>
                   </tr>

@@ -8,8 +8,8 @@
 // while you allocate, because that is the number that constrains the decision.
 
 import React, { useMemo, useState } from "react";
-import { Callout, Card, Chip, Modal, SectionTitle, Stat, StatusDot, Swatch, Table, Td, Th, relTime } from "@/components/ui";
-import { applyMove, gradedStyles, planningStores, replenRun, warehouseBySize, warehouseTotal } from "@/lib/engine";
+import { Callout, Card, Chip, Modal, SectionTitle, Stat, StatusDot, Swatch, Table, Tabs, Td, Th, relTime } from "@/components/ui";
+import { applyMove, dcAvailable, gradedStyles, planningStores, replenRun, unitsAt, warehouseBySize, warehouseTotal } from "@/lib/engine";
 import { NOW, STYLES, storeById, styleById } from "@/lib/seed";
 import { CYCLE_LABEL, useApp } from "@/lib/state";
 import { PLANNING_BRAND } from "@/lib/engine";
@@ -237,26 +237,42 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
   const app = useApp();
   const stores = planningStores();
   const styles = useMemo(() => STYLES.filter((s) => s.brand === PLANNING_BRAND), []);
+
+  // Two ways in, because planners think both ways: "where does this unit go?"
+  // and "what does this store need?".
+  const [mode, setMode] = useState<"unit" | "store">("unit");
+
+  // By unit: one SKU and size, spread across stores.
   const [styleId, setStyleId] = useState(styles[0]?.id ?? "");
   const [size, setSize] = useState<Size | "">("");
-  const [qty, setQty] = useState<Record<string, number>>({});
+  const [byStore, setByStore] = useState<Record<string, number>>({});
+
+  // By store: one store, several SKUs.
+  const [storeId, setStoreId] = useState(stores[0]?.id ?? "");
+  const [byStyle, setByStyle] = useState<Record<string, { size: Size; units: number }>>({});
 
   const style = styleById(styleId);
   const bySize = useMemo(() => warehouseBySize(styleId), [styleId]);
   const total = useMemo(() => warehouseTotal(styleId), [styleId]);
-  // Open on a size the warehouse can actually ship, otherwise the first thing a
-  // planner sees is a dead end.
   const deepest = useMemo(() => [...bySize].sort((a, b) => b.units - a.units)[0]?.size ?? style.coreSizes[0], [bySize, style.coreSizes]);
   const chosenSize = (size || deepest) as Size;
   const availableInSize = bySize.find((b) => b.size === chosenSize)?.units ?? 0;
 
-  const allocated = Object.values(qty).reduce((a, n) => a + n, 0);
-  const over = allocated > availableInSize;
+  const unitAllocated = Object.values(byStore).reduce((a, n) => a + n, 0);
+  const storeAllocated = Object.values(byStyle).reduce((a, p) => a + p.units, 0);
+  const allocated = mode === "unit" ? unitAllocated : storeAllocated;
+  const over = mode === "unit" && allocated > availableInSize;
 
   function submit() {
-    const lines: CycleLine[] = Object.entries(qty)
-      .filter(([, units]) => units > 0)
-      .map(([storeId, units], i) => ({ id: `CL-${i}`, storeId, styleId, size: chosenSize, units }));
+    const lines: CycleLine[] =
+      mode === "unit"
+        ? Object.entries(byStore)
+            .filter(([, units]) => units > 0)
+            .map(([sid, units], i) => ({ id: `CL-${i}`, storeId: sid, styleId, size: chosenSize, units }))
+        : Object.entries(byStyle)
+            .filter(([, p]) => p.units > 0)
+            .map(([sty, p], i) => ({ id: `CL-${i}`, storeId, styleId: sty, size: p.size, units: p.units }));
+
     if (lines.length === 0 || over) return;
     const cycle: Cycle = {
       id: `CY-${kind === "renewal" ? "RN" : "AL"}-${app.cycles.length + 1}`,
@@ -266,11 +282,12 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
       createdBy: app.actorName,
       source: "warehouse",
       lines,
-      note: `${style.name} · size ${chosenSize}`,
+      note: mode === "unit" ? `${style.name} · size ${chosenSize}` : `${storeById(storeId).name} · ${lines.length} styles`,
     };
     app.dispatch({ type: "cycle:create", cycle });
-    app.toastNow(`${CYCLE_LABEL[kind]} cycle created · ${allocated} units across ${lines.length} stores`, "good");
-    setQty({});
+    app.toastNow(`${CYCLE_LABEL[kind]} cycle created · ${allocated} units`, "good");
+    setByStore({});
+    setByStyle({});
     onClose();
   }
 
@@ -283,7 +300,7 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
       footer={
         <div className="flex items-center justify-between w-full gap-3">
           <span className="text-xs num" style={{ color: over ? "var(--status-critical)" : "var(--text-secondary)" }}>
-            {allocated} of {availableInSize} available in size {chosenSize}
+            {mode === "unit" ? `${allocated} of ${availableInSize} available in size ${chosenSize}` : `${allocated} units across ${Object.values(byStyle).filter((p) => p.units > 0).length} styles`}
           </span>
           <button className="btn-primary" data-cycle-submit disabled={allocated === 0 || over} onClick={submit}>
             Send for approval
@@ -292,92 +309,220 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
       }
     >
       <div className="space-y-3">
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
-            <div className="label mb-1">Unit</div>
-            <select
-              value={styleId}
-              data-cycle-style
-              onChange={(e) => {
-                setStyleId(e.target.value);
-                setSize("");
-                setQty({});
-              }}
-              className="w-full border border-line bg-raised px-3 py-2 text-sm text-ink"
-            >
-              {styles.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.id} · {s.name} · {s.colour}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <div className="label mb-1">Size</div>
-            <select
-              value={chosenSize}
-              data-cycle-size
-              onChange={(e) => {
-                setSize(e.target.value as Size);
-                setQty({});
-              }}
-              className="w-full border border-line bg-raised px-3 py-2 text-sm text-ink"
-            >
-              {bySize.map((b) => (
-                <option key={b.size} value={b.size}>
-                  {b.size} — {b.units} available
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <Tabs
+          value={mode}
+          onChange={(m: "unit" | "store") => setMode(m)}
+          options={[
+            { id: "unit", label: "By unit" },
+            { id: "store", label: "By store" },
+          ]}
+        />
 
-        <div className="flex items-center gap-3 flex-wrap text-xs">
-          <Swatch hex={style.colourHex} label={style.colour} />
-          <span className="text-ink2">{style.category}</span>
-          <span className="num text-ink2">MRP {inr(style.mrp)}</span>
-          <span className="num text-ink">
-            Warehouse total {total.toLocaleString("en-IN")} · size {chosenSize}: {availableInSize}
-          </span>
-        </div>
+        {mode === "unit" ? (
+          <>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <div className="label mb-1">Unit</div>
+                <select
+                  value={styleId}
+                  data-cycle-style
+                  onChange={(e) => {
+                    setStyleId(e.target.value);
+                    setSize("");
+                    setByStore({});
+                  }}
+                  className={inputCls}
+                >
+                  {styles.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.id} · {s.name} · {s.colour}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div className="label mb-1">Size</div>
+                <select
+                  value={chosenSize}
+                  data-cycle-size
+                  onChange={(e) => {
+                    setSize(e.target.value as Size);
+                    setByStore({});
+                  }}
+                  className={inputCls}
+                >
+                  {bySize.map((b) => (
+                    <option key={b.size} value={b.size}>
+                      {b.size}
+                      {style.coreSizes.includes(b.size) ? " · pivotal" : ""} — {b.units} available
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-        {over && <Callout tone="critical" title={`Over the warehouse by ${allocated - availableInSize} units in size ${chosenSize}`} />}
+            <div className="flex items-center gap-3 flex-wrap text-xs">
+              <Swatch hex={style.colourHex} label={style.colour} />
+              <span className="text-ink2">{style.category}</span>
+              <span className="num text-ink2">MRP {inr(style.mrp)}</span>
+              <span className="num text-ink">
+                Warehouse total {total.toLocaleString("en-IN")} · size {chosenSize}: {availableInSize}
+              </span>
+            </div>
 
-        <Table>
-          <thead>
-            <tr>
-              <Th>Store</Th>
-              <Th>Grade</Th>
-              <Th align="right">On floor now</Th>
-              <Th align="right">Fill rate</Th>
-              <Th align="right">Allocate</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {stores.map((s) => {
-              const carried = gradedStyles(s.id, 60).find((g) => g.signal.style.id === styleId);
-              return (
-                <tr key={s.id}>
-                  <Td className="text-ink">{s.name}</Td>
-                  <Td>{s.grade}</Td>
-                  <Td align="right" className="num">{carried ? carried.signal.sellable : 0}</Td>
-                  <Td align="right" className="num">{pct(app.normFor(s.id) > 0 ? (carried?.signal.sellable ?? 0) / app.normFor(s.id) : 0)}</Td>
-                  <Td align="right">
-                    <input
-                      type="number"
-                      min={0}
-                      value={qty[s.id] ?? 0}
-                      data-cycle-qty
-                      onChange={(e) => setQty({ ...qty, [s.id]: Math.max(0, Number(e.target.value) || 0) })}
-                      className="w-16 border border-line bg-raised px-2 py-1 text-sm text-ink text-right num"
-                    />
-                  </Td>
+            {over && <Callout tone="critical" title={`Over the warehouse by ${allocated - availableInSize} units in size ${chosenSize}`} />}
+
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Store</Th>
+                  <Th>Grade</Th>
+                  <Th align="right">Has this size</Th>
+                  <Th align="right">Has this style</Th>
+                  <Th>Set</Th>
+                  <Th align="right">Fill rate</Th>
+                  <Th align="right">Allocate</Th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </Table>
+              </thead>
+              <tbody>
+                {stores.map((st) => {
+                  const carried = gradedStyles(st.id, 60).find((g) => g.signal.style.id === styleId);
+                  const hasSize = unitsAt(st.id, styleId, chosenSize);
+                  return (
+                    <tr key={st.id}>
+                      <Td className="text-ink">{st.name}</Td>
+                      <Td>{st.grade}</Td>
+                      <Td align="right" className="num" style={hasSize === 0 ? { color: "var(--status-critical)" } : undefined}>
+                        {hasSize}
+                      </Td>
+                      <Td align="right" className="num">{carried ? carried.signal.sellable : 0}</Td>
+                      <Td>
+                        {carried ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <StatusDot tone={carried.signal.health.status === "healthy" ? "good" : carried.signal.health.status === "broken" ? "critical" : "warn"} />
+                            <span className="text-xs text-ink2">
+                              {carried.signal.health.status === "healthy" ? "Healthy" : carried.signal.health.status === "broken" ? "Broken" : "At risk"}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted">Not carried</span>
+                        )}
+                      </Td>
+                      <Td align="right" className="num">{pct(app.normFor(st.id) > 0 ? (carried?.signal.sellable ?? 0) / app.normFor(st.id) : 0)}</Td>
+                      <Td align="right">
+                        <input
+                          type="number"
+                          min={0}
+                          value={byStore[st.id] ?? 0}
+                          data-cycle-qty
+                          onChange={(e) => setByStore({ ...byStore, [st.id]: Math.max(0, Number(e.target.value) || 0) })}
+                          className="w-16 border border-line bg-raised px-2 py-1 text-sm text-ink text-right num"
+                        />
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          </>
+        ) : (
+          <>
+            <div>
+              <div className="label mb-1">Store</div>
+              <select
+                value={storeId}
+                data-cycle-store
+                onChange={(e) => {
+                  setStoreId(e.target.value);
+                  setByStyle({});
+                }}
+                className={inputCls}
+              >
+                {stores.map((st) => (
+                  <option key={st.id} value={st.id}>
+                    {st.name} · {st.grade}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <Table>
+              <thead>
+                <tr>
+                  <Th>SKU</Th>
+                  <Th>Style</Th>
+                  <Th>Colour</Th>
+                  <Th align="right">Has now</Th>
+                  <Th>Set</Th>
+                  <Th>Size</Th>
+                  <Th align="right">Warehouse</Th>
+                  <Th align="right">Allocate</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {styles.slice(0, 14).map((sty) => {
+                  const line = byStyle[sty.id] ?? { size: sty.coreSizes[0], units: 0 };
+                  const carried = gradedStyles(storeId, 60).find((g) => g.signal.style.id === sty.id);
+                  const wh = dcAvailable(sty.id, line.size);
+                  return (
+                    <tr key={sty.id}>
+                      <Td className="num text-xs text-ink2">{sty.id}</Td>
+                      <Td className="text-ink">{sty.name}</Td>
+                      <Td>
+                        <Swatch hex={sty.colourHex} label={sty.colour} />
+                      </Td>
+                      <Td align="right" className="num">{carried ? carried.signal.sellable : 0}</Td>
+                      <Td>
+                        {carried ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <StatusDot tone={carried.signal.health.status === "healthy" ? "good" : carried.signal.health.status === "broken" ? "critical" : "warn"} />
+                            <span className="text-xs text-ink2">
+                              {carried.signal.health.status === "healthy" ? "Healthy" : carried.signal.health.status === "broken" ? "Broken" : "At risk"}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted">Not carried</span>
+                        )}
+                      </Td>
+                      <Td>
+                        <select
+                          value={line.size}
+                          data-cycle-size
+                          onChange={(e) => setByStyle({ ...byStyle, [sty.id]: { size: e.target.value as Size, units: 0 } })}
+                          className="border border-line bg-raised px-2 py-1 text-xs text-ink num"
+                        >
+                          {sty.sizes.map((sz) => (
+                            <option key={sz} value={sz}>
+                              {sz}
+                              {sty.coreSizes.includes(sz) ? " · pivotal" : ""} — {dcAvailable(sty.id, sz)}
+                            </option>
+                          ))}
+                        </select>
+                      </Td>
+                      <Td align="right" className="num">{wh}</Td>
+                      <Td align="right">
+                        <input
+                          type="number"
+                          min={0}
+                          max={wh}
+                          value={line.units}
+                          data-cycle-qty
+                          onChange={(e) =>
+                            setByStyle({ ...byStyle, [sty.id]: { size: line.size, units: Math.max(0, Math.min(wh, Number(e.target.value) || 0)) } })
+                          }
+                          className="w-16 border border-line bg-raised px-2 py-1 text-sm text-ink text-right num"
+                        />
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          </>
+        )}
       </div>
     </Modal>
   );
 }
+
+const inputCls = "w-full border border-line bg-raised px-3 py-2 text-sm text-ink";

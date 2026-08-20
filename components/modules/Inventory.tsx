@@ -90,7 +90,7 @@ export default function Inventory() {
 
       <EstateFilterBar />
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
         <Stat
           label="On floor"
           value={summary.sellableUnits.toLocaleString("en-IN")}
@@ -101,7 +101,7 @@ export default function Inventory() {
         />
         <Stat label="Floor value at MRP" value={inr(floorValue, { compact: true })} />
         <Stat label="In transit" value={summary.inTransit.toLocaleString("en-IN")} />
-        <Stat label="Warehouse held" value={held.units.toLocaleString("en-IN")} sub={pct(held.share)} />
+        <Stat label="Warehouse held" value={pct(held.share)} />
         <Stat
           label="Estate cover"
           value={`${Math.round(estateCover)} days`}
@@ -112,6 +112,12 @@ export default function Inventory() {
           value={inr(summary.valueAtRisk, { compact: true })}
           sub={`${summary.brokenStyles} broken size sets`}
           tone={summary.valueAtRisk > 0 ? "critical" : "good"}
+        />
+        <Stat
+          label="Broken studs"
+          value={String(summary.brokenStuds)}
+          sub={summary.brokenStuds > 0 ? inr(summary.brokenStudValue, { compact: true }) : undefined}
+          tone={summary.brokenStuds > 0 ? "critical" : "good"}
         />
       </div>
 

@@ -12,7 +12,7 @@ import { Card, Chip, SectionTitle, SortTh, Stat, StatusDot, Table, Tabs, Td, Th,
 import { applyMove, planningStores, replenRun, warehouseHeld } from "@/lib/engine";
 import { NOW, storeById, styleById } from "@/lib/seed";
 import { useApp } from "@/lib/state";
-import { HOLDBACK_GOAL, inr, lastRunAt, nextRunAt, pct } from "@/lib/rules";
+import { inr, lastRunAt, nextRunAt, pct } from "@/lib/rules";
 import type { ReplenLine, StockMove } from "@/lib/types";
 
 type Filter = "open" | "shipped" | "held";
@@ -95,7 +95,7 @@ export default function Replen() {
         <Stat label="Stores in this run" value={`${run.triggered.length} of ${stores.length}`} tone={run.triggered.length > 0 ? "warn" : "good"} emphasis />
         <Stat label="Units proposed" value={open.reduce((a, l) => a + l.units, 0).toLocaleString("en-IN")} />
         <Stat label="Paused stores" value={String(app.pausedStores.length)} tone={app.pausedStores.length > 0 ? "warn" : undefined} />
-        <Stat label="Warehouse held" value={held.units.toLocaleString("en-IN")} sub={`${pct(held.share)} · goal ${pct(HOLDBACK_GOAL)}`} />
+        <Stat label="Warehouse held" value={pct(held.share)} />
       </div>
 
       <Card>

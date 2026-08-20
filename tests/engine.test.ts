@@ -34,6 +34,7 @@ import {
   dropAllocation,
   dropUnitsFor,
   applyMove,
+  brokenStuds,
   unitsAt,
   validateMove,
   NO_FILTERS,
@@ -1302,5 +1303,38 @@ describe("moving stock by hand", () => {
     expect(dcAvailable(style.id, size)).toBe(0);
     expect(applyMove({ from: "warehouse", toStoreId: st.id, styleId: style.id, size, units: 1 })).toBe(false);
     expect(dcAvailable(style.id, size)).toBe(0);
+  });
+});
+
+describe("broken studs", () => {
+  it("counts only styles that are both selling and short a pivotal size", () => {
+    const stores = planningStores();
+    const studs = brokenStuds(stores);
+    studs.forEach((x) => {
+      expect(x.graded.grade).toBe("stud");
+      expect(x.graded.signal.health.status).not.toBe("healthy");
+    });
+  });
+
+  it("is a subset of the unhealthy styles, never larger", () => {
+    const stores = planningStores();
+    const s = estateSummary(stores, "week");
+    expect(s.brokenStuds).toBeLessThanOrEqual(s.brokenStyles + s.atRiskStyles);
+    expect(s.brokenStuds).toBe(brokenStuds(stores).length);
+  });
+
+  it("ranks the most expensive one first, and prices the whole set", () => {
+    const studs = brokenStuds(planningStores());
+    for (let i = 1; i < studs.length; i++) {
+      expect(studs[i - 1].graded.signal.valueAtRisk).toBeGreaterThanOrEqual(studs[i].graded.signal.valueAtRisk);
+    }
+    const s = estateSummary(planningStores(), "week");
+    expect(s.brokenStudValue).toBeCloseTo(studs.reduce((a, x) => a + x.graded.signal.valueAtRisk, 0), 4);
+  });
+
+  it("adds up across stores to the estate figure", () => {
+    const stores = planningStores();
+    const perStore = storeRows(stores, "week").reduce((a, r) => a + r.brokenStuds, 0);
+    expect(perStore).toBe(estateSummary(stores, "week").brokenStuds);
   });
 });

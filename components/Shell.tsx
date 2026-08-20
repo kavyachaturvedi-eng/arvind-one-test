@@ -308,7 +308,7 @@ function LiveDot() {
   return <span className="w-2 h-2 rounded-full pulse-crit" style={{ background: "var(--status-good)" }} aria-label="live" />;
 }
 
-// ── Role hierarchy: Store (Manager | Staff) · Planning (Regional | Category) · Super Admin
+// ── Role hierarchy: Store (Manager | Staff) · Planning (Retail | Buying) · Super Admin
 
 function RoleSwitcher() {
   const app = useApp();
@@ -338,11 +338,11 @@ function RoleSwitcher() {
       {/* Planning is two jobs: regional runs the estate day to day, category owns the season. */}
       <div className={`flex items-center gap-0.5 rounded-lg px-1 py-0.5 ${planningSide ? "bg-[color:var(--brand-soft)]" : ""}`}>
         <span className={`text-2xs font-semibold px-1 ${planningSide ? "text-[color:var(--brand)]" : "text-muted"}`}>Planning</span>
-        <button data-role="planner" onClick={() => app.setRole("planner")} title="Regional Planning — the estate day to day" className={pill(app.role === "planner")}>
-          Regional
+        <button data-role="planner" onClick={() => app.setRole("planner")} title="Retail Planning — the estate day to day" className={pill(app.role === "planner")}>
+          Retail
         </button>
-        <button data-role="catplan" onClick={() => app.setRole("catplan")} title="Category Planning — season, OTB, buy depth" className={pill(app.role === "catplan")}>
-          Category
+        <button data-role="catplan" onClick={() => app.setRole("catplan")} title="Buying team — season, OTB, buy depth" className={pill(app.role === "catplan")}>
+          Buying
         </button>
       </div>
       <button data-role="leadership" onClick={() => app.setRole("leadership")} title="Leadership view" className={pill(app.role === "leadership")}>

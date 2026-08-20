@@ -132,8 +132,19 @@ Modelled from Praveen's description of the planning organisation:
 
 | Persona | Role id | Owns |
 |---|---|---|
-| Regional Planning | `planner` | Day-to-day: the run, Store 360, store liaison, IST, RTV, norms |
-| Category Planning | `catplan` | Season plan, OTB, core/NOS strategy, buy depth, allocation |
+| Retail Planning | `planner` | Day-to-day: the run, Store 360, store liaison, IST, RTV, norms |
+| Buying team | `catplan` | Season plan, OTB, core/NOS strategy, buy depth, allocation |
+
+Named as AFL names them (confirmed by Pushpal, 20 Aug) — the earlier
+"Regional"/"Category" labels were ours, not theirs.
+
+### A word on "core"
+
+The word does two jobs in this domain and we only use it for one. **Core** is a
+product type: a style carried across more than one season, never discounted.
+The pivotal sizes that decide whether a size set is broken are called
+**pivotal** everywhere in the UI — Praveen's own term — because "core size" on a
+screen that also says "Core / Fashion" reads as a contradiction.
 
 ## 9 · OTB
 

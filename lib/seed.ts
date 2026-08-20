@@ -88,14 +88,14 @@ export const ROLES: Role[] = [
   },
   {
     id: "catplan",
-    label: "Category Planning",
-    person: "Category Planning",
-    title: "Category planner",
+    label: "Buying team",
+    person: "Buying team",
+    title: "Buyer",
     scope: "All regions · season plan, OTB, core strategy",
     initials: "CP",
     mode: "observe",
     does: "Owns the season: what to buy, how deep, what stays core — and how the buy is cut across clusters.",
-    basedOn: "Praveen — planning organisation, category vs regional split",
+    basedOn: "Praveen — planning organisation, buying vs retail planning split",
   },
   {
     id: "leadership",

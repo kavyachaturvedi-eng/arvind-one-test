@@ -1371,6 +1371,21 @@ function periodMultiple(storeId: string, period: Period): number {
   return v.todaySales > 0 ? week / v.todaySales : 1;
 }
 
+/**
+ * A stud with a broken size set — a style that is selling and cannot be bought
+ * in the sizes people want. The most expensive failure in the estate, and the
+ * one worth counting on its own rather than hiding inside "broken styles".
+ */
+export function brokenStuds(stores: Store[]): Array<{ store: Store; graded: GradedStyle }> {
+  const out: Array<{ store: Store; graded: GradedStyle }> = [];
+  stores.forEach((store) => {
+    gradedStyles(store.id, 60).forEach((g) => {
+      if (g.grade === "stud" && g.signal.health.status !== "healthy") out.push({ store, graded: g });
+    });
+  });
+  return out.sort((a, b) => b.graded.signal.valueAtRisk - a.graded.signal.valueAtRisk);
+}
+
 export interface EstateSummary {
   storeCount: number;
   period: Period;
@@ -1407,10 +1422,14 @@ export interface EstateSummary {
   brokenStyles: number;
   atRiskStyles: number;
   valueAtRisk: number;
+  /** Styles that are selling well and cannot be bought in a pivotal size. */
+  brokenStuds: number;
+  brokenStudValue: number;
 }
 
 export function estateSummary(stores: Store[], period: Period): EstateSummary {
   const vitals = stores.map((s) => vitalsFor(s.id));
+  const studs = brokenStuds(stores);
   const mult = new Map(stores.map((s) => [s.id, periodMultiple(s.id, period)]));
 
   const sales = vitals.reduce((a, v) => a + v.todaySales * (mult.get(v.store.id) ?? 1), 0);
@@ -1461,6 +1480,8 @@ export function estateSummary(stores: Store[], period: Period): EstateSummary {
     brokenStyles: vitals.reduce((a, v) => a + v.brokenStyles, 0),
     atRiskStyles: vitals.reduce((a, v) => a + v.atRiskStyles, 0),
     valueAtRisk: vitals.reduce((a, v) => a + v.valueAtRisk, 0),
+    brokenStuds: studs.length,
+    brokenStudValue: studs.reduce((a, x) => a + x.graded.signal.valueAtRisk, 0),
   };
 }
 
@@ -1475,6 +1496,7 @@ export interface StoreRow {
   corePct: number;
   valueAtRisk: number;
   brokenStyles: number;
+  brokenStuds: number;
   openAsks: number;
 }
 
@@ -1497,6 +1519,7 @@ export function storeRows(stores: Store[], period: Period, requests: { storeId: 
         corePct: total > 0 ? mix.core / total : 0,
         valueAtRisk: v.valueAtRisk,
         brokenStyles: v.brokenStyles,
+        brokenStuds: brokenStuds([store]).length,
         openAsks: requests.filter((r) => r.storeId === store.id && r.status === "open").length,
       };
     })

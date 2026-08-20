@@ -17,14 +17,17 @@ import {
   gradedStyles,
   mixForStore,
   planningStores,
+  applyMove,
   sizeSetExceptions,
   skuRow,
+  unitsAt,
   vitalsFor,
 } from "@/lib/engine";
 import { NOW, clusterById, storeById } from "@/lib/seed";
 import { REQUEST_LABEL, useApp } from "@/lib/state";
 import { coreShareTarget, fillBand, inr, normRecommendation, pct } from "@/lib/rules";
 import type { StyleGrade } from "@/lib/rules";
+import type { Size, StockMove } from "@/lib/types";
 
 const GRADE_TONE: Record<StyleGrade, "good" | "warn" | "critical"> = { stud: "good", bud: "warn", dud: "critical" };
 type Cut = "all" | "stud" | "bud" | "dud" | "broken";
@@ -93,20 +96,28 @@ export default function StoreView() {
   });
 
   return (
-    <div className="space-y-4 relative">
+    <div className="space-y-4">
       {opening && (
+        /* Opacity-only page transition, so a fixed overlay is safe here — a
+           transform on an ancestor would have made this its containing block. */
         <div
-          className="absolute -inset-3 sm:-inset-6 z-40 grid place-items-center"
-          style={{ background: "var(--surface-1)", animation: "storeOpen 1100ms ease-out forwards" }}
+          className="fixed inset-0 z-[60] grid place-items-center no-print"
+          style={{ background: "var(--text-primary)", animation: "storeOpen 1100ms ease-out forwards" }}
           data-store-opening
           aria-live="polite"
         >
-          <div className="text-center" style={{ animation: "storeOpenRise 420ms ease-out both" }}>
-            <div className="label mb-2">Opening Store 360</div>
-            <div className="text-2xl font-semibold text-ink">{store.name}</div>
-            <div className="text-xs text-ink2 mt-1">{cluster.name} · {store.city}</div>
-            <div className="mx-auto mt-3 h-0.5 w-28 overflow-hidden" style={{ background: "var(--line)" }}>
-              <div className="h-full" style={{ background: "var(--brand)", animation: "storeOpenBar 1000ms ease-out forwards" }} />
+          <div className="text-center px-6" style={{ animation: "storeOpenRise 380ms ease-out both" }}>
+            <div className="label" style={{ color: "#8A8F96" }}>
+              Opening Store 360
+            </div>
+            <div className="text-[40px] leading-tight font-medium text-white mt-3" style={{ letterSpacing: "-0.02em" }}>
+              {store.name}
+            </div>
+            <div className="text-sm mt-2" style={{ color: "#8A8F96" }}>
+              {cluster.name} · {store.city} · Grade {store.grade}
+            </div>
+            <div className="mx-auto mt-6 h-[3px] w-48 overflow-hidden" style={{ background: "#2A2A2A" }}>
+              <div className="h-full" style={{ background: "#fff", animation: "storeOpenBar 1000ms ease-out forwards" }} />
             </div>
           </div>
         </div>
@@ -156,7 +167,7 @@ export default function StoreView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Stat
           label="Fill rate"
           value={pct(fill)}
@@ -181,6 +192,12 @@ export default function StoreView() {
           value={inr(summary.valueAtRisk, { compact: true })}
           sub={`${summary.brokenStyles} broken · ${summary.atRiskStyles} at risk`}
           tone={summary.valueAtRisk > 0 ? "critical" : "good"}
+        />
+        <Stat
+          label="Broken studs"
+          value={String(summary.brokenStuds)}
+          sub={summary.brokenStuds > 0 ? inr(summary.brokenStudValue, { compact: true }) : undefined}
+          tone={summary.brokenStuds > 0 ? "critical" : "good"}
         />
       </div>
 
@@ -366,15 +383,15 @@ function SkuModal({ storeId, styleId, onClose }: { storeId: string; styleId: str
             <Th align="right">In transit</Th>
             <Th align="right">Sold 28d</Th>
             <Th align="right">Warehouse</Th>
-            <Th>Core size</Th>
+            <Th>Pivotal</Th>
           </tr>
         </thead>
         <tbody>
           {s.sizes.map((size) => {
             const row = skuRow(storeId, styleId, size);
             const sellableUnits = row ? Math.max(0, row.onHand - row.reserved) : 0;
-            const isCore = s.coreSizes.includes(size);
-            const gone = isCore && sellableUnits === 0;
+            const isPivotal = s.coreSizes.includes(size);
+            const gone = isPivotal && sellableUnits === 0;
             return (
               <tr key={size} data-sku-row={gone ? "gone" : "held"}>
                 <Td>
@@ -388,7 +405,7 @@ function SkuModal({ storeId, styleId, onClose }: { storeId: string; styleId: str
                 <Td align="right" className="num text-ink2">{row?.inTransit ?? 0}</Td>
                 <Td align="right" className="num">{row?.sold28 ?? 0}</Td>
                 <Td align="right" className="num">{dcAvailable(styleId, size)}</Td>
-                <Td>{isCore ? "Core" : "—"}</Td>
+                <Td>{isPivotal ? "Pivotal" : "—"}</Td>
               </tr>
             );
           })}
@@ -404,16 +421,39 @@ function SkuModal({ storeId, styleId, onClose }: { storeId: string; styleId: str
 function AssignModal({ open, onClose, storeId }: { open: boolean; onClose: () => void; storeId: string }) {
   const app = useApp();
   const candidates = useMemo(() => sizeSetExceptions(storeId, 8), [storeId]);
-  const [picked, setPicked] = useState<Record<string, number>>({});
-  const total = Object.values(picked).reduce((a, n) => a + n, 0);
+  // Size is chosen explicitly, per line. Sending units without naming the size
+  // is how a broken set gets "replenished" with the size that was already there.
+  const [picked, setPicked] = useState<Record<string, { size: Size; units: number }>>({});
+
+  const total = Object.values(picked).reduce((a, p) => a + p.units, 0);
+
+  function lineFor(styleId: string, fallback: Size) {
+    return picked[styleId] ?? { size: fallback, units: 0 };
+  }
 
   function confirm() {
-    const pushes = Object.entries(picked)
-      .filter(([, units]) => units > 0)
-      .map(([styleId, units], i) => ({ id: `AP-${storeId}-${i}`, at: NOW, by: app.actorName, storeId, styleId, units, origin: "manual" as const }));
-    if (pushes.length === 0) return;
-    app.dispatch({ type: "alloc:push", pushes, by: app.actorName, label: `${total} units → ${storeById(storeId).name}` });
-    app.toastNow(`${total} units sent to ${storeById(storeId).name}`, "good");
+    const moves: StockMove[] = [];
+    Object.entries(picked)
+      .filter(([, p]) => p.units > 0)
+      .forEach(([styleId, p], i) => {
+        const ok = applyMove({ from: "warehouse", toStoreId: storeId, styleId, size: p.size, units: p.units });
+        if (ok) {
+          moves.push({
+            id: `MV-SD-${storeId}-${i}`,
+            at: NOW,
+            by: app.actorName,
+            from: "warehouse",
+            toStoreId: storeId,
+            styleId,
+            size: p.size,
+            units: p.units,
+            reason: "Sent by planning from Store 360",
+          });
+        }
+      });
+    if (moves.length === 0) return;
+    app.dispatch({ type: "cycle:apply", id: `SEND-${storeId}-${app.moves.length}`, moves, by: app.actorName });
+    app.toastNow(`${moves.reduce((a, m) => a + m.units, 0)} units sent to ${storeById(storeId).name}`, "good");
     setPicked({});
     onClose();
   }
@@ -422,6 +462,7 @@ function AssignModal({ open, onClose, storeId }: { open: boolean; onClose: () =>
     <Modal
       open={open}
       onClose={onClose}
+      wide
       title="Send units from the warehouse"
       sub={storeById(storeId).name}
       footer={
@@ -435,31 +476,68 @@ function AssignModal({ open, onClose, storeId }: { open: boolean; onClose: () =>
     >
       <Table>
         <thead>
-          <tr><Th>Style</Th><Th>Colour</Th><Th align="right">Warehouse</Th><Th align="right">At risk</Th><Th align="right">Units</Th></tr>
+          <tr>
+            <Th>SKU</Th>
+            <Th>Style</Th>
+            <Th>Colour</Th>
+            <Th>Set</Th>
+            <Th align="right">Here now</Th>
+            <Th>Size</Th>
+            <Th align="right">Warehouse</Th>
+            <Th align="right">Send</Th>
+          </tr>
         </thead>
         <tbody>
           {candidates.map((sig) => {
-            const size = sig.health.missingCore[0] ?? sig.style.coreSizes[0];
-            const wh = dcAvailable(sig.style.id, size);
+            const fallback = (sig.health.missingCore[0] ?? sig.style.coreSizes[0]) as Size;
+            const line = lineFor(sig.style.id, fallback);
+            const wh = dcAvailable(sig.style.id, line.size);
+            const here = unitsAt(storeId, sig.style.id, line.size);
             return (
               <tr key={sig.style.id}>
-                <Td>
-                  <div className="text-ink">{sig.style.name}</div>
-                  <div className="text-2xs text-muted num">{sig.style.id} · size {size}</div>
-                </Td>
+                <Td className="num text-xs text-ink2">{sig.style.id}</Td>
+                <Td className="text-ink">{sig.style.name}</Td>
                 <Td>
                   <Swatch hex={sig.style.colourHex} label={sig.style.colour} />
                 </Td>
+                <Td>
+                  <span className="inline-flex items-center gap-1.5">
+                    <StatusDot tone={sig.health.status === "broken" ? "critical" : "warn"} />
+                    <span className="text-xs text-ink2">{sig.health.status === "broken" ? "Broken" : "At risk"}</span>
+                  </span>
+                </Td>
+                <Td align="right" className="num" style={here === 0 ? { color: "var(--status-critical)" } : undefined}>
+                  {here}
+                </Td>
+                <Td>
+                  <select
+                    value={line.size}
+                    data-assign-size
+                    onChange={(e) => setPicked({ ...picked, [sig.style.id]: { size: e.target.value as Size, units: 0 } })}
+                    className="border border-line bg-raised px-2 py-1 text-xs text-ink num"
+                  >
+                    {sig.style.sizes.map((sz) => (
+                      <option key={sz} value={sz}>
+                        {sz}
+                        {sig.style.coreSizes.includes(sz) ? " · pivotal" : ""} — {dcAvailable(sig.style.id, sz)} in warehouse
+                      </option>
+                    ))}
+                  </select>
+                </Td>
                 <Td align="right" className="num">{wh}</Td>
-                <Td align="right" className="num">{inr(sig.valueAtRisk, { compact: true })}</Td>
                 <Td align="right">
                   <input
                     type="number"
                     min={0}
                     max={wh}
-                    value={picked[sig.style.id] ?? 0}
+                    value={line.units}
                     data-assign-units
-                    onChange={(e) => setPicked({ ...picked, [sig.style.id]: Math.max(0, Math.min(wh, Number(e.target.value) || 0)) })}
+                    onChange={(e) =>
+                      setPicked({
+                        ...picked,
+                        [sig.style.id]: { size: line.size, units: Math.max(0, Math.min(wh, Number(e.target.value) || 0)) },
+                      })
+                    }
                     className="w-16 border border-line bg-raised px-2 py-1 text-sm text-ink text-right num"
                   />
                 </Td>
