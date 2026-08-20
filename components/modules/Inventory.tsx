@@ -7,7 +7,7 @@
 // my stock sitting and what is it worth", then goes to a store for the detail.
 
 import React, { useMemo, useState } from "react";
-import { BarChart, Card, Chip, ColumnChart, SectionTitle, Stat, StatusDot, Swatch, Table, Tabs, Td, Th } from "@/components/ui";
+import { BarChart, Card, SectionTitle, SortTh, Stat, StatusDot, Swatch, Table, Tabs, Td, Th, useSort } from "@/components/ui";
 import {
   PLANNING_BRAND,
   estateSummary,
@@ -25,6 +25,7 @@ import { HOLDBACK_GOAL, inr, pct } from "@/lib/rules";
 
 type Cut = "category" | "cluster" | "type";
 type StyleCut = "all" | "risk" | "thin" | "heavy";
+type StyleSort = "code" | "name" | "colour" | "type" | "stores" | "floor" | "wh" | "ros" | "cover" | "st" | "broken" | "risk";
 
 export default function Inventory() {
   const app = useApp();
@@ -48,6 +49,7 @@ export default function Inventory() {
   // implied. Deterministic, like everything else on these screens.
   const unitsTrend = useMemo(() => trend(`inv-${stores.length}`, 14, Math.max(1, summary.sellableUnits), 0.015), [stores.length, summary.sellableUnits]);
 
+  const sorter = useSort<StyleSort>("risk");
   const shownStyles =
     styleCut === "all"
       ? styles
@@ -57,19 +59,35 @@ export default function Inventory() {
       ? styles.filter((s) => s.cover < 21)
       : styles.filter((s) => s.cover > 120);
 
+  const sortedStyles = sorter.sort(shownStyles, (r, key) => {
+    switch (key) {
+      case "code": return r.style.id;
+      case "name": return r.style.name;
+      case "colour": return r.style.colour;
+      case "type": return r.style.productType;
+      case "stores": return r.storesCarrying;
+      case "floor": return r.sellable;
+      case "wh": return r.warehouse;
+      case "ros": return r.ros;
+      case "cover": return Math.min(r.cover, 999);
+      case "st": return r.sellThrough;
+      case "broken": return r.unhealthyStores;
+      case "risk": return r.valueAtRisk;
+    }
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Inventory</h1>
           <p className="text-xs text-ink2 mt-1">
-            {PLANNING_BRAND} · {stores.length} stores · {styles.length} styles carried
+            {stores.length} stores · {styles.length} styles
           </p>
         </div>
-        <Chip tone="brand">{pct(held.share)} held at warehouse · goal {pct(HOLDBACK_GOAL)}</Chip>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <Stat
           label="On floor"
           value={summary.sellableUnits.toLocaleString("en-IN")}
@@ -78,13 +96,13 @@ export default function Inventory() {
           emphasis
           spark={unitsTrend}
         />
-        <Stat label="Floor value at MRP" value={inr(floorValue, { compact: true })} sub="Units tied up in stores" />
-        <Stat label="In transit" value={summary.inTransit.toLocaleString("en-IN")} sub="Inbound, not yet countable" />
+        <Stat label="Floor value at MRP" value={inr(floorValue, { compact: true })} />
+        <Stat label="In transit" value={summary.inTransit.toLocaleString("en-IN")} />
+        <Stat label="Warehouse held" value={held.units.toLocaleString("en-IN")} sub={pct(held.share)} />
         <Stat
           label="Estate cover"
           value={`${Math.round(estateCover)} days`}
-          sub="At today's true rate of sale"
-          tone={estateCover < 21 ? "warn" : estateCover > 120 ? "warn" : "good"}
+          tone={estateCover < 21 || estateCover > 120 ? "warn" : "good"}
         />
         <Stat
           label="At risk this week"
@@ -175,26 +193,27 @@ export default function Inventory() {
         <Table>
           <thead>
             <tr>
-              <Th>Style</Th>
-              <Th>Type</Th>
-              <Th align="right">Stores</Th>
-              <Th align="right">On floor</Th>
-              <Th align="right">Warehouse</Th>
-              <Th align="right">True ROS</Th>
-              <Th align="right">Cover</Th>
-              <Th align="right">Sell-through</Th>
-              <Th align="right">Broken in</Th>
-              <Th align="right">At risk</Th>
+              <SortTh sortKey="code" sorter={sorter}>SKU</SortTh>
+              <SortTh sortKey="name" sorter={sorter}>Style</SortTh>
+              <SortTh sortKey="colour" sorter={sorter}>Colour</SortTh>
+              <SortTh sortKey="type" sorter={sorter}>Type</SortTh>
+              <SortTh sortKey="stores" sorter={sorter} align="right">Stores</SortTh>
+              <SortTh sortKey="floor" sorter={sorter} align="right">On floor</SortTh>
+              <SortTh sortKey="wh" sorter={sorter} align="right">Warehouse</SortTh>
+              <SortTh sortKey="ros" sorter={sorter} align="right">True ROS</SortTh>
+              <SortTh sortKey="cover" sorter={sorter} align="right">Cover</SortTh>
+              <SortTh sortKey="st" sorter={sorter} align="right">Sell-through</SortTh>
+              <SortTh sortKey="broken" sorter={sorter} align="right">Broken in</SortTh>
+              <SortTh sortKey="risk" sorter={sorter} align="right">At risk</SortTh>
             </tr>
           </thead>
           <tbody>
-            {shownStyles.map((r) => (
+            {sortedStyles.map((r) => (
               <tr key={r.style.id} data-inv-style>
+                <Td className="num text-xs text-ink2">{r.style.id}</Td>
+                <Td className="text-ink">{r.style.name}</Td>
                 <Td>
-                  <span className="inline-flex items-center gap-2">
-                    <Swatch hex={r.style.colourHex} label={r.style.colour} />
-                    <span className="text-ink">{r.style.name}</span>
-                  </span>
+                  <Swatch hex={r.style.colourHex} label={r.style.colour} />
                 </Td>
                 <Td>{r.style.productType === "core" ? "Core" : "Fashion"}</Td>
                 <Td align="right" className="num">{r.storesCarrying}</Td>

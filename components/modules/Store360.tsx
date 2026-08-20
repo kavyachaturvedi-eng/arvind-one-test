@@ -10,7 +10,7 @@
 // One brand: planning owns Tommy. There is no brand switch anywhere here.
 
 import React, { useMemo } from "react";
-import { Card, Chip, Meter, SectionTitle, Stat, StatusDot, Table, Tabs, Td, Th } from "@/components/ui";
+import { Card, Chip, Meter, SectionTitle, SortTh, Stat, StatusDot, Table, Tabs, Td, Th, useSort } from "@/components/ui";
 import {
   NO_FILTERS,
   PERIOD_LABEL,
@@ -26,23 +26,10 @@ import {
 import { CLUSTERS } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import { inr, pct } from "@/lib/rules";
-import StoreDetail from "@/components/modules/StoreDetail";
 
-const MIX_LABEL: Record<string, string> = {
-  on_plan: "On plan",
-  core_heavy: "Core heavy",
-  fashion_heavy: "Fashion heavy",
-};
+type StoreSort = "name" | "cluster" | "grade" | "sales" | "ach" | "fill" | "st" | "core" | "risk" | "asks";
 
 export default function Store360() {
-  const app = useApp();
-  // One store open? That is its own screen, and its own URL. Split into two
-  // components rather than returning early inside one: an early return above
-  // the hooks changes hook order between the two views, which React rejects.
-  return app.estate.storeId ? <StoreDetail storeId={app.estate.storeId} /> : <EstateList />;
-}
-
-function EstateList() {
   const app = useApp();
   const { filters, period } = app.estate;
 
@@ -52,6 +39,22 @@ function EstateList() {
   const spark = useMemo(() => (stores.length ? estateTrend(stores) : []), [stores]);
 
   const narrowed = filtersActive(filters);
+
+  const sorter = useSort<StoreSort>("risk");
+  const sorted = sorter.sort(rows, (r, key) => {
+    switch (key) {
+      case "name": return r.store.name;
+      case "cluster": return r.cluster.name;
+      case "grade": return r.store.grade;
+      case "sales": return r.sales;
+      case "ach": return r.achievement;
+      case "fill": return r.fillRate;
+      case "st": return r.sellThrough;
+      case "core": return r.corePct;
+      case "risk": return r.valueAtRisk;
+      case "asks": return r.openAsks;
+    }
+  });
   const bandTone = summary.band === "healthy" ? "good" : summary.band === "thin" ? "critical" : "warn";
   const clusters = CLUSTERS.filter((c) => planningStores().some((s) => s.clusterId === c.id));
   const regions = [...new Set(planningStores().map((s) => s.region))].sort();
@@ -62,8 +65,7 @@ function EstateList() {
         <div>
           <h1 className="text-xl font-semibold text-ink">Store 360</h1>
           <p className="text-xs text-ink2 mt-1">
-            {PLANNING_BRAND} · {stores.length} of {planningStores().length} stores
-            {narrowed > 0 ? ` · ${narrowed} filter${narrowed === 1 ? "" : "s"} on` : ""}
+            {stores.length} of {planningStores().length} stores
           </p>
         </div>
         <Tabs
@@ -107,7 +109,7 @@ function EstateList() {
             <Stat
               label="Fill rate"
               value={pct(summary.fillRate)}
-              sub={`${summary.sellableUnits.toLocaleString("en-IN")} of ${summary.norm.toLocaleString("en-IN")} norm · band 97–105%`}
+              sub={`${summary.sellableUnits.toLocaleString("en-IN")} of ${summary.norm.toLocaleString("en-IN")} norm`}
               tone={bandTone}
               emphasis
             />
@@ -121,7 +123,6 @@ function EstateList() {
             <Stat
               label="Full-price sell-through"
               value={pct(summary.sellThrough)}
-              sub="Season to date · benchmark 85–90%"
               tone={summary.sellThrough >= 0.85 ? "good" : summary.sellThrough >= 0.7 ? "warn" : "critical"}
             />
             <Stat
@@ -134,10 +135,7 @@ function EstateList() {
 
           <div className="grid lg:grid-cols-[1.35fr_1fr] gap-3 items-start">
             <Card>
-              <SectionTitle
-                title={`KPIs · ${PERIOD_LABEL[period].toLowerCase()}`}
-                right={<Chip>{stores.length} {stores.length === 1 ? "store" : "stores"}</Chip>}
-              />
+              <SectionTitle title={`KPIs · ${PERIOD_LABEL[period].toLowerCase()}`} />
               <Table>
                 <thead>
                   <tr>
@@ -165,10 +163,7 @@ function EstateList() {
             </Card>
 
             <Card>
-              <SectionTitle
-                title="Core and fashion"
-                right={<Chip tone={summary.mix === "on_plan" ? "good" : "warn"}>{MIX_LABEL[summary.mix]}</Chip>}
-              />
+              <SectionTitle title="Core and fashion" />
               <div className="space-y-3">
                 <div>
                   <div className="flex items-baseline justify-between text-sm">
@@ -197,23 +192,24 @@ function EstateList() {
           </div>
 
           <Card>
-            <SectionTitle title="Stores" right={<Chip>Worst value at risk first</Chip>} />
+            <SectionTitle title="Stores" />
             <Table>
               <thead>
                 <tr>
-                  <Th>Store</Th>
-                  <Th>Cluster</Th>
-                  <Th align="right">Sales</Th>
-                  <Th align="right">vs target</Th>
-                  <Th align="right">Fill rate</Th>
-                  <Th align="right">Sell-through</Th>
-                  <Th align="right">Core</Th>
-                  <Th align="right">At risk</Th>
-                  <Th align="right">Asks</Th>
+                  <SortTh sortKey="name" sorter={sorter}>Store</SortTh>
+                  <SortTh sortKey="cluster" sorter={sorter}>Cluster</SortTh>
+                  <SortTh sortKey="grade" sorter={sorter}>Grade</SortTh>
+                  <SortTh sortKey="sales" sorter={sorter} align="right">Sales</SortTh>
+                  <SortTh sortKey="ach" sorter={sorter} align="right">vs target</SortTh>
+                  <SortTh sortKey="fill" sorter={sorter} align="right">Fill rate</SortTh>
+                  <SortTh sortKey="st" sorter={sorter} align="right">Sell-through</SortTh>
+                  <SortTh sortKey="core" sorter={sorter} align="right">Core</SortTh>
+                  <SortTh sortKey="risk" sorter={sorter} align="right">At risk</SortTh>
+                  <SortTh sortKey="asks" sorter={sorter} align="right">Asks</SortTh>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {sorted.map((r) => (
                   <tr
                     key={r.store.id}
                     className="hover:bg-[color:var(--plane)] cursor-pointer"
@@ -224,10 +220,10 @@ function EstateList() {
                       <div className="flex items-center gap-2">
                         <StatusDot tone={r.band === "healthy" ? "good" : r.band === "thin" ? "critical" : "warn"} />
                         <span className="text-ink">{r.store.name}</span>
-                        <span className="text-2xs text-muted">{r.store.grade}</span>
                       </div>
                     </Td>
                     <Td className="text-ink2">{r.cluster.name}</Td>
+                    <Td>{r.store.grade}</Td>
                     <Td align="right" className="num">{inr(r.sales, { compact: true })}</Td>
                     <Td align="right" className="num">{pct(r.achievement)}</Td>
                     <Td align="right" className="num">{pct(r.fillRate)}</Td>

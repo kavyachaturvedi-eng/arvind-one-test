@@ -773,3 +773,44 @@ describe("the assumptions register", () => {
     expect(planning.HOLDBACK_GOAL).toBe(0.4);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Table sorting — the comparator behind clickable column headers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The same comparator `useSort` uses, extracted so it can be tested without React. */
+function sortBy<R>(rows: R[], get: (r: R) => number | string, dir: "asc" | "desc"): R[] {
+  return [...rows].sort((a, b) => {
+    const av = get(a);
+    const bv = get(b);
+    const cmp = typeof av === "string" || typeof bv === "string" ? String(av).localeCompare(String(bv)) : av - bv;
+    return dir === "asc" ? cmp : -cmp;
+  });
+}
+
+describe("column sorting", () => {
+  const rows = [
+    { name: "Bomber Jacket", units: 30, risk: 0 },
+    { name: "Achilles Polo", units: 120, risk: 4000 },
+    { name: "Chino", units: 75, risk: 900 },
+  ];
+
+  it("sorts numbers both ways", () => {
+    expect(sortBy(rows, (r) => r.units, "desc").map((r) => r.units)).toEqual([120, 75, 30]);
+    expect(sortBy(rows, (r) => r.units, "asc").map((r) => r.units)).toEqual([30, 75, 120]);
+  });
+
+  it("sorts text alphabetically, not by character code", () => {
+    expect(sortBy(rows, (r) => r.name, "asc").map((r) => r.name)).toEqual(["Achilles Polo", "Bomber Jacket", "Chino"]);
+  });
+
+  it("does not mutate the array it was given", () => {
+    const before = rows.map((r) => r.name);
+    sortBy(rows, (r) => r.units, "asc");
+    expect(rows.map((r) => r.name)).toEqual(before);
+  });
+
+  it("keeps zeroes in place rather than treating them as missing", () => {
+    expect(sortBy(rows, (r) => r.risk, "asc").map((r) => r.risk)).toEqual([0, 900, 4000]);
+  });
+});

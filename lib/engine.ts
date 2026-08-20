@@ -1087,7 +1087,11 @@ export interface GradedStyle {
 }
 
 export function gradedStyles(storeId: string, limit = 60): GradedStyle[] {
+  const store = storeById(storeId);
   return stylesAtStore(storeId)
+    // Own brand only. The seed lets a door hold a little cross-brand stock, but
+    // a planner who owns one brand should never see another brand's styles.
+    .filter((st) => st.brand === store.brand)
     .slice(0, limit)
     .map((style) => {
       const signal = styleSignal(storeId, style.id);

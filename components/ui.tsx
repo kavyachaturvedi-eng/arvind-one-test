@@ -471,7 +471,7 @@ export function Callout({
   tone = "brand",
   title,
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   tone?: "brand" | "good" | "warn" | "critical";
   title?: string;
 }) {
@@ -483,8 +483,8 @@ export function Callout({
   };
   return (
     <div className={`rounded-lg border-l-[3px] px-3.5 py-3 ${map[tone]}`}>
-      {title && <div className="text-xs font-semibold text-ink mb-1">{title}</div>}
-      <div className="text-xs text-ink2 leading-relaxed">{children}</div>
+      {title && <div className={`text-xs font-semibold text-ink ${children ? "mb-1" : ""}`}>{title}</div>}
+      {children && <div className="text-xs text-ink2 leading-relaxed">{children}</div>}
     </div>
   );
 }
@@ -653,5 +653,67 @@ export function Toast({ message, tone, onDone }: { message: string; tone: "good"
         {message}
       </div>
     </div>
+  );
+}
+
+// ── Sortable tables ──────────────────────────────────────────────────────────
+//
+// Clicking a column header sorts by it; clicking again reverses. Replaces the
+// "sorted by X" labels that used to explain the order — the arrow says it.
+
+export interface Sorter<K extends string> {
+  key: K;
+  dir: "asc" | "desc";
+  toggle: (k: K) => void;
+  sort: <R>(rows: R[], get: (row: R, key: K) => number | string) => R[];
+}
+
+export function useSort<K extends string>(initial: K, initialDir: "asc" | "desc" = "desc"): Sorter<K> {
+  const [key, setKey] = React.useState<K>(initial);
+  const [dir, setDir] = React.useState<"asc" | "desc">(initialDir);
+
+  const toggle = (k: K) => {
+    if (k === key) {
+      setDir((d) => (d === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setKey(k);
+    // A new column starts on the reading most people want first: biggest, or A–Z.
+    setDir("desc");
+  };
+
+  function sort<R>(rows: R[], get: (row: R, key: K) => number | string): R[] {
+    return [...rows].sort((a, b) => {
+      const av = get(a, key);
+      const bv = get(b, key);
+      const cmp = typeof av === "string" || typeof bv === "string" ? String(av).localeCompare(String(bv)) : av - bv;
+      return dir === "asc" ? cmp : -cmp;
+    });
+  }
+
+  return { key, dir, toggle, sort };
+}
+
+export function SortTh<K extends string>({
+  children,
+  sortKey,
+  sorter,
+  align = "left",
+}: {
+  children: React.ReactNode;
+  sortKey: K;
+  sorter: Sorter<K>;
+  align?: "left" | "right" | "center";
+}) {
+  const active = sorter.key === sortKey;
+  return (
+    <Th align={align} onClick={() => sorter.toggle(sortKey)} className="cursor-pointer select-none hover:text-ink">
+      <span className="inline-flex items-center gap-1">
+        <span style={active ? { color: "var(--text-primary)" } : undefined}>{children}</span>
+        <span className="text-[9px]" style={{ color: active ? "var(--brand)" : "var(--line)" }} aria-hidden>
+          {active ? (sorter.dir === "asc" ? "▲" : "▼") : "▾"}
+        </span>
+      </span>
+    </Th>
   );
 }

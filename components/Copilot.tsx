@@ -30,20 +30,17 @@ export default function Copilot() {
         data-copilot
         onClick={() => setOpen((v) => !v)}
         aria-label="Arvi, AI assistant"
-        className="fixed bottom-5 right-5 z-40 no-print flex items-center gap-2 rounded-full border-2 pl-3 pr-3.5 py-2 text-sm shadow-pop transition-colors bg-raised"
+        className="fixed bottom-4 right-4 z-40 no-print flex items-center gap-1.5 rounded-full border pl-2 pr-2.5 py-1 text-xs shadow-pop transition-colors bg-raised"
         style={{ borderColor: "var(--brand)" }}
       >
         <span
-          className="w-6 h-6 grid place-items-center rounded-full text-xs"
+          className="w-4 h-4 grid place-items-center rounded-full text-[9px]"
           style={{ background: "var(--brand-soft)", color: "var(--brand)" }}
           aria-hidden
         >
           ✳
         </span>
-        <span className="leading-tight text-left">
-          <span className="serif-accent block text-[15px]">Arvi</span>
-        </span>
-        <span className="label" style={{ color: "var(--brand)" }}>AI assist</span>
+        <span className="serif-accent text-[12px] leading-none">Arvi</span>
       </button>
 
       {open && (

@@ -59,9 +59,6 @@ export default function Allocation() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Chip tone={daysOut <= 3 ? "critical" : "brand"}>
-            {daysOut <= 0 ? "Landed" : daysOut === 1 ? "Lands tomorrow" : `${daysOut} days out`}
-          </Chip>
           {!applied.includes(dropId) && moved > 0 && (
             <button className="btn-primary" data-apply-recut onClick={applyRecut}>
               Apply the re-cut
@@ -88,23 +85,18 @@ export default function Allocation() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Units in this drop" value={units.toLocaleString("en-IN")} sub={`${pct(drop.pctOfBuy)} of the season buy`} emphasis />
-        <Stat label="Units moved by the re-cut" value={moved.toLocaleString("en-IN")} sub={`${rows.filter((r) => r.delta !== 0).length} stores change`} tone="warn" />
-        <Stat label="Stores in scope" value={String(rows.length)} sub={PLANNING_BRAND} />
-        <Stat label="Held at warehouse" value={pct(HOLDBACK_SHARE)} sub="Funds the Tue/Fri run" />
+        <Stat label="Units in this drop" value={units.toLocaleString("en-IN")} sub={pct(drop.pctOfBuy)} emphasis />
+        <Stat label="Units moved by the re-cut" value={moved.toLocaleString("en-IN")} sub={`${rows.filter((r) => r.delta !== 0).length} stores`} tone="warn" />
+        <Stat label="Stores" value={String(rows.length)} />
+        <Stat label="Held at warehouse" value={pct(HOLDBACK_SHARE)} />
       </div>
 
       {applied.includes(dropId) && (
-        <Callout tone="good" title="Re-cut applied">
-          The warehouse has the revised cut for {drop.label}. Stores see their new numbers on the next run.
-        </Callout>
+        <Callout tone="good" title={`${drop.label} re-cut applied`} />
       )}
 
       <Card>
-        <SectionTitle
-          title="Plan against today's signals"
-          right={<Chip>{rows.filter((r) => r.delta !== 0).length} changes</Chip>}
-        />
+        <SectionTitle title="Plan against today's signals" />
         <Table>
           <thead>
             <tr>

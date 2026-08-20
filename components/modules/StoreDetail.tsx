@@ -8,7 +8,7 @@
 // send units, or change the norm.
 
 import React, { useMemo, useState } from "react";
-import { Card, Chip, Meter, Modal, SectionTitle, Stat, StatusDot, Swatch, Table, Tabs, Td, Th, relTime } from "@/components/ui";
+import { Card, Chip, Meter, Modal, SectionTitle, SortTh, Stat, StatusDot, Swatch, Table, Tabs, Td, Th, relTime, useSort } from "@/components/ui";
 import {
   PERIOD_LABEL,
   dcAvailable,
@@ -16,20 +16,23 @@ import {
   estateTrend,
   gradedStyles,
   mixForStore,
+  planningStores,
   sizeSetExceptions,
   skuRow,
   vitalsFor,
 } from "@/lib/engine";
 import { NOW, clusterById, storeById } from "@/lib/seed";
 import { REQUEST_LABEL, useApp } from "@/lib/state";
-import { coreShareTarget, fillBand, inr, mixVerdict, normRecommendation, pct } from "@/lib/rules";
+import { coreShareTarget, fillBand, inr, normRecommendation, pct } from "@/lib/rules";
 import type { StyleGrade } from "@/lib/rules";
 
 const GRADE_TONE: Record<StyleGrade, "good" | "warn" | "critical"> = { stud: "good", bud: "warn", dud: "critical" };
 type Cut = "all" | "stud" | "bud" | "dud" | "broken";
+type StyleSort = "code" | "name" | "colour" | "type" | "grade" | "floor" | "ros" | "region" | "cover" | "st" | "set" | "risk";
 
-export default function StoreDetail({ storeId }: { storeId: string }) {
+export default function StoreView() {
   const app = useApp();
+  const storeId = app.estate.storeId ?? planningStores()[0].id;
   const store = storeById(storeId);
   const cluster = clusterById(store.clusterId);
   const period = app.estate.period;
@@ -61,16 +64,59 @@ export default function StoreDetail({ storeId }: { storeId: string }) {
 
   const counts = graded.reduce((a, g) => ({ ...a, [g.grade]: (a[g.grade] ?? 0) + 1 }), {} as Record<StyleGrade, number>);
 
+  const sorter = useSort<StyleSort>("risk");
+  const sorted = sorter.sort(shown, (g, key) => {
+    switch (key) {
+      case "code": return g.signal.style.id;
+      case "name": return g.signal.style.name;
+      case "colour": return g.signal.style.colour;
+      case "type": return g.productType;
+      case "grade": return g.grade;
+      case "floor": return g.signal.sellable;
+      case "ros": return g.signal.ros;
+      case "region": return g.signal.regionalRos;
+      case "cover": return Math.min(g.signal.cover, 999);
+      case "st": return g.sellThrough;
+      case "set": return g.signal.health.status;
+      case "risk": return g.signal.valueAtRisk;
+    }
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <button className="text-xs text-ink2 hover:text-ink underline decoration-dotted mb-1" data-back-to-estate onClick={() => app.openStore(null)}>
-            ← All stores
-          </button>
+          {/* Where you are, and every level of it is a way back. */}
+          <div className="flex items-center gap-1.5 text-xs mb-1.5 flex-wrap">
+            <button className="text-ink2 hover:text-ink" data-back-to-estate onClick={() => app.openStore(null)}>
+              All stores
+            </button>
+            <span className="text-muted">/</span>
+            <button
+              className="text-ink2 hover:text-ink"
+              data-hier-region
+              onClick={() => {
+                app.setFilter({ region: store.region, cluster: "all" });
+              }}
+            >
+              {store.region}
+            </button>
+            <span className="text-muted">/</span>
+            <button
+              className="text-ink2 hover:text-ink"
+              data-hier-cluster
+              onClick={() => {
+                app.setFilter({ region: "all", cluster: store.clusterId });
+              }}
+            >
+              {cluster.name}
+            </button>
+            <span className="text-muted">/</span>
+            <span className="text-ink font-medium">{store.name}</span>
+          </div>
           <h1 className="text-xl font-semibold text-ink">{store.name}</h1>
           <p className="text-xs text-ink2 mt-1">
-            {cluster.name} · {store.city} · Grade {store.grade} · {store.model} · {store.managerName}
+            {store.code} · {store.city} · Grade {store.grade} · {store.model} · {store.managerName}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -87,7 +133,7 @@ export default function StoreDetail({ storeId }: { storeId: string }) {
         <Stat
           label="Fill rate"
           value={pct(fill)}
-          sub={`${summary.sellableUnits.toLocaleString("en-IN")} of ${norm.toLocaleString("en-IN")} norm · band 97–105%`}
+          sub={`${summary.sellableUnits.toLocaleString("en-IN")} of ${norm.toLocaleString("en-IN")} norm`}
           tone={band === "healthy" ? "good" : band === "thin" ? "critical" : "warn"}
           emphasis
         />
@@ -101,7 +147,6 @@ export default function StoreDetail({ storeId }: { storeId: string }) {
         <Stat
           label="Full-price sell-through"
           value={pct(summary.sellThrough)}
-          sub="Season to date · benchmark 85–90%"
           tone={summary.sellThrough >= 0.85 ? "good" : summary.sellThrough >= 0.7 ? "warn" : "critical"}
         />
         <Stat
@@ -142,10 +187,7 @@ export default function StoreDetail({ storeId }: { storeId: string }) {
         </Card>
 
         <Card>
-          <SectionTitle
-            title="Core and fashion"
-            right={<Chip tone={mixVerdict(corePct, coreTarget) === "on_plan" ? "good" : "warn"}>{corePct > coreTarget ? "Core heavy" : "On plan"}</Chip>}
-          />
+          <SectionTitle title="Core and fashion" />
           <div className="space-y-3">
             <div>
               <div className="flex items-baseline justify-between text-sm">
@@ -187,33 +229,37 @@ export default function StoreDetail({ storeId }: { storeId: string }) {
         <Table>
           <thead>
             <tr>
-              <Th>Style</Th>
-              <Th>Type</Th>
-              <Th align="right">On floor</Th>
-              <Th align="right">True ROS</Th>
-              <Th align="right">Region ROS</Th>
-              <Th align="right">Cover</Th>
-              <Th align="right">Sell-through</Th>
-              <Th>Size set</Th>
-              <Th align="right">At risk</Th>
+              <SortTh sortKey="code" sorter={sorter}>SKU</SortTh>
+              <SortTh sortKey="name" sorter={sorter}>Style</SortTh>
+              <SortTh sortKey="colour" sorter={sorter}>Colour</SortTh>
+              <SortTh sortKey="type" sorter={sorter}>Type</SortTh>
+              <SortTh sortKey="grade" sorter={sorter}>Grade</SortTh>
+              <SortTh sortKey="floor" sorter={sorter} align="right">On floor</SortTh>
+              <SortTh sortKey="ros" sorter={sorter} align="right">True ROS</SortTh>
+              <SortTh sortKey="region" sorter={sorter} align="right">Region ROS</SortTh>
+              <SortTh sortKey="cover" sorter={sorter} align="right">Cover</SortTh>
+              <SortTh sortKey="st" sorter={sorter} align="right">Sell-through</SortTh>
+              <SortTh sortKey="set" sorter={sorter}>Size set</SortTh>
+              <SortTh sortKey="risk" sorter={sorter} align="right">At risk</SortTh>
             </tr>
           </thead>
           <tbody>
-            {shown.map((g) => (
+            {sorted.map((g) => (
               <tr
                 key={g.signal.style.id}
                 className="hover:bg-[color:var(--plane)] cursor-pointer"
                 data-style-row={g.grade}
                 onClick={() => setOpenStyle(g.signal.style.id)}
               >
+                <Td className="num text-xs text-ink2">{g.signal.style.id}</Td>
+                <Td className="text-ink">{g.signal.style.name}</Td>
                 <Td>
-                  <span className="inline-flex items-center gap-2">
-                    <Swatch hex={g.signal.style.colourHex} />
-                    <Chip tone={GRADE_TONE[g.grade]}>{g.grade}</Chip>
-                    <span className="text-ink">{g.signal.style.name}</span>
-                  </span>
+                  <Swatch hex={g.signal.style.colourHex} label={g.signal.style.colour} />
                 </Td>
                 <Td>{g.productType === "core" ? "Core" : "Fashion"}</Td>
+                <Td>
+                  <Chip tone={GRADE_TONE[g.grade]}>{g.grade}</Chip>
+                </Td>
                 <Td align="right" className="num">{g.signal.sellable}</Td>
                 <Td align="right" className="num">{g.signal.ros.toFixed(2)}</Td>
                 <Td align="right" className="num text-ink2">{g.signal.regionalRos.toFixed(2)}</Td>
@@ -282,7 +328,7 @@ function SkuModal({ storeId, styleId, onClose }: { storeId: string; styleId: str
       onClose={onClose}
       wide
       title={s.name}
-      sub={`${s.id} · ${s.colour} · ${s.category} · MRP ${inr(s.mrp)} · ${s.productType === "core" ? "Core" : "Fashion"}`}
+      sub={`${s.id} · ${s.category} · ${s.productType === "core" ? "Core" : "Fashion"} · MRP ${inr(s.mrp)} · colour ${s.colour}`}
     >
       <Table>
         <thead>
@@ -362,7 +408,7 @@ function AssignModal({ open, onClose, storeId }: { open: boolean; onClose: () =>
     >
       <Table>
         <thead>
-          <tr><Th>Style</Th><Th align="right">Warehouse</Th><Th align="right">At risk</Th><Th align="right">Units</Th></tr>
+          <tr><Th>Style</Th><Th>Colour</Th><Th align="right">Warehouse</Th><Th align="right">At risk</Th><Th align="right">Units</Th></tr>
         </thead>
         <tbody>
           {candidates.map((sig) => {
@@ -371,11 +417,11 @@ function AssignModal({ open, onClose, storeId }: { open: boolean; onClose: () =>
             return (
               <tr key={sig.style.id}>
                 <Td>
-                  <span className="inline-flex items-center gap-2">
-                    <Swatch hex={sig.style.colourHex} />
-                    {sig.style.name}
-                    <span className="text-2xs text-muted">{size}</span>
-                  </span>
+                  <div className="text-ink">{sig.style.name}</div>
+                  <div className="text-2xs text-muted num">{sig.style.id} · size {size}</div>
+                </Td>
+                <Td>
+                  <Swatch hex={sig.style.colourHex} label={sig.style.colour} />
                 </Td>
                 <Td align="right" className="num">{wh}</Td>
                 <Td align="right" className="num">{inr(sig.valueAtRisk, { compact: true })}</Td>
@@ -429,7 +475,6 @@ function NormModal({ open, onClose, storeId }: { open: boolean; onClose: () => v
       }
     >
       <div className="space-y-3">
-        <div className="text-sm text-ink">{rec.reason}</div>
         <div className="flex items-center gap-3 flex-wrap">
           <div>
             <div className="label">Current</div>

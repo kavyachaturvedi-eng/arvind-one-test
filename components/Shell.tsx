@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { ROLES, STORES } from "@/lib/seed";
+import { ROLES, STORES, storeById } from "@/lib/seed";
 import { AGENTS, agentApprovals } from "@/lib/agents";
 import { sizeSetExceptions } from "@/lib/engine";
 import { NAV_GROUPS, SECTION_ORDER, type NavChild } from "@/lib/nav";
@@ -28,12 +28,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   // Where am I? — the breadcrumb above every screen.
   const crumb = useMemo(() => {
+    // The store view is reached by clicking a row, not from the nav, so it
+    // borrows Store 360's place in the tree and names the store itself.
+    if (app.module === "store" && app.estate.storeId) {
+      return { section: "Planning", group: "Estate", label: storeById(app.estate.storeId).name };
+    }
     const g = groups.find((gr) => gr.children.some(isActive)) ?? groups.find((gr) => gr.children.some((c) => c.id === app.module));
     if (!g) return null;
     const c = g.children.find(isActive) ?? g.children.find((ch) => ch.id === app.module)!;
     return { section: g.section, group: g.label, label: c.label };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, app.module, app.focus]);
+  }, [groups, app.module, app.focus, app.estate.storeId]);
 
   // ── New-since-you-looked dots ──────────────────────────────────────────────
   // A module carries a dot when something arrived that a person has not seen:

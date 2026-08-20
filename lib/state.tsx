@@ -77,6 +77,7 @@ export type ModuleId =
   | "health"
   // ── Retail planning ──
   | "store360"
+  | "store"
   | "inv"
   | "run"
   | "alloc"
@@ -678,20 +679,31 @@ function reducer(state: AppState, action: Action): AppState {
     // are: a store has to be able to see who decided its ask, and when.
 
     case "estate:filter":
-      // Narrowing the list always returns to the list — a filter applied while
-      // inside one store would silently change what the numbers describe.
-      return { ...state, estate: { ...state.estate, filters: { ...state.estate.filters, ...action.patch }, storeId: null } };
+      // Narrowing always returns to the list — a filter applied while inside one
+      // store would silently change what the numbers describe. That includes
+      // leaving the store page, not just clearing which store is open.
+      return {
+        ...state,
+        module: state.module === "store" ? "store360" : state.module,
+        estate: { ...state.estate, filters: { ...state.estate.filters, ...action.patch }, storeId: null },
+      };
 
     case "estate:period":
       return { ...state, estate: { ...state.estate, period: action.period } };
 
     case "estate:open":
-      return { ...state, estate: { ...state.estate, storeId: action.storeId } };
+      // Opening a store is a page of its own, not a mode of the list.
+      return {
+        ...state,
+        module: action.storeId ? "store" : "store360",
+        estate: { ...state.estate, storeId: action.storeId },
+      };
 
     case "url": {
       // Restoring from the address bar (a link, or the back button).
       const p = action.params;
       const one = (k: string, fallback: string) => p.get(k) ?? fallback;
+      const storeId = p.get("store");
       const module = (p.get("m") as ModuleId | null) ?? state.module;
       const period = (p.get("p") as Period | null) ?? state.estate.period;
       return {
@@ -707,7 +719,7 @@ function reducer(state: AppState, action: Action): AppState {
             band: one("band", "all"),
           },
           period,
-          storeId: p.get("store"),
+          storeId,
         },
       };
     }
@@ -932,16 +944,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // back a screen. Every screen a planner can be on is addressable, so a link
   // to "Phoenix Palladium, this week" is a link.
   const fromUrl = React.useRef(false);
+  // A deep link is read before sign-in, but `login` resets the module to the
+  // role's default — so the link has to be re-applied once the person is in.
+  const deepLink = React.useRef<URLSearchParams | null>(null);
 
   React.useEffect(() => {
     const apply = () => {
       fromUrl.current = true;
       dispatch({ type: "url", params: new URLSearchParams(window.location.search) });
     };
-    if (window.location.search) apply();
+    if (window.location.search) {
+      deepLink.current = new URLSearchParams(window.location.search);
+      apply();
+    }
     window.addEventListener("popstate", apply);
     return () => window.removeEventListener("popstate", apply);
   }, []);
+
+  React.useEffect(() => {
+    if (!state.authed || !deepLink.current) return;
+    const params = deepLink.current;
+    deepLink.current = null;
+    if (!params.get("m")) return;
+    fromUrl.current = true;
+    dispatch({ type: "url", params });
+  }, [state.authed]);
 
   React.useEffect(() => {
     if (!state.authed) return;
@@ -949,7 +976,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     p.set("role", state.role);
     p.set("m", state.module);
     if (state.focus) p.set("f", state.focus);
-    if (state.estate.storeId) p.set("store", state.estate.storeId);
+    // Only the store view carries a store in the address — otherwise the URL
+    // would claim a store you are not looking at.
+    if (state.module === "store" && state.estate.storeId) p.set("store", state.estate.storeId);
     if (state.estate.period !== "week") p.set("p", state.estate.period);
     (["region", "cluster", "grade", "band"] as const).forEach((k) => {
       if (state.estate.filters[k] !== "all") p.set(k, state.estate.filters[k]);

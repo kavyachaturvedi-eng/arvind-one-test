@@ -39,6 +39,7 @@ import Health from "@/components/modules/Health";
 import BillHistory from "@/components/modules/BillHistory";
 import Store360 from "@/components/modules/Store360";
 import Inventory from "@/components/modules/Inventory";
+import StoreView from "@/components/modules/StoreDetail";
 import ReplenRunView from "@/components/modules/ReplenRun";
 import Allocation from "@/components/modules/Allocation";
 import Otb from "@/components/modules/Otb";
@@ -53,6 +54,8 @@ function Router() {
     // ── Retail planning ──
     case "store360":
       return <Store360 />;
+    case "store":
+      return <StoreView />;
     case "inv":
       return <Inventory />;
     case "run":

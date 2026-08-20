@@ -33,14 +33,13 @@ export default function Asks() {
         <div>
           <h1 className="text-xl font-semibold text-ink">Store asks</h1>
         </div>
-        <Chip tone={open.length > 0 ? "warn" : "good"}>{open.length} waiting</Chip>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Waiting" value={String(open.length)} sub="Store proposes, planning decides" tone={open.length > 0 ? "warn" : "good"} emphasis />
-        <Stat label="Oldest" value={open.length ? relTime(oldest, NOW) : "—"} sub="Time in the queue" />
-        <Stat label="Units requested" value={open.reduce((a, r) => a + (r.units ?? 0), 0).toLocaleString("en-IN")} sub="Across every open ask" />
-        <Stat label="Decided" value={String(decided.length)} sub="This session and seeded history" />
+        <Stat label="Waiting" value={String(open.length)} tone={open.length > 0 ? "warn" : "good"} emphasis />
+        <Stat label="Oldest" value={open.length ? relTime(oldest, NOW) : "—"} />
+        <Stat label="Units requested" value={open.reduce((a, r) => a + (r.units ?? 0), 0).toLocaleString("en-IN")} />
+        <Stat label="Decided" value={String(decided.length)} />
       </div>
 
       <Card>

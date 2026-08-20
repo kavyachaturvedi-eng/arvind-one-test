@@ -1099,3 +1099,23 @@ describe("inventory", () => {
     expect(viaStyles / estate).toBeGreaterThan(0.6);
   });
 });
+
+describe("own-brand assortment", () => {
+  it("never shows another brand's styles in a store's assortment", () => {
+    planningStores()
+      .slice(0, 4)
+      .forEach((store) => {
+        const graded = gradedStyles(store.id, 60);
+        expect(graded.length).toBeGreaterThan(0);
+        graded.forEach((g) => expect(g.signal.style.brand).toBe(store.brand));
+      });
+  });
+
+  it("keeps the run's renewal candidates on the brand too", () => {
+    replenRun(NOW)
+      .lines.filter((l) => l.kind === "renew")
+      .forEach((l) => {
+        expect(STYLES.find((s) => s.id === l.styleId)!.brand).toBe(PLANNING_BRAND);
+      });
+  });
+});

@@ -62,11 +62,10 @@ export default function ReplenRunView() {
         <div>
           <h1 className="text-xl font-semibold text-ink">Replenishment &amp; renewal</h1>
           <p className="text-xs text-ink2 mt-1">
-            {PLANNING_BRAND} · ran {fmtRunDate(lastRunAt(NOW))} · next {fmtRunDate(nextRunAt(NOW))}
+            Ran {fmtRunDate(lastRunAt(NOW))} · next {fmtRunDate(nextRunAt(NOW))}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Chip tone="brand">Tuesday &amp; Friday</Chip>
           {open.length > 0 && (
             <button className="btn-primary" data-release-all onClick={() => release(open)}>
               Release all {open.length} {open.length === 1 ? "line" : "lines"}
@@ -79,30 +78,20 @@ export default function ReplenRunView() {
         <Stat
           label="Stores triggered"
           value={String(run.triggered.length)}
-          sub={`Below ${pct(FILL_TRIGGER)} of norm, or over ${pct(BROKEN_TRIGGER)} unhealthy`}
           tone={run.triggered.length > 0 ? "warn" : "good"}
           emphasis
         />
-        <Stat label="Replenishment" value={replenUnits.toLocaleString("en-IN")} sub="Same style back, size gaps first" />
-        <Stat label="Renewal" value={renewUnits.toLocaleString("en-IN")} sub="New style replacing a finished one" />
-        <Stat
-          label="Warehouse held"
-          value={held.units.toLocaleString("en-IN")}
-          sub={`${pct(held.share)} of the buy · goal ${pct(HOLDBACK_GOAL)}`}
-        />
+        <Stat label="Replenishment" value={replenUnits.toLocaleString("en-IN")} sub="units" />
+        <Stat label="Renewal" value={renewUnits.toLocaleString("en-IN")} sub="units" />
+        <Stat label="Warehouse held" value={held.units.toLocaleString("en-IN")} sub={pct(held.share)} />
       </div>
 
       {app.released.length > 0 && (
-        <Callout tone="good" title={`${app.released.length} ${app.released.length === 1 ? "line" : "lines"} released this session`}>
-          Picking advice is with the warehouse. Released lines stay on this run so the trail is readable.
-        </Callout>
+        <Callout tone="good" title={`${app.released.length} ${app.released.length === 1 ? "line" : "lines"} released to the warehouse`} />
       )}
 
       <Card>
-        <SectionTitle
-          title="Why these stores qualified"
-          right={<Chip>{run.triggered.length} of {planningStores().length}</Chip>}
-        />
+        <SectionTitle title="Why these stores qualified" />
         <div className="space-y-1.5">
           {run.triggered.map((t) => (
             <div key={t.storeId} className="flex items-start gap-2.5 text-sm">

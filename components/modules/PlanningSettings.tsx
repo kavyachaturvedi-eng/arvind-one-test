@@ -25,16 +25,16 @@ export default function PlanningSettings() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Settings</h1>
-          <p className="text-xs text-ink2 mt-1">{PLANNING_BRAND} · {CURRENT_SEASON.name}</p>
+          <p className="text-xs text-ink2 mt-1">{CURRENT_SEASON.name}</p>
         </div>
         <Chip tone={invented.length > 0 ? "warn" : "good"}>{invented.length} still invented</Chip>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Confirmed by AFL" value={String(confirmed.length)} sub="Told to us on a call" tone="good" emphasis />
-        <Stat label="Invented by us" value={String(invented.length)} sub="Waiting on Vector documentation" tone="warn" />
+        <Stat label="Confirmed by AFL" value={String(confirmed.length)} tone="good" emphasis />
+        <Stat label="Invented by us" value={String(invented.length)} tone="warn" />
         <Stat label="Clusters" value={String(CLUSTERS.filter((c) => stores.some((s) => s.clusterId === c.id)).length)} sub={`${stores.length} stores`} />
-        <Stat label="Run days" value="Tue · Fri" sub="Confirmed cadence" />
+        <Stat label="Run days" value="Tue · Fri" />
       </div>
 
       <Callout tone="warn" title="These are settings, not AFL's numbers">

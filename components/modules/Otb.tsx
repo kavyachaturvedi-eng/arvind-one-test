@@ -34,7 +34,7 @@ export default function Otb() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-ink">Open To Buy</h1>
-          <p className="text-xs text-ink2 mt-1">{PLANNING_BRAND} · {CURRENT_SEASON.name}</p>
+          <p className="text-xs text-ink2 mt-1">{CURRENT_SEASON.name}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button className="btn" data-otb-alloc onClick={() => app.go("alloc")}>
@@ -47,20 +47,17 @@ export default function Otb() {
         <Stat
           label="OTB remaining"
           value={remaining.toLocaleString("en-IN")}
-          sub={`${pct(committed / Math.max(1, budget))} of budget committed`}
+          sub={`${pct(committed / Math.max(1, budget))} committed`}
           tone={remaining > 0 ? "good" : "critical"}
           emphasis
         />
         <Stat label="Budget" value={budget.toLocaleString("en-IN")} sub={inr(value, { compact: true })} />
-        <Stat label="Received" value={received.toLocaleString("en-IN")} sub={`${pct(received / Math.max(1, committed))} of the committed buy`} />
-        <Stat label="Core share of buy" value={pct(coreUnits / Math.max(1, allUnits))} sub="Not exposed to markdown" />
+        <Stat label="Received" value={received.toLocaleString("en-IN")} sub={pct(received / Math.max(1, committed))} />
+        <Stat label="Core share of buy" value={pct(coreUnits / Math.max(1, allUnits))} />
       </div>
 
       <Card>
-        <SectionTitle
-          title="By category"
-          right={<Chip tone="brand">{pct(HOLDBACK_SHARE)} held at warehouse</Chip>}
-        />
+        <SectionTitle title="By category" />
         <Table>
           <thead>
             <tr>
