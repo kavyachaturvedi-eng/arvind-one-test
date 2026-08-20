@@ -11,7 +11,7 @@
 // Three users, exactly as Pushpal specified: the store executes, the hierarchy
 // observes. Store Manager is the operator of the consolidated execution app;
 // Retail Planning and the CEO watch that execution and act on what it surfaces.
-export type RoleId = "store" | "staff" | "planner" | "leadership";
+export type RoleId = "store" | "staff" | "planner" | "catplan" | "leadership";
 
 /** A training module pushed by Planning to every store's Tasks & Chores. */
 export interface TrainingItem {
@@ -103,8 +103,15 @@ export interface Store {
   format: StoreFormat;
   model: StoreModel;
   grade: "A" | "B" | "C";
+  /** Cluster (AFL also says "area") this store belongs to — see CLUSTERS. */
+  clusterId: string;
   /** Planned inventory norm in units (NOT display capacity — norms follow ROS). */
   norm: number;
+  /**
+   * Share of this store's incoming units that should be the same style returning
+   * (replenishment) rather than a new style (renewal). Grade-skewed; a setting.
+   */
+  replenShare: number;
   /** Monthly sales target, INR. */
   targetMonth: number;
   /** Crude lat/long-ish coords used for transfer-radius maths (arbitrary units). */
@@ -142,7 +149,12 @@ export interface Style {
   sizes: Size[];
   /** Units bought for the season across the estate. */
   bought: number;
-  isNOS: boolean;      // never-out-of-stock / core carry-forward
+  isNOS: boolean;      // never-out-of-stock / core carry-forward — a subset of core
+  /**
+   * Product-master attribute, not derived. Core carries across more than one
+   * season and is never discounted; fashion is seasonal and drives freshness.
+   */
+  productType: ProductType;
   launchedDaysAgo: number;
 }
 
@@ -393,4 +405,173 @@ export interface Notification {
   body: string;
   severity: "info" | "warn" | "critical";
   role: RoleId | "all";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Retail planning layer
+//
+// Hierarchy is Brand → Region → Cluster → Store. "Area" and "cluster" are the
+// same thing at AFL; we say cluster everywhere. Every invented threshold behind
+// these types is documented in PLANNING-ASSUMPTIONS.md and exposed as an
+// editable setting — none of them are claimed as AFL's real numbers.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Product-master attribute. Core carries across seasons; fashion is seasonal. */
+export type ProductType = "core" | "fashion";
+
+/**
+ * A named group of stores inside a region — a metro or a set of nearby cities.
+ * Brand-agnostic: one cluster manager runs the doors in their patch, and the
+ * hierarchy filters by brand above the cluster, not inside it.
+ */
+export interface Cluster {
+  id: string;
+  name: string;
+  region: Region;
+  managerName: string;
+  /** Cities whose stores belong to this cluster. */
+  cities: string[];
+}
+
+/** Where you are standing in the hierarchy. Store 360 renders all four. */
+export type ScopeLevel = "brand" | "region" | "cluster" | "store";
+
+export interface Scope {
+  level: ScopeLevel;
+  /** Brand name, region name, cluster id or store id depending on level. */
+  id: string;
+  label: string;
+}
+
+// ── Season and drops ─────────────────────────────────────────────────────────
+
+export interface Season {
+  id: string;              // "AW26"
+  name: string;            // "Autumn/Winter 26"
+  startsAt: number;
+  /** Full-price selling ends here; EOSS logic begins. */
+  fullPriceEndsAt: number;
+  endsAt: number;
+}
+
+export interface Drop {
+  id: string;
+  seasonId: string;
+  index: number;           // 1-based
+  label: string;
+  landsAt: number;
+  /** Share of the season buy landing in this drop. Drop 1 is the launch push. */
+  pctOfBuy: number;
+}
+
+// ── Open To Buy ──────────────────────────────────────────────────────────────
+
+export interface OtbLine {
+  seasonId: string;
+  brand: Brand;
+  category: Category;
+  budgetUnits: number;
+  budgetValue: number;     // INR at MRP
+  /** Units already committed to a drop or an allocation. */
+  committedUnits: number;
+  /** Units physically received into the estate or the warehouse. */
+  receivedUnits: number;
+}
+
+// ── Store requests to planning ───────────────────────────────────────────────
+//
+// Store proposes, planning decides — the maker-checker pattern. These land in a
+// queue, not on a named planner's desk.
+
+export type PlanningRequestKind =
+  | "replenish"      // send this style back, sizes are gone
+  | "renew"          // this style is finished, give me something new
+  | "rtv"            // let me send this back
+  | "style_ask"      // customers keep asking for this fit
+  | "norm_change";   // my floor can hold more (or less)
+
+export type PlanningRequestStatus = "open" | "approved" | "rejected";
+
+/** Frozen at the moment of raising, so a later decision is judged on what the
+ *  store actually saw — not on numbers that have since moved. */
+export interface RequestEvidence {
+  fillRate: number;
+  sellable: number;
+  ros: number;
+  coverDays: number;
+  sizeSetStatus: "healthy" | "at_risk" | "broken";
+  valueAtRisk: number;
+}
+
+export interface PlanningRequest {
+  id: string;
+  kind: PlanningRequestKind;
+  storeId: string;
+  styleId?: string;
+  size?: Size;
+  units?: number;
+  raisedBy: string;
+  raisedAt: number;
+  note?: string;
+  evidence: RequestEvidence;
+  status: PlanningRequestStatus;
+  decidedBy?: string;
+  decidedAt?: number;
+  decisionNote?: string;
+}
+
+// ── The replenishment and renewal run ────────────────────────────────────────
+//
+// Runs Tuesday and Friday. A store qualifies on fill rate below trigger or too
+// much brokenness across its carried styles.
+
+export type ReplenLineKind = "replenish" | "renew";
+
+export interface ReplenLine {
+  id: string;
+  storeId: string;
+  styleId: string;
+  size?: Size;             // replenishment is size-specific; renewal is not
+  kind: ReplenLineKind;
+  units: number;
+  /** Plain sentence a planner can read without opening anything else. */
+  reason: string;
+  confidence: number;
+  /** Warehouse units available against this line at run time. */
+  warehouseUnits: number;
+  valueUnlocked: number;
+}
+
+export type ReplenRunStatus = "proposed" | "released" | "part_released";
+
+export interface ReplenRun {
+  id: string;
+  ranAt: number;
+  status: ReplenRunStatus;
+  lines: ReplenLine[];
+  /** Store ids that qualified, and why. */
+  triggered: Array<{ storeId: string; reason: string }>;
+}
+
+// ── Planning's own pushes ────────────────────────────────────────────────────
+
+export interface AllocationPush {
+  id: string;
+  at: number;
+  by: string;
+  storeId: string;
+  styleId: string;
+  units: number;
+  /** Which drop or run this came from, for the store's trail. */
+  origin: "drop" | "run" | "manual";
+}
+
+export interface NormChange {
+  id: string;
+  at: number;
+  by: string;
+  storeId: string;
+  from: number;
+  to: number;
+  reason: string;
 }

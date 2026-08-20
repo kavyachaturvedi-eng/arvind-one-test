@@ -7,12 +7,13 @@ import { ROLES, STORES } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import type { RoleId } from "@/lib/types";
 
-const ORDER: RoleId[] = ["staff", "store", "planner", "leadership"];
+const ORDER: RoleId[] = ["staff", "store", "planner", "catplan", "leadership"];
 
 const DESC: Record<RoleId, string> = {
   store: "Run the store: operations plus insights",
   staff: "The till and the floor: bill, pack, receive",
   planner: "The control tower: every store, live",
+  catplan: "The season: buy, depth, OTB",
   leadership: "The business on one screen",
 };
 

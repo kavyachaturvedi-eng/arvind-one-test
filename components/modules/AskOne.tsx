@@ -57,6 +57,7 @@ const STARTERS: Record<RoleId, string[]> = {
   store: ["Which of my styles have a broken size set?", "Where is my best seller under-stocked?", "Which staff member has the lowest UPT?"],
   staff: ["Which of my styles have a broken size set?", "Where is my best seller under-stocked?"],
   planner: ["Which stores are bleeding margin on Oxford Solid Shirts?", "Which stores are below 90% fill rate?", "Why did order OM-55019 cancel?"],
+  catplan: ["What is full-price sell-through by brand?", "What is my markdown exposure by brand?", "Which stores are below 90% fill rate?"],
   leadership: ["What is my markdown exposure by brand?", "How does this month compare with last year?", "What is full-price sell-through by brand?"],
 };
 

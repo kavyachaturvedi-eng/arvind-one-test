@@ -613,6 +613,15 @@ export function fmtTime(ms: number): string {
 export function fmtDate(ms: number): string {
   return new Date(ms).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
 }
+/** "Tue 11 Aug" — the run calendar needs the weekday, not just the date. */
+export function fmtRunDate(ms: number): string {
+  return new Date(ms).toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "Asia/Kolkata",
+  });
+}
 export function fmtDateTime(ms: number): string {
   return `${fmtDate(ms)} ${fmtTime(ms)}`;
 }

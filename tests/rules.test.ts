@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import * as planning from "../lib/rules";
+import { NOW } from "../lib/seed";
 import {
   CARTON_MIN_UNITS,
   OUTWARD_CODE_LIMIT,
@@ -567,5 +569,207 @@ describe("distanceKm", () => {
   });
   it("grows with separation", () => {
     expect(distanceKm({ x: 0, y: 0 }, { x: 10, y: 0 })).toBeGreaterThan(distanceKm({ x: 0, y: 0 }, { x: 2, y: 0 }));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Retail planning rules
+//
+// These guard the invented thresholds in PLANNING-ASSUMPTIONS.md. If someone
+// changes a number there without meaning to, one of these fails.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("fill rate bands", () => {
+  it("uses the client's own 97–105% healthy band", () => {
+    expect(planning.fillBand(0.9)).toBe("thin");
+    expect(planning.fillBand(0.969)).toBe("thin");
+    expect(planning.fillBand(0.97)).toBe("healthy");
+    expect(planning.fillBand(1.0)).toBe("healthy");
+    expect(planning.fillBand(1.05)).toBe("healthy");
+    expect(planning.fillBand(1.051)).toBe("heavy");
+  });
+});
+
+describe("the run calendar", () => {
+  it("puts the demo clock on a Thursday", () => {
+    expect(planning.dayOfWeekIST(NOW)).toBe(4);
+  });
+
+  it("fires on Tuesday and Friday only", () => {
+    const days = [0, 1, 2, 3, 4, 5, 6].filter((d) =>
+      planning.RUN_DAYS.includes(d),
+    );
+    expect(days).toEqual([2, 5]);
+    expect(planning.isRunDay(NOW)).toBe(false);
+  });
+
+  it("reads back Tuesday as the last run and Friday as the next", () => {
+    const last = planning.lastRunAt(NOW);
+    const next = planning.nextRunAt(NOW);
+    expect(planning.dayOfWeekIST(last)).toBe(2);
+    expect(planning.dayOfWeekIST(next)).toBe(5);
+    expect(last).toBeLessThan(NOW);
+    expect(next).toBeGreaterThan(NOW);
+    // Tue 11 Aug and Fri 14 Aug — two days either side of the clock.
+    expect(Math.round((NOW - last) / 86_400_000)).toBe(2);
+    expect(Math.round((next - NOW) / 86_400_000)).toBe(1);
+  });
+
+  it("treats a run day as its own last run", () => {
+    const friday = planning.nextRunAt(NOW);
+    expect(planning.isRunDay(friday)).toBe(true);
+    expect(planning.lastRunAt(friday)).toBe(friday);
+  });
+});
+
+describe("run qualification", () => {
+  it("qualifies a thin store and says why in words", () => {
+    const r = planning.qualifiesForRun({ fillRate: 0.81, brokenShare: 0.05 });
+    expect(r.qualifies).toBe(true);
+    expect(r.reason).toContain("81%");
+  });
+
+  it("qualifies a broken store even when it is inside norm", () => {
+    const r = planning.qualifiesForRun({ fillRate: 1.0, brokenShare: 0.62 });
+    expect(r.qualifies).toBe(true);
+    expect(r.reason).toContain("size set");
+  });
+
+  it("leaves a healthy store alone", () => {
+    expect(planning.qualifiesForRun({ fillRate: 1.0, brokenShare: 0.4 }).qualifies).toBe(false);
+  });
+
+  it("names both triggers when both fire", () => {
+    const r = planning.qualifiesForRun({ fillRate: 0.7, brokenShare: 0.6 });
+    expect(r.reason).toContain("and");
+  });
+});
+
+describe("replenish vs renew split", () => {
+  it("splits by the store's share and never loses a unit", () => {
+    const s = planning.splitReplenRenew(100, 0.65);
+    expect(s.replenish).toBe(65);
+    expect(s.renew).toBe(35);
+    expect(s.replenish + s.renew).toBe(100);
+  });
+
+  it("holds the total across awkward numbers", () => {
+    for (const units of [1, 7, 33, 101, 457]) {
+      for (const share of [0.65, 0.72, 0.8]) {
+        const s = planning.splitReplenRenew(units, share);
+        expect(s.replenish + s.renew).toBe(units);
+        expect(s.replenish).toBeGreaterThanOrEqual(0);
+        expect(s.renew).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it("clamps a nonsense share instead of producing negative units", () => {
+    expect(planning.splitReplenRenew(50, 1.9)).toEqual({ replenish: 50, renew: 0 });
+    expect(planning.splitReplenRenew(50, -1)).toEqual({ replenish: 0, renew: 50 });
+    expect(planning.splitReplenRenew(-10, 0.7)).toEqual({ replenish: 0, renew: 0 });
+  });
+
+  it("leans C doors on core and lets A doors take newness", () => {
+    const a = planning.splitReplenRenew(100, 0.65).renew;
+    const c = planning.splitReplenRenew(100, 0.8).renew;
+    expect(a).toBeGreaterThan(c);
+  });
+});
+
+describe("style finished", () => {
+  it("is finished once it has sold through", () => {
+    expect(planning.styleFinished({ sellThrough: 0.78, daysLeftInWindow: 60 })).toBe(true);
+  });
+
+  it("is finished when the window runs out even on weak sell-through", () => {
+    expect(planning.styleFinished({ sellThrough: 0.3, daysLeftInWindow: 14 })).toBe(true);
+  });
+
+  it("is not finished mid-window on middling sell-through", () => {
+    expect(planning.styleFinished({ sellThrough: 0.5, daysLeftInWindow: 45 })).toBe(false);
+  });
+});
+
+describe("core / fashion mix", () => {
+  it("skews the core target by grade, heaviest at C", () => {
+    expect(planning.coreShareTarget("A")).toBeLessThan(planning.coreShareTarget("B"));
+    expect(planning.coreShareTarget("B")).toBeLessThan(planning.coreShareTarget("C"));
+  });
+
+  it("allows a 6-point tolerance either side before it calls a problem", () => {
+    expect(planning.mixVerdict(0.5, 0.5)).toBe("on_plan");
+    expect(planning.mixVerdict(0.55, 0.5)).toBe("on_plan");
+    expect(planning.mixVerdict(0.58, 0.5)).toBe("core_heavy");
+    expect(planning.mixVerdict(0.42, 0.5)).toBe("fashion_heavy");
+  });
+});
+
+describe("studs, buds and duds", () => {
+  it("calls a style beating its region on real sell-through a stud", () => {
+    expect(planning.studBudDud({ ros: 1.2, regionalRos: 0.8, sellThrough: 0.7 })).toBe("stud");
+  });
+
+  it("calls a regional winner that has not proved itself a bud", () => {
+    expect(planning.studBudDud({ ros: 1.2, regionalRos: 0.8, sellThrough: 0.2 })).toBe("bud");
+  });
+
+  it("calls a style behind on both a dud", () => {
+    expect(planning.studBudDud({ ros: 0.2, regionalRos: 0.9, sellThrough: 0.1 })).toBe("dud");
+  });
+});
+
+describe("norm recommendation", () => {
+  it("raises the norm on a hot door holding its sizes", () => {
+    const r = planning.normRecommendation({ norm: 3000, fillRate: 1.0, sellThrough: 0.8, sizeSetScore: 0.7 });
+    expect(r.delta).toBeGreaterThan(0);
+    expect(r.reason).toContain("carry more");
+  });
+
+  it("takes norm back off a heavy door that is not selling", () => {
+    const r = planning.normRecommendation({ norm: 3000, fillRate: 1.2, sellThrough: 0.4, sizeSetScore: 0.5 });
+    expect(r.delta).toBeLessThan(0);
+  });
+
+  it("leaves a store inside band alone", () => {
+    expect(planning.normRecommendation({ norm: 3000, fillRate: 1.0, sellThrough: 0.6, sizeSetScore: 0.5 }).delta).toBe(0);
+  });
+});
+
+describe("OTB and KPI arithmetic", () => {
+  it("reports what is left to spend and how much is consumed", () => {
+    const r = planning.otbRemaining({ budgetUnits: 1000, committedUnits: 850 });
+    expect(r.units).toBe(150);
+    expect(r.pctConsumed).toBeCloseTo(0.85, 5);
+  });
+
+  it("does not divide by zero on an empty budget", () => {
+    expect(planning.otbRemaining({ budgetUnits: 0, committedUnits: 0 }).pctConsumed).toBe(0);
+  });
+
+  it("computes ASP and growth the way AFL's KPI sheet does", () => {
+    expect(planning.asp(100_000, 70)).toBeCloseTo(1428.571, 2);
+    expect(planning.asp(100_000, 0)).toBe(0);
+    expect(planning.growth(100_000, 75_000)).toBeCloseTo(0.3333, 3);
+    expect(planning.growth(100_000, 0)).toBe(0);
+  });
+});
+
+describe("the assumptions register", () => {
+  it("is honest about which numbers came from the client", () => {
+    expect(planning.ASSUMPTIONS.length).toBeGreaterThan(8);
+    const confirmed = planning.ASSUMPTIONS.filter((a) => a.basis === "confirmed").map((a) => a.key);
+    expect(confirmed).toContain("holdback");
+    expect(confirmed).toContain("fillBand");
+    expect(confirmed).toContain("runDays");
+    // Anything invented must not claim a source.
+    planning.ASSUMPTIONS.filter((a) => a.basis === "invented").forEach((a) => {
+      expect(a.source).toBe("—");
+    });
+  });
+
+  it("keeps the holdback at the confirmed 25% with 40% as the goal", () => {
+    expect(planning.HOLDBACK_SHARE).toBe(0.25);
+    expect(planning.HOLDBACK_GOAL).toBe(0.4);
   });
 });

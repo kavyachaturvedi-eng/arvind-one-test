@@ -11,23 +11,33 @@
 import React, { createContext, useCallback, useContext, useMemo, useReducer } from "react";
 import {
   CASH_EXCEPTIONS,
+  DAY,
+  HOUR,
   NOW,
   SEED_OMNI,
   SEED_OUTWARD,
   SEED_TICKETS,
   STORES,
+  STYLES,
+  storeById,
   styleById,
 } from "./seed";
 import { classifyCancellation, evaluateIstPolicy, splitOutward, type IstPolicyInput } from "./rules";
 import type {
+  AllocationPush,
   AuditEntry,
   TrainingItem,
   CashException,
   ISTRequest,
   ISTStatus,
+  NormChange,
   OmniOrder,
   OutwardBatch,
+  PlanningRequest,
+  PlanningRequestKind,
+  RequestEvidence,
   RoleId,
+  Scope,
   Size,
   Task,
   Ticket,
@@ -65,6 +75,13 @@ export type ModuleId =
   | "attendance"
   | "offers"
   | "health"
+  // ── Retail planning ──
+  | "store360"
+  | "run"
+  | "alloc"
+  | "otb"
+  | "asks"
+  | "planset"
 ;
 
 interface AppState {
@@ -100,6 +117,21 @@ interface AppState {
   audit: AuditEntry[];
   toast: { id: number; message: string; tone: "good" | "warn" | "info" } | null;
   clockOffsetMinutes: number;
+
+  // ── Retail planning ──
+  /** Where the planner is standing in Brand → Region → Cluster → Store. */
+  scope: Scope;
+  /** Store asks waiting on planning. Store proposes, planning decides. */
+  requests: PlanningRequest[];
+  /** Run lines planning has released to the warehouse. */
+  released: string[];
+  /** Run lines planning has explicitly dropped from this run. */
+  dropped: string[];
+  /** Norm overrides planning has set, by store id. Falls back to the seed norm. */
+  norms: Record<string, number>;
+  normLog: NormChange[];
+  /** Units planning has pushed to a store outside the run. */
+  pushes: AllocationPush[];
 }
 
 /** What a person is allowed to do. The manager sets these when adding staff. */
@@ -139,6 +171,17 @@ export interface LeaveRequest {
   status: "pending" | "approved" | "declined";
 }
 
+let reqSeq = 1;
+
+/** How each kind of store ask reads on screen and in the audit trail. */
+export const REQUEST_LABEL: Record<PlanningRequestKind, string> = {
+  replenish: "Replenishment",
+  renew: "Renewal",
+  rtv: "RTV",
+  style_ask: "Style request",
+  norm_change: "Norm change",
+};
+
 type Action =
   | { type: "login"; role: RoleId; storeId?: string; userName?: string }
   | { type: "user:add"; user: StoreUser }
@@ -170,6 +213,14 @@ type Action =
   | { type: "audit"; entry: AuditEntry }
   | { type: "toast"; message: string; tone?: "good" | "warn" | "info" }
   | { type: "toast:clear" }
+  // ── Retail planning ──
+  | { type: "scope"; scope: Scope }
+  | { type: "request:create"; request: PlanningRequest }
+  | { type: "request:decide"; id: string; status: "approved" | "rejected"; by: string; note?: string }
+  | { type: "run:release"; lineIds: string[]; by: string; label: string }
+  | { type: "run:drop"; lineIds: string[]; by: string; label: string }
+  | { type: "norm:set"; storeId: string; to: number; by: string; reason: string }
+  | { type: "alloc:push"; pushes: AllocationPush[]; by: string; label: string }
   | { type: "reset" };
 
 // ── Initial tasks, generated from the exception engines ──────────────────────
@@ -281,6 +332,78 @@ function initialTasks(): Task[] {
   ];
 }
 
+/**
+ * A handful of store asks already sitting in the queue, so the planner's inbox
+ * is never empty on a demo. Store proposes, planning decides — these are the
+ * proposals, and the evidence is frozen at the moment each was raised.
+ */
+function seedRequests(): PlanningRequest[] {
+  return [
+    {
+      id: "REQ-3301",
+      kind: "replenish",
+      storeId: STORES[1].id,
+      styleId: STYLES[0].id,
+      size: "L",
+      units: 24,
+      raisedBy: "Aisha Khan",
+      raisedAt: NOW - 19 * HOUR,
+      note: "Third customer this week asked for L. Wall looks picked over.",
+      evidence: { fillRate: 0.88, sellable: 41, ros: 1.4, coverDays: 29, sizeSetStatus: "broken", valueAtRisk: 128_000 },
+      status: "open",
+    },
+    {
+      id: "REQ-3302",
+      kind: "renew",
+      storeId: STORES[4].id,
+      styleId: STYLES[7].id,
+      units: 30,
+      raisedBy: "Karan Mehta",
+      raisedAt: NOW - 2 * DAY - 3 * HOUR,
+      note: "This one is done. Same wall since launch — needs something new before the festive weekend.",
+      evidence: { fillRate: 1.06, sellable: 88, ros: 0.2, coverDays: 340, sizeSetStatus: "at_risk", valueAtRisk: 42_000 },
+      status: "open",
+    },
+    {
+      id: "REQ-3303",
+      kind: "rtv",
+      storeId: STORES[14].id,
+      styleId: STYLES[12].id,
+      units: 210,
+      raisedBy: "Farhan Sheikh",
+      raisedAt: NOW - 27 * HOUR,
+      note: "Outlet door. Knitwear is not moving at this price and it is eating the back wall.",
+      evidence: { fillRate: 1.19, sellable: 260, ros: 0.1, coverDays: 999, sizeSetStatus: "healthy", valueAtRisk: 0 },
+      status: "open",
+    },
+    {
+      id: "REQ-3304",
+      kind: "style_ask",
+      storeId: STORES[8].id,
+      styleId: STYLES[3].id,
+      raisedBy: "Nikhil Rao",
+      raisedAt: NOW - 4 * DAY,
+      note: "Customers keep asking for the slim fit in this. We only carry regular.",
+      evidence: { fillRate: 0.95, sellable: 62, ros: 0.9, coverDays: 68, sizeSetStatus: "healthy", valueAtRisk: 0 },
+      status: "open",
+    },
+    {
+      id: "REQ-3305",
+      kind: "norm_change",
+      storeId: STORES[3].id,
+      units: 420,
+      raisedBy: "Sneha Deshpande",
+      raisedAt: NOW - 6 * DAY,
+      note: "New wall went in after the fit-out. We can hold about 400 more units.",
+      evidence: { fillRate: 1.02, sellable: 3180, ros: 0, coverDays: 0, sizeSetStatus: "healthy", valueAtRisk: 0 },
+      status: "approved",
+      decidedBy: "Regional Planning",
+      decidedAt: NOW - 5 * DAY,
+      decisionNote: "Approved after the fit-out photos. Norm raised from 3,120 to 3,540.",
+    },
+  ];
+}
+
 const initial: AppState = {
   authed: false,
   role: "store",
@@ -312,6 +435,13 @@ const initial: AppState = {
   ],
   printerRoutedTo: null,
   cardBatched: false,
+  scope: { level: "brand", id: "all", label: "All brands" },
+  requests: seedRequests(),
+  released: [],
+  dropped: [],
+  norms: {},
+  normLog: [],
+  pushes: [],
   audit: [
     { at: NOW - 64 * 60_000, actor: "Commercial", action: "Price revision published", object: "11 styles", system: "Arvind One" },
     { at: NOW - 63 * 60_000, actor: "Arvind One", action: "Created reprint job TK-8803", object: "41 units", system: "Arvind One" },
@@ -535,6 +665,77 @@ function reducer(state: AppState, action: Action): AppState {
     case "toast:clear":
       return { ...state, toast: null };
 
+    // ── Retail planning ──────────────────────────────────────────────────────
+    //
+    // Every planning decision is auditable for the same reason store mutations
+    // are: a store has to be able to see who decided its ask, and when.
+
+    case "scope":
+      return { ...state, scope: action.scope };
+
+    case "request:create":
+      return {
+        ...state,
+        requests: [action.request, ...state.requests],
+        audit: [
+          { at: action.request.raisedAt, actor: action.request.raisedBy, action: `${REQUEST_LABEL[action.request.kind]} raised to planning`, object: `${action.request.id} · ${storeById(action.request.storeId).name}`, system: "Arvind One" },
+          ...state.audit,
+        ],
+      };
+
+    case "request:decide": {
+      const req = state.requests.find((r) => r.id === action.id);
+      return {
+        ...state,
+        requests: state.requests.map((r) =>
+          r.id === action.id
+            ? { ...r, status: action.status, decidedBy: action.by, decidedAt: NOW, decisionNote: action.note }
+            : r,
+        ),
+        audit: [
+          { at: NOW, actor: action.by, action: `Store ask ${action.status}`, object: `${action.id}${req ? ` · ${storeById(req.storeId).name}` : ""}`, system: "Arvind One" },
+          ...state.audit,
+        ],
+      };
+    }
+
+    case "run:release":
+      return {
+        ...state,
+        released: [...new Set([...state.released, ...action.lineIds])],
+        dropped: state.dropped.filter((id) => !action.lineIds.includes(id)),
+        audit: [{ at: NOW, actor: action.by, action: "Run lines released to the warehouse", object: action.label, system: "Arvind One" }, ...state.audit],
+      };
+
+    case "run:drop":
+      return {
+        ...state,
+        dropped: [...new Set([...state.dropped, ...action.lineIds])],
+        released: state.released.filter((id) => !action.lineIds.includes(id)),
+        audit: [{ at: NOW, actor: action.by, action: "Run lines dropped", object: action.label, system: "Arvind One" }, ...state.audit],
+      };
+
+    case "norm:set": {
+      const store = storeById(action.storeId);
+      const from = state.norms[action.storeId] ?? store.norm;
+      return {
+        ...state,
+        norms: { ...state.norms, [action.storeId]: action.to },
+        normLog: [
+          { id: `NC-${action.storeId}-${state.normLog.length + 1}`, at: NOW, by: action.by, storeId: action.storeId, from, to: action.to, reason: action.reason },
+          ...state.normLog,
+        ],
+        audit: [{ at: NOW, actor: action.by, action: "Norm changed", object: `${store.name} · ${from} → ${action.to} units`, system: "Arvind One" }, ...state.audit],
+      };
+    }
+
+    case "alloc:push":
+      return {
+        ...state,
+        pushes: [...action.pushes, ...state.pushes],
+        audit: [{ at: NOW, actor: action.by, action: "Units assigned from the warehouse", object: action.label, system: "Arvind One" }, ...state.audit],
+      };
+
     case "reset":
       return { ...initial, role: state.role, module: state.module, storeId: state.storeId };
 
@@ -546,7 +747,9 @@ function reducer(state: AppState, action: Action): AppState {
 function defaultModule(role: RoleId): ModuleId {
   // Staff go straight to the till, which opens the day; the manager to
   // insights; planning to the live control tower; the CEO to the summary.
-  return role === "staff" ? "pos" : role === "store" ? "home" : role === "planner" ? "live" : "exec";
+  // Staff to the till, the manager to insights, regional planning to Store 360
+  // (the hierarchy is where their day starts), category planning to OTB.
+  return role === "staff" ? "pos" : role === "store" ? "home" : role === "planner" ? "store360" : role === "catplan" ? "otb" : "exec";
 }
 
 // ── Context ──────────────────────────────────────────────────────────────────
@@ -559,6 +762,22 @@ interface Ctx extends AppState {
   toastNow: (m: string, tone?: "good" | "warn" | "info") => void;
   createIst: (input: CreateIstInput) => ISTRequest;
   actorName: string;
+  // ── Retail planning ──
+  setScope: (s: Scope) => void;
+  /** The store's norm, honouring any change planning has made this session. */
+  normFor: (storeId: string) => number;
+  /** Raise a store ask. Store proposes; the decision belongs to planning. */
+  raiseRequest: (input: RaiseRequestInput) => PlanningRequest;
+}
+
+export interface RaiseRequestInput {
+  kind: PlanningRequestKind;
+  storeId: string;
+  styleId?: string;
+  size?: Size;
+  units?: number;
+  note?: string;
+  evidence: RequestEvidence;
 }
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -590,7 +809,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       case "staff":
         return "Store Staff";
       case "planner":
-        return "Planning";
+        return "Regional Planning";
+      case "catplan":
+        return "Category Planning";
       case "leadership":
         return "Super Admin";
     }
@@ -664,6 +885,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return request;
   }, []);
 
+  const raiseRequest = useCallback(
+    (input: RaiseRequestInput): PlanningRequest => {
+      const request: PlanningRequest = {
+        id: `REQ-${4100 + reqSeq++}`,
+        kind: input.kind,
+        storeId: input.storeId,
+        styleId: input.styleId,
+        size: input.size,
+        units: input.units,
+        raisedBy: actorName,
+        raisedAt: NOW,
+        note: input.note,
+        evidence: input.evidence,
+        status: "open",
+      };
+      dispatch({ type: "request:create", request });
+      return request;
+    },
+    [actorName],
+  );
+
   const value: Ctx = {
     ...state,
     dispatch,
@@ -673,6 +915,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     go: (m, focus) => dispatch({ type: "module", module: m, focus: focus ?? null }),
     toastNow: (m, tone) => dispatch({ type: "toast", message: m, tone }),
     createIst,
+    setScope: (sc) => dispatch({ type: "scope", scope: sc }),
+    normFor: (storeId) => state.norms[storeId] ?? storeById(storeId).norm,
+    raiseRequest,
   };
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

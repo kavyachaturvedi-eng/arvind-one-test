@@ -10,6 +10,11 @@ import type {
   Brand,
   CashException,
   Category,
+  Cluster,
+  Drop,
+  OtbLine,
+  ProductType,
+  Season,
   MetricDef,
   OmniOrder,
   OutwardBatch,
@@ -82,6 +87,17 @@ export const ROLES: Role[] = [
     basedOn: "Praveen — retail planning conversation",
   },
   {
+    id: "catplan",
+    label: "Category Planning",
+    person: "Category Planning",
+    title: "Category planner",
+    scope: "All regions · season plan, OTB, core strategy",
+    initials: "CP",
+    mode: "observe",
+    does: "Owns the season: what to buy, how deep, what stays core — and how the buy is cut across clusters.",
+    basedOn: "Praveen — planning organisation, category vs regional split",
+  },
+  {
     id: "leadership",
     label: "Super Admin",
     person: "Super Admin",
@@ -143,6 +159,28 @@ const PINCODES = [
   "560092", "500081", "500019", "110070",
 ];
 
+// ── Clusters ─────────────────────────────────────────────────────────────────
+//
+// Brand → Region → Cluster → Store. "Area" and "cluster" are the same thing at
+// AFL; we say cluster. A cluster is a metro or a set of nearby cities, run by
+// one cluster manager who reports to the regional manager.
+
+export const CLUSTERS: Cluster[] = [
+  { id: "CL-MUM", name: "Mumbai Metro", region: "West", managerName: "Sandeep Kulkarni", cities: ["Mumbai"] },
+  { id: "CL-WST", name: "Pune & Surat", region: "West", managerName: "Meghna Joshi", cities: ["Pune", "Surat"] },
+  { id: "CL-DEL", name: "Delhi NCR", region: "North", managerName: "Vivek Chadha", cities: ["Delhi NCR"] },
+  { id: "CL-NTH", name: "Chandigarh & Lucknow", region: "North", managerName: "Gurpreet Kaur", cities: ["Chandigarh", "Lucknow"] },
+  { id: "CL-BLR", name: "Bengaluru", region: "South", managerName: "Anitha Raghavan", cities: ["Bengaluru"] },
+  { id: "CL-STH", name: "Chennai, Kochi & Hyderabad", region: "South", managerName: "Vinod Krishnan", cities: ["Chennai", "Kochi", "Hyderabad"] },
+  { id: "CL-EST", name: "East", region: "East", managerName: "Subhro Banerjee", cities: ["Kolkata", "Bhubaneswar", "Siliguri"] },
+];
+
+export const clusterById = (id: string) => CLUSTERS.find((c) => c.id === id)!;
+const clusterForCity = (city: string) => CLUSTERS.find((c) => c.cities.includes(city))!.id;
+
+/** Replenishment share of incoming units, by grade. See PLANNING-ASSUMPTIONS.md §4. */
+const REPLEN_SHARE: Record<Store["grade"], number> = { A: 0.65, B: 0.72, C: 0.8 };
+
 export const STORES: Store[] = STORE_SPECS.map(([name, city, brand, region, format, model, grade, x, y], i) => {
   const r = rng(1000 + i);
   const gradeMult = grade === "A" ? 1 : grade === "B" ? 0.62 : 0.38;
@@ -156,7 +194,9 @@ export const STORES: Store[] = STORE_SPECS.map(([name, city, brand, region, form
     format,
     model,
     grade,
+    clusterId: clusterForCity(city),
     norm: Math.round((2600 + r() * 1400) * gradeMult),
+    replenShare: REPLEN_SHARE[grade],
     targetMonth: Math.round((4_200_000 + r() * 2_400_000) * gradeMult),
     x,
     y,
@@ -231,25 +271,38 @@ const STYLE_SPECS: Array<[string, Category, Brand, string, string, number]> = [
   ["FM Hooded Sweatshirt", "Knitwear", "Flying Machine", "Grey", "#8F8F8A", 2299],
 ];
 
+// Core vs fashion is a product-master attribute, not a derived number (Pushpal,
+// 20 Aug). Core carries across more than one season and is never discounted;
+// fashion is seasonal and drives floor freshness. NOS is a subset of core.
+const CORE_LEANING: Category[] = ["Polo", "Shirts", "T-Shirts", "Denim", "Trousers", "Accessories"];
+
+function coreOrFashion(isNOS: boolean, story: string, category: Category, roll: number): ProductType {
+  if (isNOS || story === "Core NOS") return "core";
+  return CORE_LEANING.includes(category) && roll < 0.42 ? "core" : "fashion";
+}
+
 export const STYLES: Style[] = STYLE_SPECS.map(([name, category, brand, colour, colourHex, mrp], i) => {
   const r = rng(2000 + i);
   const waist = category === "Denim" || category === "Trousers";
   const sizes = category === "Accessories" ? (["M", "L", "XL"] as Size[]) : waist ? WAIST_SIZES : APPAREL_SIZES;
   const coreSizes = category === "Accessories" ? (["M", "L"] as Size[]) : waist ? CORE_WAIST : CORE_APPAREL;
   const prefix = brand.split(" ")[0].slice(0, 2).toUpperCase();
+  const story = pick(r, STORIES);
+  const nos = r() < 0.22;
   return {
     id: `${prefix}-${category.slice(0, 3).toUpperCase()}-${4000 + i * 17}`,
     name,
     brand,
     category,
-    story: pick(r, STORIES),
+    story,
     mrp,
     colour,
     colourHex,
     coreSizes,
     sizes,
     bought: int(r, 4200, 21000),
-    isNOS: r() < 0.22,
+    isNOS: nos,
+    productType: coreOrFashion(nos, story, category, r()),
     launchedDaysAgo: int(r, 12, 132),
   };
 });
@@ -863,3 +916,69 @@ export const SEED_OUTWARD: OutwardBatch[] = [
     ],
   },
 ];
+
+// ── Seasons, drops and OTB ───────────────────────────────────────────────────
+//
+// AW26 launches 15 Aug 2026 — two days after the frozen demo clock, which is
+// why the planning screens open on a pre-launch allocation decision. Drop
+// shares add to 75%: the other 25% is the warehouse holdback that funds the
+// Tue/Fri replenishment run (PLANNING-ASSUMPTIONS.md §1).
+
+export const SEASONS: Season[] = [
+  {
+    id: "SS26",
+    name: "Spring/Summer 26",
+    startsAt: Date.UTC(2026, 1, 5, 4, 0, 0),
+    fullPriceEndsAt: Date.UTC(2026, 5, 8, 4, 0, 0),
+    endsAt: Date.UTC(2026, 6, 31, 4, 0, 0),
+  },
+  {
+    id: "AW26",
+    name: "Autumn/Winter 26",
+    startsAt: Date.UTC(2026, 7, 15, 4, 0, 0),
+    fullPriceEndsAt: Date.UTC(2027, 0, 10, 4, 0, 0),
+    endsAt: Date.UTC(2027, 1, 28, 4, 0, 0),
+  },
+];
+
+export const CURRENT_SEASON = SEASONS[1];
+export const seasonById = (id: string) => SEASONS.find((s) => s.id === id)!;
+
+export const DROPS: Drop[] = [
+  { id: "AW26-D1", seasonId: "AW26", index: 1, label: "Launch", landsAt: Date.UTC(2026, 7, 15, 4, 0, 0), pctOfBuy: 0.45 },
+  { id: "AW26-D2", seasonId: "AW26", index: 2, label: "Festive", landsAt: Date.UTC(2026, 8, 3, 4, 0, 0), pctOfBuy: 0.2 },
+  { id: "AW26-D3", seasonId: "AW26", index: 3, label: "Winter", landsAt: Date.UTC(2026, 9, 8, 4, 0, 0), pctOfBuy: 0.1 },
+];
+
+export const dropsForSeason = (seasonId: string) => DROPS.filter((d) => d.seasonId === seasonId);
+
+/**
+ * Open To Buy, modelled lightly: budget against what has been committed to a
+ * drop and what has physically landed. Budget runs 12% above the committed buy,
+ * so there is real OTB headroom to spend on a winner mid-season.
+ */
+export const OTB: OtbLine[] = (() => {
+  const acc = new Map<string, OtbLine>();
+  STYLES.forEach((style) => {
+    const key = `${style.brand}|${style.category}`;
+    const line = acc.get(key) ?? {
+      seasonId: CURRENT_SEASON.id,
+      brand: style.brand,
+      category: style.category,
+      budgetUnits: 0,
+      budgetValue: 0,
+      committedUnits: 0,
+      receivedUnits: 0,
+    };
+    line.committedUnits += style.bought;
+    line.budgetUnits += Math.round(style.bought * 1.12);
+    line.budgetValue += Math.round(style.bought * 1.12 * style.mrp);
+    // 75% of the buy is scheduled into stores across three drops; the launch
+    // drop (45%) has not landed yet on the demo clock.
+    line.receivedUnits += Math.round(style.bought * 0.3);
+    acc.set(key, line);
+  });
+  return [...acc.values()].sort((a, b) => (a.brand === b.brand ? a.category.localeCompare(b.category) : a.brand.localeCompare(b.brand)));
+})();
+
+export const otbForBrand = (brand: Brand) => OTB.filter((l) => l.brand === brand);

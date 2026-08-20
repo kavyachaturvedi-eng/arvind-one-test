@@ -1,13 +1,18 @@
 "use client";
 
-// Replenishment — the pull-and-transfer engine for this store.
-// Warehouse pulls execute here; inter-store transfers route into Save the Sale.
+// Replenishment — what this store is asking planning to send.
+//
+// A pull is a *request*, not an instruction: the store proposes and Retail
+// Planning decides (maker-checker). Raising one creates the local task so the
+// floor knows it is in hand, and a planning request carrying the evidence the
+// store could see at the moment it raised it.
 
 import React, { useMemo, useState } from "react";
 import { NOW } from "@/lib/seed";
-import { sizeSetExceptions, type StyleSignal } from "@/lib/engine";
-import { useApp } from "@/lib/state";
+import { sizeSetExceptions, vitalsFor, type StyleSignal } from "@/lib/engine";
+import { REQUEST_LABEL, useApp } from "@/lib/state";
 import { Card, Chip, Empty, SectionTitle, Stat, StatusDot, Swatch, Table, Td, Th, inr } from "@/components/ui";
+import { pct } from "@/lib/rules";
 
 const ACTION_LABEL: Record<string, string> = {
   replenish_from_dc: "Pull from warehouse",
@@ -19,7 +24,12 @@ const ACTION_LABEL: Record<string, string> = {
 export default function Replenishment() {
   const app = useApp();
   const all = useMemo(() => sizeSetExceptions(app.storeId, 40), [app.storeId]);
+  const vitals = useMemo(() => vitalsFor(app.storeId), [app.storeId]);
   const [raised, setRaised] = useState<string[]>([]);
+  // What planning has already done with this store's asks.
+  const mine = app.requests.filter((r) => r.storeId === app.storeId);
+  const waiting = mine.filter((r) => r.status === "open");
+  const decided = mine.filter((r) => r.status !== "open");
 
   const pulls = all.filter((s) => s.decision.action === "replenish_from_dc");
   const transfers = all.filter((s) => s.decision.action === "transfer_in");
@@ -33,13 +43,33 @@ export default function Replenishment() {
 
   function raisePull(sig: StyleSignal) {
     const units = Math.max(1, Math.min(sig.dcUnits, sig.decision.units || Math.ceil(sig.ros * 7)));
+
+    // The ask that goes up to planning, with the evidence frozen as the store
+    // saw it. Planning decides; nothing is picked until it does.
+    app.raiseRequest({
+      kind: "replenish",
+      storeId: app.storeId,
+      styleId: sig.style.id,
+      size: sig.health.missingCore[0] ?? sig.style.coreSizes[0],
+      units,
+      note: sig.decision.reason,
+      evidence: {
+        fillRate: vitals.fillRate,
+        sellable: sig.sellable,
+        ros: sig.ros,
+        coverDays: sig.cover,
+        sizeSetStatus: sig.health.status,
+        valueAtRisk: Math.round(sig.valueAtRisk),
+      },
+    });
+
     app.dispatch({
       type: "task:create",
       task: {
         id: `T-RP-${sig.style.id}`,
         storeId: app.storeId,
-        title: `Replenish ${units} × ${sig.style.name} from the warehouse`,
-        detail: `${sig.decision.reason} Warehouse shows ${sig.dcUnits} units.`,
+        title: `Replenish ${units} × ${sig.style.name} — asked planning`,
+        detail: `${sig.decision.reason} Warehouse shows ${sig.dcUnits} units. Waiting on Retail Planning.`,
         origin: "replenishment",
         assignedTo: app.actorName,
         dueAt: NOW + 24 * 3600_000,
@@ -52,7 +82,7 @@ export default function Replenishment() {
       },
     });
     setRaised((r) => [...r, sig.style.id]);
-    app.toastNow(`Pull raised: ${units} × ${sig.style.name}`, "good");
+    app.toastNow(`Asked planning for ${units} × ${sig.style.name}`, "good");
   }
 
   function raiseAll() {
@@ -66,7 +96,7 @@ export default function Replenishment() {
           <h1 className="text-xl font-semibold text-ink">Replenishment</h1>
         </div>
         {openPulls.length > 1 && (
-          <button className="btn-primary" onClick={raiseAll}>Raise all {openPulls.length} pulls</button>
+          <button className="btn-primary" data-ask-all onClick={raiseAll}>Ask planning for all {openPulls.length}</button>
         )}
       </div>
 
@@ -123,9 +153,9 @@ export default function Replenishment() {
                     <Td align="right" className="num text-xs" style={{ color: "var(--status-critical)" }}>{inr(s.valueAtRisk, { compact: true })}</Td>
                     <Td align="right">
                       {done ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-ink2"><StatusDot tone="good" />Raised</span>
+                        <span className="inline-flex items-center gap-1.5 text-xs text-ink2"><StatusDot tone="warn" />With planning</span>
                       ) : (
-                        <button className="btn-primary !py-1.5 !text-xs" onClick={() => raisePull(s)}>Pull</button>
+                        <button className="btn-primary !py-1.5 !text-xs" data-ask-pull onClick={() => raisePull(s)}>Ask</button>
                       )}
                     </Td>
                   </tr>
@@ -190,6 +220,37 @@ export default function Replenishment() {
           </Table>
         </Card>
       )}
+
+      <Card>
+        <SectionTitle
+          title="With planning"
+          sub={`Your norm is ${app.normFor(app.storeId).toLocaleString("en-IN")} units — planning owns it. Floor is at ${pct(vitals.sellableUnits / Math.max(1, app.normFor(app.storeId)))} of it.`}
+          right={<Chip tone={waiting.length ? "warn" : "good"}>{waiting.length} waiting</Chip>}
+        />
+        {mine.length === 0 ? (
+          <Empty title="Nothing with planning" body="Raise a pull above and it appears here until planning decides." />
+        ) : (
+          <Table>
+            <thead>
+              <tr><Th>Ask</Th><Th align="right">Units</Th><Th>Status</Th><Th className="w-1/2">Planning said</Th></tr>
+            </thead>
+            <tbody>
+              {[...waiting, ...decided].map((r) => (
+                <tr key={r.id} data-my-ask={r.status}>
+                  <Td className="text-sm text-ink">{REQUEST_LABEL[r.kind]}</Td>
+                  <Td align="right" className="num text-xs">{r.units ?? "—"}</Td>
+                  <Td>
+                    <Chip tone={r.status === "approved" ? "good" : r.status === "rejected" ? "critical" : "warn"}>
+                      {r.status === "open" ? "Waiting" : r.status === "approved" ? "Approved" : "Rejected"}
+                    </Chip>
+                  </Td>
+                  <Td className="text-xs text-ink2">{r.decisionNote ?? (r.status === "open" ? "—" : r.decidedBy ?? "—")}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </Card>
     </div>
   );
 }

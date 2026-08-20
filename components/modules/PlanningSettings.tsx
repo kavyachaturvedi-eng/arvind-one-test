@@ -1,0 +1,138 @@
+"use client";
+
+// Planning settings — and the honest bit.
+//
+// Every threshold the planning layer runs on is listed here with where it came
+// from. "Confirmed" means the client told us. "Invented" means we made it up so
+// the thing would run, and it is waiting to be replaced by Praveen's Vector
+// documentation. Nobody should be able to mistake one for the other.
+
+import React from "react";
+import { Callout, Card, Chip, SectionTitle, Stat, StatusDot, Table, Td, Th } from "@/components/ui";
+import { CLUSTERS, CURRENT_SEASON, STORES } from "@/lib/seed";
+import { useApp } from "@/lib/state";
+import { ASSUMPTIONS, coreShareTarget, pct } from "@/lib/rules";
+
+export default function PlanningSettings() {
+  const app = useApp();
+  const invented = ASSUMPTIONS.filter((a) => a.basis === "invented");
+  const confirmed = ASSUMPTIONS.filter((a) => a.basis === "confirmed");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-xl font-semibold text-ink">Settings</h1>
+          <p className="text-xs text-ink2 mt-1">{CURRENT_SEASON.name}</p>
+        </div>
+        <Chip tone={invented.length > 0 ? "warn" : "good"}>{invented.length} still invented</Chip>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Stat label="Confirmed by AFL" value={String(confirmed.length)} sub="Told to us on a call" tone="good" emphasis />
+        <Stat label="Invented by us" value={String(invented.length)} sub="Waiting on Vector documentation" tone="warn" />
+        <Stat label="Clusters" value={String(CLUSTERS.length)} sub={`${STORES.length} stores`} />
+        <Stat label="Run days" value="Tue · Fri" sub="Confirmed cadence" />
+      </div>
+
+      <Callout tone="warn" title="These are settings, not AFL's numbers">
+        Praveen offered the Vector replenishment and IST documentation, plus a portal walkthrough. Every
+        row marked invented below is a placeholder until that lands. PLANNING-ASSUMPTIONS.md in the repo
+        carries the same list with the reasoning.
+      </Callout>
+
+      <Card>
+        <SectionTitle title="Thresholds the planning layer runs on" />
+        <Table>
+          <thead>
+            <tr>
+              <Th>Setting</Th>
+              <Th>Value</Th>
+              <Th>Basis</Th>
+              <Th>Source</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {ASSUMPTIONS.map((a) => (
+              <tr key={a.key} data-assumption={a.basis}>
+                <Td>
+                  <div className="flex items-center gap-2">
+                    <StatusDot tone={a.basis === "confirmed" ? "good" : "warn"} />
+                    <span className="text-ink">{a.label}</span>
+                  </div>
+                </Td>
+                <Td className="num">{a.value}</Td>
+                <Td>
+                  <Chip tone={a.basis === "confirmed" ? "good" : "warn"}>{a.basis === "confirmed" ? "Confirmed" : "Invented"}</Chip>
+                </Td>
+                <Td>
+                  <span className="text-xs text-ink2">{a.source}</span>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </Card>
+
+      <Card>
+        <SectionTitle title="Per-store settings" right={<Chip>{Object.keys(app.norms).length} norms changed this session</Chip>} />
+        <Table>
+          <thead>
+            <tr>
+              <Th>Store</Th>
+              <Th>Cluster</Th>
+              <Th>Grade</Th>
+              <Th align="right">Norm</Th>
+              <Th align="right">Replenish share</Th>
+              <Th align="right">Core target</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {STORES.map((s) => {
+              const changed = app.norms[s.id] !== undefined;
+              return (
+                <tr key={s.id} data-store-setting>
+                  <Td>{s.name}</Td>
+                  <Td className="text-ink2">{CLUSTERS.find((c) => c.id === s.clusterId)?.name}</Td>
+                  <Td>{s.grade}</Td>
+                  <Td align="right" className="num">
+                    {app.normFor(s.id).toLocaleString("en-IN")}
+                    {changed && <span className="text-2xs text-muted ml-1.5">was {s.norm.toLocaleString("en-IN")}</span>}
+                  </Td>
+                  <Td align="right" className="num">{pct(s.replenShare)}</Td>
+                  <Td align="right" className="num">{pct(coreShareTarget(s.grade))}</Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
+      </Card>
+
+      <Card>
+        <SectionTitle title="Clusters" />
+        <Table>
+          <thead>
+            <tr>
+              <Th>Cluster</Th>
+              <Th>Region</Th>
+              <Th>Manager</Th>
+              <Th>Cities</Th>
+              <Th align="right">Stores</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {CLUSTERS.map((c) => (
+              <tr key={c.id} data-cluster-row>
+                <Td>{c.name}</Td>
+                <Td>{c.region}</Td>
+                <Td className="text-ink2">{c.managerName}</Td>
+                <Td className="text-ink2">{c.cities.join(", ")}</Td>
+                <Td align="right" className="num">{STORES.filter((s) => s.clusterId === c.id).length}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </Card>
+    </div>
+  );
+}

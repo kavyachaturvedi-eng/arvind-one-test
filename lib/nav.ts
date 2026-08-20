@@ -108,34 +108,51 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 
   // ── Planning ──
+   // ── Retail planning · Regional ──
+  //
+  // Rebuilt for the planning layer: the hierarchy first, then the run, then the
+  // exception paths. The old planner IA (live execution, reallocation, strategic
+  // moves, catchment, trainings) is retired from this role — leadership keeps it.
   {
-    key: "plive", label: "Live", glyph: "◉", roles: ["planner"], section: "Planning",
+    key: "pest", label: "Estate", glyph: "◎", roles: ["planner", "catplan"], section: "Planning",
     children: [
-      { id: "live", label: "Live Execution" },
+      { id: "store360", label: "Store 360" },
+      { id: "truth", label: "Stock Position" },
+    ],
+  },
+  {
+    key: "pflow", label: "Stock flow", glyph: "⇅", roles: ["planner"], section: "Planning",
+    children: [
+      { id: "run", label: "Replenishment & renewal" },
+      { id: "alloc", label: "Allocation" },
+      { id: "moves", label: "Strategic IST" },
+    ],
+  },
+  {
+    key: "pseason", label: "Season", glyph: "◈", roles: ["catplan"], section: "Planning",
+    children: [
+      { id: "otb", label: "Open To Buy" },
+      { id: "alloc", label: "Allocation" },
       { id: "performance", label: "Performance" },
     ],
   },
   {
-    key: "pact", label: "Act", glyph: "⇉", roles: ["planner"], section: "Planning",
+    key: "pdecide", label: "Decide", glyph: "⇉", roles: ["planner"], section: "Planning",
     children: [
+      { id: "asks", label: "Store asks" },
       { id: "tickets", label: "Issues & SLA" },
-      { id: "allocate", label: "Reallocation" },
-      { id: "merch", label: "Smart Moves" },
-      { id: "moves", label: "Strategic Moves" },
-      { id: "catchment", label: "Catchment" },
-      { id: "trainings", label: "Trainings" },
     ],
   },
   {
-    key: "pdata", label: "Data", glyph: "◎", roles: ["planner"], section: "Planning",
+    key: "pdata", label: "Data", glyph: "▤", roles: ["planner", "catplan"], section: "Planning",
     children: [
-      { id: "truth", label: "Stock Position" },
       { id: "reports", label: "Reports" },
       { id: "governance", label: "Metric Registry" },
+      { id: "planset", label: "Settings" },
     ],
   },
   {
-    key: "pai", label: "AI", glyph: "✳", roles: ["planner"], section: "Planning",
+    key: "pai", label: "AI", glyph: "✳", roles: ["planner", "catplan"], section: "Planning",
     children: [
       { id: "agents", label: "AI Agents" },
       { id: "ask", label: "Ask One" },

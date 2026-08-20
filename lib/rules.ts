@@ -468,3 +468,213 @@ export function inr(n: number, opts: { compact?: boolean } = {}): string {
 export function pct(n: number, digits = 0): string {
   return `${(n * 100).toFixed(digits)}%`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Retail planning rules
+//
+// Every threshold below was invented by us, not supplied by AFL. They are
+// documented in PLANNING-ASSUMPTIONS.md and rendered as editable settings in
+// the Planning → Settings screen, so nobody mistakes them for AFL's numbers.
+// When Praveen's Vector documentation arrives, these are what get replaced.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface Assumption {
+  key: string;
+  label: string;
+  value: string;
+  /** "confirmed" — the client told us. "invented" — we made it up to ship. */
+  basis: "confirmed" | "invented";
+  source: string;
+}
+
+export const ASSUMPTIONS: Assumption[] = [
+  { key: "holdback", label: "Warehouse holdback", value: "25% of the season buy", basis: "confirmed", source: "Pushpal, 20 Aug 2026 — current is 20–25%" },
+  { key: "holdbackGoal", label: "Holdback goal", value: "40%", basis: "confirmed", source: "Pushpal, 20 Aug 2026 — stated goal, not today" },
+  { key: "fillBand", label: "Healthy fill rate", value: "97%–105% of norm", basis: "confirmed", source: "Newme product manager call" },
+  { key: "fillTrigger", label: "Replenishment trigger", value: "fill rate below 92%", basis: "invented", source: "—" },
+  { key: "fillHeavy", label: "Overstock trigger", value: "fill rate above 112%", basis: "invented", source: "—" },
+  { key: "brokenTrigger", label: "Brokenness trigger", value: "over 55% of carried styles unhealthy", basis: "invented", source: "—" },
+  { key: "runDays", label: "Run cadence", value: "Tuesday and Friday", basis: "confirmed", source: "Pushpal, 20 Aug 2026" },
+  { key: "replenShare", label: "Replenish vs renew", value: "A 65/35 · B 72/28 · C 80/20", basis: "invented", source: "—" },
+  { key: "finished", label: "Style is finished", value: "sell-through ≥ 78% or ≤ 14 days of window", basis: "invented", source: "—" },
+  { key: "coreTarget", label: "Target core share", value: "A 42% · B 50% · C 58%", basis: "invented", source: "—" },
+  { key: "productType", label: "Core vs fashion", value: "product-master attribute", basis: "confirmed", source: "Pushpal, 20 Aug 2026" },
+  { key: "otbHeadroom", label: "OTB budget headroom", value: "12% above the committed buy", basis: "invented", source: "—" },
+];
+
+/** Warehouse holdback: the share of a season buy kept back to fund the run. */
+export const HOLDBACK_SHARE = 0.25;
+export const HOLDBACK_GOAL = 0.4;
+
+/** Fill rate against norm. The healthy band is the client's own number. */
+export const FILL_HEALTHY_LOW = 0.97;
+export const FILL_HEALTHY_HIGH = 1.05;
+export const FILL_TRIGGER = 0.92;
+export const FILL_HEAVY = 1.12;
+
+/**
+ * Share of carried styles that may be unhealthy before the store qualifies.
+ *
+ * Calibrated to the synthetic dataset, which is deliberately broken so the store
+ * screens are not vacuous: brokenness runs 25–70% across the 24 demo stores,
+ * median 50%. At AFL's real numbers this threshold will be far lower. It is a
+ * setting for exactly this reason.
+ */
+export const BROKEN_TRIGGER = 0.55;
+
+/** Sunday = 0. The run fires on Tuesday and Friday. */
+export const RUN_DAYS = [2, 5];
+const IST_OFFSET = 5.5 * 3600_000;
+const ONE_DAY = 24 * 3600_000;
+
+export type FillBand = "thin" | "healthy" | "heavy";
+
+/** Where a store sits against its norm, as a band rather than a bare ratio. */
+export function fillBand(fillRate: number): FillBand {
+  if (fillRate < FILL_HEALTHY_LOW) return "thin";
+  if (fillRate > FILL_HEALTHY_HIGH) return "heavy";
+  return "healthy";
+}
+
+/**
+ * Day of week in IST, computed arithmetically because reading a clock is banned
+ * in this codebase. 1 Jan 1970 was a Thursday, hence the +4.
+ */
+export function dayOfWeekIST(ms: number): number {
+  return ((Math.floor((ms + IST_OFFSET) / ONE_DAY) % 7) + 4) % 7;
+}
+
+export function isRunDay(ms: number): boolean {
+  return RUN_DAYS.includes(dayOfWeekIST(ms));
+}
+
+/** Midnight IST of the given instant, as an epoch. */
+function startOfDayIST(ms: number): number {
+  return Math.floor((ms + IST_OFFSET) / ONE_DAY) * ONE_DAY - IST_OFFSET;
+}
+
+/** The most recent run day at or before `ms` (today counts if it is a run day). */
+export function lastRunAt(ms: number): number {
+  for (let back = 0; back < 8; back++) {
+    const t = startOfDayIST(ms) - back * ONE_DAY;
+    if (isRunDay(t)) return t;
+  }
+  return startOfDayIST(ms);
+}
+
+/** The next run day strictly after today. */
+export function nextRunAt(ms: number): number {
+  for (let fwd = 1; fwd < 9; fwd++) {
+    const t = startOfDayIST(ms) + fwd * ONE_DAY;
+    if (isRunDay(t)) return t;
+  }
+  return startOfDayIST(ms) + ONE_DAY;
+}
+
+/**
+ * Does this store qualify for the run? Two triggers, and the reason is the
+ * sentence a planner reads — never a code.
+ */
+export function qualifiesForRun(input: { fillRate: number; brokenShare: number }): {
+  qualifies: boolean;
+  reason: string;
+} {
+  const thin = input.fillRate < FILL_TRIGGER;
+  const broken = input.brokenShare > BROKEN_TRIGGER;
+  if (thin && broken)
+    return { qualifies: true, reason: `Fill rate ${pct(input.fillRate)} of norm and ${pct(input.brokenShare)} of styles unhealthy` };
+  if (thin) return { qualifies: true, reason: `Fill rate ${pct(input.fillRate)} of norm, below the ${pct(FILL_TRIGGER)} trigger` };
+  if (broken) return { qualifies: true, reason: `${pct(input.brokenShare)} of carried styles have a broken or at-risk size set` };
+  return { qualifies: false, reason: "Inside norm and size sets are holding" };
+}
+
+/**
+ * Split incoming units between the same style returning (replenishment) and a
+ * new style arriving (renewal). The share is a per-store setting, grade-skewed:
+ * A doors absorb more newness, C doors lean on proven core.
+ */
+export function splitReplenRenew(totalUnits: number, replenShare: number): { replenish: number; renew: number } {
+  const units = Math.max(0, Math.round(totalUnits));
+  const share = Math.min(1, Math.max(0, replenShare));
+  const replenish = Math.round(units * share);
+  return { replenish, renew: units - replenish };
+}
+
+/** A style is finished when it has sold through or run out of window. */
+export function styleFinished(input: { sellThrough: number; daysLeftInWindow: number }): boolean {
+  return input.sellThrough >= 0.78 || input.daysLeftInWindow <= 14;
+}
+
+/** Target share of units that should be core, by store grade. */
+export function coreShareTarget(grade: "A" | "B" | "C"): number {
+  return grade === "A" ? 0.42 : grade === "B" ? 0.5 : 0.58;
+}
+
+export type MixVerdict = "on_plan" | "core_heavy" | "fashion_heavy";
+
+/** Core/fashion mix against the store's target, with a 6-point tolerance. */
+export function mixVerdict(corePct: number, target: number): MixVerdict {
+  if (corePct > target + 0.06) return "core_heavy";
+  if (corePct < target - 0.06) return "fashion_heavy";
+  return "on_plan";
+}
+
+/**
+ * Studs, buds and duds — Tarun's own vocabulary for style-level performance.
+ * A stud is beating its region and selling through; a dud is behind on both; a
+ * bud is doing well but has not proved it at scale yet.
+ */
+export type StyleGrade = "stud" | "bud" | "dud";
+
+export function studBudDud(input: { ros: number; regionalRos: number; sellThrough: number }): StyleGrade {
+  const beatsRegion = input.regionalRos > 0 ? input.ros >= input.regionalRos : input.ros > 0;
+  if (beatsRegion && input.sellThrough >= 0.55) return "stud";
+  if (beatsRegion || input.sellThrough >= 0.4) return "bud";
+  return "dud";
+}
+
+/**
+ * Norms follow rate of sale, not display capacity (Praveen). A door that is
+ * running hot and holding its sizes earns a bigger norm; one sitting heavy on
+ * slow stock gives some back.
+ */
+export function normRecommendation(input: {
+  norm: number;
+  fillRate: number;
+  sellThrough: number;
+  sizeSetScore: number;
+}): { to: number; delta: number; reason: string } {
+  const hot = input.sellThrough >= 0.72 && input.sizeSetScore >= 0.6;
+  const cold = input.sellThrough < 0.55 && input.fillRate > FILL_HEALTHY_HIGH;
+  let factor = 1;
+  let reason = "Holding its norm — sell-through and fill rate are both inside band";
+  if (hot) {
+    factor = 1.12;
+    reason = `Sell-through ${pct(input.sellThrough)} with size sets holding — the floor can carry more`;
+  } else if (cold) {
+    factor = 0.9;
+    reason = `Sitting at ${pct(input.fillRate)} of norm on ${pct(input.sellThrough)} sell-through — norm is ahead of demand`;
+  }
+  const to = Math.round(input.norm * factor);
+  return { to, delta: to - input.norm, reason };
+}
+
+/** OTB left to spend on a brand × category line. */
+export function otbRemaining(line: { budgetUnits: number; committedUnits: number }): {
+  units: number;
+  pctConsumed: number;
+} {
+  const units = line.budgetUnits - line.committedUnits;
+  const pctConsumed = line.budgetUnits > 0 ? line.committedUnits / line.budgetUnits : 0;
+  return { units, pctConsumed };
+}
+
+/** Average selling price — sales over units. On AFL's own daily KPI sheet. */
+export function asp(sales: number, qty: number): number {
+  return qty > 0 ? sales / qty : 0;
+}
+
+/** Growth against last year, as a signed ratio. */
+export function growth(cy: number, ly: number): number {
+  return ly > 0 ? (cy - ly) / ly : 0;
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { METRICS, NOW, ROLES, STOCK, STORES, STYLES, rng } from "../lib/seed";
+import { CLUSTERS, CURRENT_SEASON, METRICS, NOW, OTB, ROLES, STOCK, STORES, STYLES, dropsForSeason, rng } from "../lib/seed";
+import { dayOfWeekIST, fillBand, lastRunAt, mixVerdict, otbRemaining, qualifiesForRun } from "../lib/rules";
 import {
   allVitals,
   brandRollups,
@@ -21,6 +22,17 @@ import {
   topSellers,
   trend,
   vitalsFor,
+  BRAND_SCOPE,
+  childScopes,
+  clusterRollups,
+  gradedStyles,
+  mixForStore,
+  replenRun,
+  scopeSummary,
+  storesInScope,
+  warehouseHeld,
+  dropAllocation,
+  dropUnitsFor,
 } from "../lib/engine";
 
 const finite = (n: number) => Number.isFinite(n) && !Number.isNaN(n);
@@ -83,10 +95,10 @@ describe("determinism", () => {
 
 describe("dataset", () => {
   it("has the store side (manager + staff) executing and the hierarchy observing", () => {
-    expect(ROLES).toHaveLength(4);
-    expect(ROLES.map((r) => r.id).sort()).toEqual(["leadership", "planner", "staff", "store"]);
+    expect(ROLES).toHaveLength(5);
+    expect(ROLES.map((r) => r.id).sort()).toEqual(["catplan", "leadership", "planner", "staff", "store"]);
     expect(ROLES.filter((r) => r.mode === "execute").map((r) => r.id).sort()).toEqual(["staff", "store"]);
-    expect(ROLES.filter((r) => r.mode === "observe")).toHaveLength(2);
+    expect(ROLES.filter((r) => r.mode === "observe")).toHaveLength(3);
   });
 
   it("has a real estate of stores and a real assortment", () => {
@@ -584,5 +596,316 @@ describe("execution status", () => {
 
   it("the feed is deterministic", () => {
     expect(JSON.stringify(liveFeed(20))).toBe(JSON.stringify(liveFeed(20)));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Planning read model
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("the hierarchy", () => {
+  it("puts every store in exactly one cluster, and every cluster in its region", () => {
+    STORES.forEach((s) => {
+      const cluster = CLUSTERS.filter((c) => c.id === s.clusterId);
+      expect(cluster).toHaveLength(1);
+      expect(cluster[0].region).toBe(s.region);
+      expect(cluster[0].cities).toContain(s.city);
+    });
+  });
+
+  it("leaves no cluster empty — an empty level is a broken drill-down", () => {
+    CLUSTERS.forEach((c) => {
+      expect(STORES.filter((s) => s.clusterId === c.id).length).toBeGreaterThan(0);
+    });
+  });
+
+  it("drills brand → region → cluster → store and bottoms out", () => {
+    const brand = BRAND_SCOPE;
+    const regions = childScopes(brand);
+    expect(regions.length).toBeGreaterThan(1);
+    expect(regions.every((r) => r.level === "region")).toBe(true);
+
+    const clusters = childScopes(regions[0]);
+    expect(clusters.length).toBeGreaterThan(0);
+    expect(clusters.every((c) => c.level === "cluster")).toBe(true);
+
+    const stores = childScopes(clusters[0]);
+    expect(stores.length).toBeGreaterThan(0);
+    expect(stores.every((s) => s.level === "store")).toBe(true);
+
+    expect(childScopes(stores[0])).toEqual([]);
+  });
+
+  it("keeps the whole estate accounted for at every level", () => {
+    const total = STORES.length;
+    const viaRegions = childScopes(BRAND_SCOPE).reduce((a, r) => a + storesInScope(r).length, 0);
+    expect(viaRegions).toBe(total);
+
+    const viaClusters = CLUSTERS.reduce((a, c) => a + storesInScope({ level: "cluster", id: c.id, label: c.name }).length, 0);
+    expect(viaClusters).toBe(total);
+  });
+});
+
+describe("scope summary", () => {
+  it("reports the same estate figures from the top as the stores add up to", () => {
+    const all = scopeSummary(BRAND_SCOPE);
+    expect(all.storeCount).toBe(STORES.length);
+    const perStore = STORES.reduce((a, s) => a + vitalsFor(s.id).sellableUnits, 0);
+    expect(all.sellableUnits).toBe(perStore);
+  });
+
+  it("weights fill rate by norm rather than averaging ratios", () => {
+    const all = scopeSummary(BRAND_SCOPE);
+    const norm = STORES.reduce((a, s) => a + s.norm, 0);
+    expect(all.fillRate).toBeCloseTo(all.sellableUnits / norm, 6);
+    expect(all.band).toBe(fillBand(all.fillRate));
+  });
+
+  it("produces finite, sane figures at every level of the tree", () => {
+    const scopes = [
+      BRAND_SCOPE,
+      ...childScopes(BRAND_SCOPE),
+      ...CLUSTERS.map((c) => ({ level: "cluster" as const, id: c.id, label: c.name })),
+      ...STORES.slice(0, 5).map((s) => ({ level: "store" as const, id: s.id, label: s.name })),
+    ];
+    scopes.forEach((scope) => {
+      const s = scopeSummary(scope);
+      [s.todaySales, s.mtdSales, s.sellableUnits, s.norm, s.fillRate, s.asp, s.atv, s.upt, s.valueAtRisk].forEach((n) => {
+        expect(Number.isFinite(n)).toBe(true);
+        expect(n).toBeGreaterThanOrEqual(0);
+      });
+      expect(s.conversion).toBeLessThanOrEqual(1);
+      expect(s.corePct).toBeGreaterThanOrEqual(0);
+      expect(s.corePct).toBeLessThanOrEqual(1);
+      expect(s.storeCount).toBeGreaterThan(0);
+    });
+  });
+
+  it("keeps ASP consistent with ATV and UPT", () => {
+    const s = scopeSummary(BRAND_SCOPE);
+    expect(s.asp).toBeCloseTo(s.atv / s.upt, 4);
+  });
+
+  it("splits every sellable unit into either core or fashion, never both", () => {
+    STORES.slice(0, 6).forEach((store) => {
+      const mix = mixForStore(store.id);
+      expect(mix.core + mix.fashion).toBe(vitalsFor(store.id).sellableUnits);
+    });
+  });
+
+  it("holds the core target inside the invented band and judges the mix against it", () => {
+    const s = scopeSummary(BRAND_SCOPE);
+    expect(s.coreTarget).toBeGreaterThanOrEqual(0.42);
+    expect(s.coreTarget).toBeLessThanOrEqual(0.58);
+    expect(s.mix).toBe(mixVerdict(s.corePct, s.coreTarget));
+  });
+
+  it("does not contradict itself between today and last year", () => {
+    const s = scopeSummary(BRAND_SCOPE);
+    // Growth today and growth MTD must point the same way.
+    expect(Math.sign(s.todaySales - s.lySameDay)).toBe(Math.sign(s.mtdSales - s.lyMtd));
+  });
+});
+
+describe("the replenishment and renewal run", () => {
+  it("is deterministic — the same clock produces the same run", () => {
+    const a = replenRun(NOW);
+    const b = replenRun(NOW);
+    expect(a.id).toBe(b.id);
+    expect(a.lines.map((l) => `${l.id}:${l.units}`)).toEqual(b.lines.map((l) => `${l.id}:${l.units}`));
+  });
+
+  it("dates itself to the last run day, not to right now", () => {
+    const run = replenRun(NOW);
+    expect(run.ranAt).toBe(lastRunAt(NOW));
+    expect(dayOfWeekIST(run.ranAt)).toBe(2);
+  });
+
+  it("only triggers stores that actually failed a threshold", () => {
+    const run = replenRun(NOW);
+    expect(run.triggered.length).toBeGreaterThan(0);
+    run.triggered.forEach((t) => {
+      const v = vitalsFor(t.storeId);
+      const carried = stylesAtStore(t.storeId).length;
+      const brokenShare = carried > 0 ? (v.brokenStyles + v.atRiskStyles) / carried : 0;
+      expect(qualifiesForRun({ fillRate: v.fillRate, brokenShare }).qualifies).toBe(true);
+      expect(t.reason.length).toBeGreaterThan(10);
+    });
+  });
+
+  it("raises both kinds of line, and every line carries a readable reason", () => {
+    const run = replenRun(NOW);
+    expect(run.lines.length).toBeGreaterThan(0);
+    const kinds = new Set(run.lines.map((l) => l.kind));
+    expect(kinds.has("replenish")).toBe(true);
+    run.lines.forEach((l) => {
+      expect(l.units).toBeGreaterThan(0);
+      expect(l.reason.length).toBeGreaterThan(15);
+      expect(l.confidence).toBeGreaterThan(0);
+      expect(l.confidence).toBeLessThanOrEqual(1);
+      expect(STORES.some((s) => s.id === l.storeId)).toBe(true);
+      expect(STYLES.some((s) => s.id === l.styleId)).toBe(true);
+    });
+  });
+
+  it("never promises more units than the warehouse holds on a replenishment line", () => {
+    replenRun(NOW)
+      .lines.filter((l) => l.kind === "replenish")
+      .forEach((l) => {
+        expect(l.units).toBeLessThanOrEqual(l.warehouseUnits);
+      });
+  });
+
+  it("gives a replenishment line a size and a renewal line none", () => {
+    const run = replenRun(NOW);
+    run.lines.forEach((l) => {
+      if (l.kind === "replenish") expect(l.size).toBeDefined();
+      else expect(l.size).toBeUndefined();
+    });
+  });
+
+  it("only ever fills a store towards the healthy floor, never past its norm", () => {
+    const run = replenRun(NOW);
+    const byStore = new Map<string, number>();
+    run.lines.forEach((l) => byStore.set(l.storeId, (byStore.get(l.storeId) ?? 0) + l.units));
+    byStore.forEach((units, storeId) => {
+      const v = vitalsFor(storeId);
+      expect(v.sellableUnits + units).toBeLessThanOrEqual(v.store.norm * 1.05);
+    });
+  });
+});
+
+describe("the warehouse holdback", () => {
+  it("holds back the confirmed 25%, and knows the 40% goal is not today", () => {
+    const held = warehouseHeld();
+    const bought = STYLES.reduce((a, s) => a + s.bought, 0);
+    expect(held.share).toBe(0.25);
+    expect(held.units).toBe(Math.round(bought * 0.25));
+    expect(held.goalUnits).toBeGreaterThan(held.units);
+  });
+});
+
+describe("studs, buds and duds", () => {
+  it("grades a store's assortment and ranks it by rate of sale", () => {
+    const graded = gradedStyles(STORES[0].id, 20);
+    expect(graded.length).toBeGreaterThan(0);
+    graded.forEach((g) => {
+      expect(["stud", "bud", "dud"]).toContain(g.grade);
+      expect(["core", "fashion"]).toContain(g.productType);
+    });
+    for (let i = 1; i < graded.length; i++) {
+      expect(graded[i - 1].signal.ros).toBeGreaterThanOrEqual(graded[i].signal.ros);
+    }
+  });
+});
+
+describe("clusters and OTB", () => {
+  it("ranks clusters by sales and covers the whole estate", () => {
+    const rolls = clusterRollups();
+    expect(rolls).toHaveLength(CLUSTERS.length);
+    expect(rolls.reduce((a, r) => a + r.summary.storeCount, 0)).toBe(STORES.length);
+    for (let i = 1; i < rolls.length; i++) {
+      expect(rolls[i - 1].summary.mtdSales).toBeGreaterThanOrEqual(rolls[i].summary.mtdSales);
+    }
+  });
+
+  it("leaves real OTB headroom on every line, so a mid-season bet is possible", () => {
+    expect(OTB.length).toBeGreaterThan(0);
+    OTB.forEach((line) => {
+      const r = otbRemaining(line);
+      expect(r.units).toBeGreaterThan(0);
+      expect(r.pctConsumed).toBeGreaterThan(0);
+      expect(r.pctConsumed).toBeLessThan(1);
+      expect(line.receivedUnits).toBeLessThanOrEqual(line.committedUnits);
+    });
+  });
+
+  it("schedules three drops that leave the holdback at the warehouse", () => {
+    const drops = dropsForSeason(CURRENT_SEASON.id);
+    expect(drops).toHaveLength(3);
+    const scheduled = drops.reduce((a, d) => a + d.pctOfBuy, 0);
+    expect(scheduled).toBeCloseTo(1 - 0.25, 5);
+    for (let i = 1; i < drops.length; i++) {
+      expect(drops[i].landsAt).toBeGreaterThan(drops[i - 1].landsAt);
+    }
+  });
+
+  it("splits the assortment into core and fashion from the product master", () => {
+    const core = STYLES.filter((s) => s.productType === "core");
+    expect(core.length).toBeGreaterThan(4);
+    expect(core.length).toBeLessThan(STYLES.length);
+    // Every NOS style is core by definition.
+    STYLES.filter((s) => s.isNOS).forEach((s) => expect(s.productType).toBe("core"));
+  });
+});
+
+describe("drop allocation", () => {
+  it("hands out the whole drop, and no more", () => {
+    const rows = dropAllocation("AW26-D1");
+    expect(rows).toHaveLength(STORES.length);
+    const units = dropUnitsFor("AW26-D1");
+    const planned = rows.reduce((a, r) => a + r.planned, 0);
+    const recommended = rows.reduce((a, r) => a + r.recommended, 0);
+    // Rounding per store, so allow a unit of drift per door.
+    expect(Math.abs(planned - units)).toBeLessThanOrEqual(STORES.length);
+    expect(Math.abs(recommended - units)).toBeLessThanOrEqual(STORES.length);
+  });
+
+  it("moves units towards the doors that are trading ahead", () => {
+    const rows = dropAllocation("AW26-D1");
+    const winners = rows.filter((r) => r.delta > 0);
+    const losers = rows.filter((r) => r.delta < 0);
+    expect(winners.length).toBeGreaterThan(0);
+    expect(losers.length).toBeGreaterThan(0);
+    // Best-performing door must not be losing units to a worse one.
+    const best = [...rows].sort((a, b) => b.achievement - a.achievement)[0];
+    const worst = [...rows].sort((a, b) => a.achievement - b.achievement)[0];
+    expect(best.recommended / Math.max(1, best.store.norm)).toBeGreaterThan(worst.recommended / Math.max(1, worst.store.norm));
+  });
+
+  it("ranks by the size of the change and explains each one", () => {
+    const rows = dropAllocation("AW26-D1");
+    for (let i = 1; i < rows.length; i++) expect(rows[i - 1].delta).toBeGreaterThanOrEqual(rows[i].delta);
+    rows.forEach((r) => expect(r.reason.length).toBeGreaterThan(10));
+  });
+
+  it("filters to one brand without leaking another brand's doors", () => {
+    const rows = dropAllocation("AW26-D1", "Arrow");
+    expect(rows.length).toBeGreaterThan(0);
+    rows.forEach((r) => expect(r.store.brand).toBe("Arrow"));
+  });
+
+  it("returns nothing for a drop that does not exist", () => {
+    expect(dropAllocation("NOPE")).toEqual([]);
+    expect(dropUnitsFor("NOPE")).toBe(0);
+  });
+});
+
+describe("style-level grading feeds the run", () => {
+  it("grades each style on its own sell-through, not the store's", () => {
+    const graded = gradedStyles(STORES[0].id, 20);
+    const spread = new Set(graded.map((g) => g.sellThrough.toFixed(4)));
+    // If the store's own figure were being used, every style would be identical.
+    expect(spread.size).toBeGreaterThan(1);
+    graded.forEach((g) => {
+      expect(g.sellThrough).toBeGreaterThanOrEqual(0);
+      expect(g.sellThrough).toBeLessThanOrEqual(1);
+    });
+  });
+
+  it("produces both replenishment and renewal volume, not just one", () => {
+    const run = replenRun(NOW);
+    const replen = run.lines.filter((l) => l.kind === "replenish").reduce((a, l) => a + l.units, 0);
+    const renew = run.lines.filter((l) => l.kind === "renew").reduce((a, l) => a + l.units, 0);
+    expect(replen).toBeGreaterThan(0);
+    expect(renew).toBeGreaterThan(0);
+    // Replenishment leads, but renewal must not be a rounding error.
+    expect(renew / (replen + renew)).toBeGreaterThan(0.05);
+  });
+
+  it("leaves some stores alone — a trigger that fires everywhere is not a trigger", () => {
+    const run = replenRun(NOW);
+    expect(run.triggered.length).toBeLessThan(STORES.length);
+    expect(run.triggered.length).toBeGreaterThan(2);
   });
 });

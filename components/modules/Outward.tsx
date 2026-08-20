@@ -9,6 +9,7 @@ import React, { useMemo, useState } from "react";
 import { NOW, STYLES, storeById } from "@/lib/seed";
 import { OUTWARD_CODE_LIMIT, splitOutward, validateOutward } from "@/lib/rules";
 import { useApp } from "@/lib/state";
+import { vitalsFor } from "@/lib/engine";
 import { Callout, Card, Chip, Meter, SectionTitle, Stat, StatusDot, Table, Td, Th, Timeline, fmtDateTime, inr } from "@/components/ui";
 import type { OutwardBatch, OutwardKind } from "@/lib/types";
 
@@ -34,6 +35,7 @@ const STATUS_TONE: Record<OutwardBatch["status"], "good" | "warn" | "serious" | 
 
 export default function Outward() {
   const app = useApp();
+  const vitals = useMemo(() => vitalsFor(app.storeId), [app.storeId]);
 
   const [kind, setKind] = useState<OutwardKind>("EOSS pullback");
   const [unitsText, setUnitsText] = useState("2500");
@@ -137,12 +139,43 @@ export default function Outward() {
     app.toastNow(`${lrNumber} attached to ${sel.id}.`, "good");
   }
 
+  // What goes back is a planning call, not a store call. The store builds and
+  // packs the batch; Retail Planning approves it leaving the building.
+  const rtvAsk = sel ? app.requests.find((r) => r.kind === "rtv" && r.storeId === app.storeId && r.note?.includes(sel.id)) : undefined;
+  const rtvApproved = rtvAsk?.status === "approved";
+
   const blockers = useMemo(() => {
     if (!sel) return ["No batch selected."];
     const errs = validateOutward({ codes: sel.codes, videoProof: sel.videoProof, lrNumber: sel.lrNumber });
     if (unpacked > 0) errs.push(`${unpacked} transfer code${unpacked === 1 ? "" : "s"} still unpacked — pick and pack before handover.`);
+    if (!rtvApproved) {
+      errs.push(
+        rtvAsk
+          ? "Retail Planning has not decided this batch yet — what leaves the store is their call."
+          : "Retail Planning has not approved this batch. Ask them before handover.",
+      );
+    }
     return errs;
-  }, [sel, unpacked]);
+  }, [sel, unpacked, rtvApproved, rtvAsk]);
+
+  function askPlanning() {
+    if (!sel) return;
+    app.raiseRequest({
+      kind: "rtv",
+      storeId: app.storeId,
+      units: sel.totalUnits,
+      note: `${sel.id} · ${sel.kind} · ${sel.codes.length} transfer codes`,
+      evidence: {
+        fillRate: vitals.fillRate,
+        sellable: vitals.sellableUnits,
+        ros: 0,
+        coverDays: 0,
+        sizeSetStatus: "healthy",
+        valueAtRisk: 0,
+      },
+    });
+    app.toastNow(`${sel.id} sent to Retail Planning for approval`, "good");
+  }
 
   function dispatchBatch() {
     if (!sel || blockers.length > 0) return;
@@ -289,7 +322,15 @@ export default function Outward() {
                 <button className="btn" onClick={attachLr} disabled={!!sel.lrNumber || dispatched}>
                   {sel.lrNumber ? `LR ${sel.lrNumber} attached` : "Attach LR copy"}
                 </button>
-                <button className="btn-primary" onClick={dispatchBatch} disabled={blockers.length > 0 || dispatched}>
+                {!dispatched && !rtvAsk && (
+                  <button className="btn" data-rtv-ask onClick={askPlanning}>
+                    Ask planning to approve
+                  </button>
+                )}
+                {!dispatched && rtvAsk && !rtvApproved && (
+                  <Chip tone="warn">With planning</Chip>
+                )}
+                <button className="btn-primary" data-outward-dispatch onClick={dispatchBatch} disabled={blockers.length > 0 || dispatched}>
                   {dispatched ? "Dispatched" : "Dispatch"}
                 </button>
               </div>

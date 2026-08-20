@@ -7,7 +7,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
+  BRANDS,
   CATEGORIES,
+  CLUSTERS,
+  DROPS,
   NOW,
   STOCK,
   STORES,
@@ -17,15 +20,46 @@ import {
   styleById,
 } from "./seed";
 import {
+  FILL_HEALTHY_LOW,
+  HOLDBACK_GOAL,
+  HOLDBACK_SHARE,
+  asp,
+  coreShareTarget,
   coverDays,
   distanceKm,
+  fillBand,
+  growth,
+  inr,
+  lastRunAt,
+  mixVerdict,
+  qualifiesForRun,
   replenishmentDecision,
+  sellThrough,
   sizeSetHealth,
+  splitReplenRenew,
+  studBudDud,
+  styleFinished,
   trueRos,
+  type FillBand,
+  type MixVerdict,
   type ReplenishDecision,
   type SizeSetResult,
+  type StyleGrade,
 } from "./rules";
-import type { Brand, Category, Region, Size, StockRow, Store, Style } from "./types";
+import type {
+  Brand,
+  Category,
+  Cluster,
+  ProductType,
+  Region,
+  ReplenLine,
+  ReplenRun,
+  Scope,
+  Size,
+  StockRow,
+  Store,
+  Style,
+} from "./types";
 
 // ── Indexes (built once) ─────────────────────────────────────────────────────
 
@@ -861,3 +895,390 @@ export function trend(seedKey: string, points = 14, base = 100, drift = 0.02): n
 }
 
 export { NOW };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Planning read model
+//
+// One payload shape for all four levels of the hierarchy, so Store 360 renders
+// a brand, a region, a cluster and a store with the same component — and a
+// planner can act at whichever level they are standing on.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ScopeSummary {
+  scope: Scope;
+  storeCount: number;
+
+  // Trading — mirrors AFL's own daily KPI sheet (Sales, Bills, Qty, ATV, UPT, ASP)
+  todaySales: number;
+  lySameDay: number;
+  salesGrowth: number;
+  bills: number;
+  qty: number;
+  atv: number;
+  upt: number;
+  asp: number;
+  conversion: number;
+  footfall: number;
+  mtdSales: number;
+  mtdTarget: number;
+  lyMtd: number;
+  achievement: number;
+
+  // Inventory
+  sellableUnits: number;
+  inTransit: number;
+  norm: number;
+  fillRate: number;
+  band: FillBand;
+  sellThrough: number;
+
+  // Mix
+  coreUnits: number;
+  fashionUnits: number;
+  corePct: number;
+  coreTarget: number;
+  mix: MixVerdict;
+
+  // Health
+  sizeSetScore: number;
+  brokenStyles: number;
+  atRiskStyles: number;
+  valueAtRisk: number;
+
+  /** The next level down, ready to drill into. */
+  children: Scope[];
+}
+
+const coreIds = new Set(STYLES.filter((s) => s.productType === "core").map((s) => s.id));
+
+/** Core vs fashion split of sellable units, from the product-master attribute. */
+export function mixForStore(storeId: string): { core: number; fashion: number } {
+  let core = 0;
+  let fashion = 0;
+  stockForStore(storeId).forEach((r) => {
+    const units = sellable(r);
+    if (coreIds.has(r.styleId)) core += units;
+    else fashion += units;
+  });
+  return { core, fashion };
+}
+
+export function storesInScope(scope: Scope): Store[] {
+  switch (scope.level) {
+    case "brand":
+      return scope.id === "all" ? STORES : STORES.filter((s) => s.brand === scope.id);
+    case "region":
+      return STORES.filter((s) => s.region === scope.id);
+    case "cluster":
+      return STORES.filter((s) => s.clusterId === scope.id);
+    case "store":
+      return STORES.filter((s) => s.id === scope.id);
+  }
+}
+
+/** The scopes one level below this one, in display order. */
+export function childScopes(scope: Scope): Scope[] {
+  const inScope = storesInScope(scope);
+  switch (scope.level) {
+    case "brand": {
+      const regions = [...new Set(inScope.map((s) => s.region))].sort();
+      return regions.map((r) => ({ level: "region" as const, id: r, label: r }));
+    }
+    case "region": {
+      const ids = [...new Set(inScope.map((s) => s.clusterId))];
+      return CLUSTERS.filter((c) => ids.includes(c.id)).map((c) => ({ level: "cluster" as const, id: c.id, label: c.name }));
+    }
+    case "cluster":
+      return inScope.map((s) => ({ level: "store" as const, id: s.id, label: s.name }));
+    case "store":
+      return [];
+  }
+}
+
+/**
+ * The uniform summary. Aggregates are unit- or footfall-weighted where a plain
+ * average would lie: fill rate is units over norm, conversion is bills over
+ * footfall, ASP is value over units.
+ */
+export function scopeSummary(scope: Scope): ScopeSummary {
+  const stores = storesInScope(scope);
+  const vitals = stores.map((s) => vitalsFor(s.id));
+
+  const sum = (f: (v: StoreVitals) => number) => vitals.reduce((a, v) => a + f(v), 0);
+
+  const todaySales = sum((v) => v.todaySales);
+  const lySameDay = sum((v) => v.lySameDay);
+  const bills = sum((v) => v.bills);
+  const footfall = sum((v) => v.footfall);
+  const qty = vitals.reduce((a, v) => a + v.bills * v.upt, 0);
+  const mtdSales = sum((v) => v.mtdSales);
+  const mtdTarget = sum((v) => v.mtdTargetToDate);
+  // Last year MTD carries the same growth ratio as today, so the two comparisons
+  // never contradict each other on screen.
+  const lyMtd = vitals.reduce((a, v) => a + (v.todaySales > 0 ? v.mtdSales * (v.lySameDay / v.todaySales) : v.mtdSales), 0);
+
+  const sellableUnits = sum((v) => v.sellableUnits);
+  const norm = stores.reduce((a, s) => a + s.norm, 0);
+  const fillRate = norm > 0 ? sellableUnits / norm : 0;
+
+  const mixes = stores.map((s) => mixForStore(s.id));
+  const coreUnits = mixes.reduce((a, m) => a + m.core, 0);
+  const fashionUnits = mixes.reduce((a, m) => a + m.fashion, 0);
+  const mixTotal = coreUnits + fashionUnits;
+  const corePct = mixTotal > 0 ? coreUnits / mixTotal : 0;
+  // Weight each door's target by its norm, so a big A door is not outvoted by
+  // two small C doors.
+  const coreTarget = norm > 0 ? stores.reduce((a, s) => a + coreShareTarget(s.grade) * s.norm, 0) / norm : 0;
+
+  const sellThroughUnits = stores.reduce((a, s) => a + s.norm, 0);
+  const sellThrough = sellThroughUnits > 0 ? vitals.reduce((a, v) => a + v.sellThrough * v.store.norm, 0) / sellThroughUnits : 0;
+  const sizeSetScore = stores.length ? vitals.reduce((a, v) => a + v.sizeSetScore, 0) / stores.length : 0;
+
+  return {
+    scope,
+    storeCount: stores.length,
+    todaySales,
+    lySameDay,
+    salesGrowth: growth(todaySales, lySameDay),
+    bills,
+    qty,
+    atv: bills > 0 ? todaySales / bills : 0,
+    upt: bills > 0 ? qty / bills : 0,
+    asp: asp(todaySales, qty),
+    conversion: footfall > 0 ? bills / footfall : 0,
+    footfall,
+    mtdSales,
+    mtdTarget,
+    lyMtd,
+    achievement: mtdTarget > 0 ? mtdSales / mtdTarget : 0,
+    sellableUnits,
+    inTransit: sum((v) => v.inTransit),
+    norm,
+    fillRate,
+    band: fillBand(fillRate),
+    sellThrough,
+    coreUnits,
+    fashionUnits,
+    corePct,
+    coreTarget,
+    mix: mixVerdict(corePct, coreTarget),
+    sizeSetScore,
+    brokenStyles: sum((v) => v.brokenStyles),
+    atRiskStyles: sum((v) => v.atRiskStyles),
+    valueAtRisk: sum((v) => v.valueAtRisk),
+    children: childScopes(scope),
+  };
+}
+
+export const BRAND_SCOPE: Scope = { level: "brand", id: "all", label: "All brands" };
+
+export function brandScopes(): Scope[] {
+  return [BRAND_SCOPE, ...BRANDS.map((b) => ({ level: "brand" as const, id: b, label: b }))];
+}
+
+/** Studs, buds and duds for a store, using Tarun's own vocabulary. */
+export interface GradedStyle {
+  signal: StyleSignal;
+  grade: StyleGrade;
+  productType: ProductType;
+  /** This style's own full-price sell-through at this store. */
+  sellThrough: number;
+}
+
+export function gradedStyles(storeId: string, limit = 60): GradedStyle[] {
+  return stylesAtStore(storeId)
+    .slice(0, limit)
+    .map((style) => {
+      const signal = styleSignal(storeId, style.id);
+      const st = sellThrough(
+        stockForStyleAtStore(storeId, style.id).reduce((a, r) => a + Math.max(0, r.sold28 - r.soldOnMarkdown28), 0),
+        Math.max(1, stockForStyleAtStore(storeId, style.id).reduce((a, r) => a + r.sold28 + sellable(r), 0)),
+      );
+      return {
+        signal,
+        grade: studBudDud({ ros: signal.ros, regionalRos: signal.regionalRos, sellThrough: st }),
+        productType: style.productType,
+        sellThrough: st,
+      };
+    })
+    .sort((a, b) => b.signal.ros - a.signal.ros);
+}
+
+// ── The Tuesday/Friday replenishment and renewal run ─────────────────────────
+
+/** Units held back at the warehouse to fund the run. */
+export function warehouseHeld(): { units: number; share: number; goalUnits: number } {
+  const bought = STYLES.reduce((a, s) => a + s.bought, 0);
+  return {
+    units: Math.round(bought * HOLDBACK_SHARE),
+    share: HOLDBACK_SHARE,
+    goalUnits: Math.round(bought * HOLDBACK_GOAL),
+  };
+}
+
+/**
+ * Build the run. Deterministic: same clock in, same run out. A store qualifies
+ * on fill rate or brokenness; its gap to norm is then split between the same
+ * style returning and a new style arriving, per that store's replenish share.
+ */
+export function replenRun(at: number): ReplenRun {
+  const triggered: ReplenRun["triggered"] = [];
+  const lines: ReplenLine[] = [];
+
+  STORES.forEach((store) => {
+    const v = vitalsFor(store.id);
+    const carried = stylesAtStore(store.id).length;
+    const brokenShare = carried > 0 ? (v.brokenStyles + v.atRiskStyles) / carried : 0;
+    const check = qualifiesForRun({ fillRate: v.fillRate, brokenShare });
+    if (!check.qualifies) return;
+    triggered.push({ storeId: store.id, reason: check.reason });
+
+    // The gap to the healthy floor of the band, never the whole norm.
+    const gap = Math.max(0, Math.round(store.norm * FILL_HEALTHY_LOW - v.sellableUnits));
+    if (gap <= 0) return;
+    const split = splitReplenRenew(gap, store.replenShare);
+
+    // Replenishment: the exceptions the store is already losing money on, in
+    // value-at-risk order, filled from the warehouse.
+    let replenLeft = split.replenish;
+    sizeSetExceptions(store.id, 8).forEach((sig, i) => {
+      if (replenLeft <= 0) return;
+      const missing = sig.health.missingCore[0] ?? sig.style.coreSizes[0];
+      const wh = dcAvailable(sig.style.id, missing);
+      const want = Math.min(replenLeft, Math.max(6, Math.ceil(sig.ros * 14)));
+      const units = Math.min(want, wh);
+      if (units <= 0) return;
+      replenLeft -= units;
+      lines.push({
+        id: `RL-${store.code}-R${i}`,
+        storeId: store.id,
+        styleId: sig.style.id,
+        size: missing,
+        kind: "replenish",
+        units,
+        reason: `${sig.health.status === "broken" ? "Broken" : "At-risk"} size set on ${sig.style.name} — ${missing} gone, ${inr(sig.valueAtRisk, { compact: true })} at risk`,
+        confidence: sig.decision.confidence,
+        warehouseUnits: wh,
+        valueUnlocked: Math.round(units * sig.style.mrp * 0.55),
+      });
+    });
+
+    // Renewal: a finished style frees wall space, and something fresher takes it.
+    //
+    // Candidates are the brand's fashion styles that are working in this store's
+    // region and that this door is *under-weighted* on — not only styles it has
+    // never carried. With a 47-style assortment, "never carried" is almost empty,
+    // and under-weighted is the more useful signal anyway: it is how a capsule
+    // gets consolidated into the doors that can sell it.
+    let renewLeft = split.renew;
+    const graded = gradedStyles(store.id, 40);
+    const finished = graded.filter((g) =>
+      styleFinished({ sellThrough: g.sellThrough, daysLeftInWindow: g.signal.daysLeftInWindow }),
+    );
+    if (finished.length === 0) return;
+
+    const carriedUnits = new Map(graded.map((g) => [g.signal.style.id, g.signal.sellable]));
+    const finishedIds = new Set(finished.map((f) => f.signal.style.id));
+    const candidates = STYLES.filter((st) => st.brand === store.brand && st.productType === "fashion" && !finishedIds.has(st.id))
+      .map((st) => ({ style: st, held: carriedUnits.get(st.id) ?? 0, regionalRos: styleTrueRos(store.id, st.id) }))
+      .sort((a, b) => a.held - b.held)
+      .slice(0, 4);
+
+    if (candidates.length === 0) return;
+    // Spread the renewal budget across the candidates rather than starving the tail.
+    const per = Math.max(6, Math.floor(split.renew / candidates.length));
+
+    candidates.forEach((cand, i) => {
+      if (renewLeft <= 0 || i >= finished.length) return;
+      const outgoing = finished[i];
+      const wh = Math.round(cand.style.bought * HOLDBACK_SHARE);
+      const units = Math.min(renewLeft, per, wh);
+      if (units <= 0) return;
+      renewLeft -= units;
+      lines.push({
+        id: `RL-${store.code}-N${i}`,
+        storeId: store.id,
+        styleId: cand.style.id,
+        kind: "renew",
+        units,
+        reason: `${outgoing.signal.style.name} is finished (${outgoing.grade}) — replace with ${cand.style.name} from ${cand.style.story}, ${cand.held === 0 ? "not carried here" : `only ${cand.held} on floor`}`,
+        confidence: 0.74,
+        warehouseUnits: wh,
+        valueUnlocked: Math.round(units * cand.style.mrp * 0.4),
+      });
+    });
+  });
+
+  return { id: `RUN-${lastRunAt(at)}`, ranAt: lastRunAt(at), status: "proposed", lines, triggered };
+}
+
+/** Cluster-level rollup for the hierarchy tree and the cluster league. */
+export function clusterRollups(): Array<{ cluster: Cluster; summary: ScopeSummary }> {
+  return CLUSTERS.map((cluster) => ({
+    cluster,
+    summary: scopeSummary({ level: "cluster", id: cluster.id, label: cluster.name }),
+  })).sort((a, b) => b.summary.mtdSales - a.summary.mtdSales);
+}
+
+// ── Drop allocation and pre-season reallocation ──────────────────────────────
+//
+// Praveen's hardest problem, in his words: "given what we already bought, how do
+// we most efficiently reallocate it using the freshest store signals?" The plan
+// was cut a year ago on norms; the recommendation re-cuts it on how each door is
+// trading now. The diff between the two is the whole point of the screen.
+
+export interface DropAllocationRow {
+  store: Store;
+  /** What the plan says, cut on norm share when the buy was committed. */
+  planned: number;
+  /** What the freshest signals say, cut on achievement and rate of sale. */
+  recommended: number;
+  delta: number;
+  achievement: number;
+  fillRate: number;
+  reason: string;
+}
+
+export function dropAllocation(dropId: string, brand?: Brand): DropAllocationRow[] {
+  const drop = DROPS.find((d) => d.id === dropId);
+  if (!drop) return [];
+
+  const stores = brand ? STORES.filter((s) => s.brand === brand) : STORES;
+  if (stores.length === 0) return [];
+
+  const bought = STYLES.filter((s) => !brand || s.brand === brand).reduce((a, s) => a + s.bought, 0);
+  const dropUnits = Math.round(bought * drop.pctOfBuy);
+
+  const normTotal = stores.reduce((a, s) => a + s.norm, 0);
+  // Performance index: how the door is trading against target, tempered by
+  // whether it is holding its size sets. A door that cannot keep a size set
+  // whole does not earn more units by selling fast.
+  const indexed = stores.map((store) => {
+    const v = vitalsFor(store.id);
+    const index = Math.max(0.2, v.achievement * 0.7 + v.sizeSetScore * 0.3);
+    return { store, v, index };
+  });
+  const indexTotal = indexed.reduce((a, r) => a + r.index * r.store.norm, 0);
+
+  return indexed
+    .map(({ store, v, index }) => {
+      const planned = Math.round((dropUnits * store.norm) / normTotal);
+      const recommended = indexTotal > 0 ? Math.round((dropUnits * index * store.norm) / indexTotal) : planned;
+      const delta = recommended - planned;
+      const reason =
+        delta > 0
+          ? `Trading at ${Math.round(v.achievement * 100)}% of target — earns ${delta} more than the plan`
+          : delta < 0
+          ? `At ${Math.round(v.achievement * 100)}% of target — ${Math.abs(delta)} better placed elsewhere`
+          : "Plan and current performance agree";
+      return { store, planned, recommended, delta, achievement: v.achievement, fillRate: v.fillRate, reason };
+    })
+    .sort((a, b) => b.delta - a.delta);
+}
+
+export function dropUnitsFor(dropId: string, brand?: Brand): number {
+  const drop = DROPS.find((d) => d.id === dropId);
+  if (!drop) return 0;
+  const bought = STYLES.filter((s) => !brand || s.brand === brand).reduce((a, s) => a + s.bought, 0);
+  return Math.round(bought * drop.pctOfBuy);
+}

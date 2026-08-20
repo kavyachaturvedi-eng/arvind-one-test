@@ -52,7 +52,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       d.add("merch");
       if (app.leaves.some((l) => l.status === "pending")) d.add("team");
     }
-    if (app.role === "planner" || app.role === "leadership" || app.role === "store") d.add("agents");
+    if (app.role === "planner" || app.role === "catplan" || app.role === "leadership" || app.role === "store") d.add("agents");
     if (app.trainings.length > 0) d.add("trainings");
     return d;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -297,11 +297,12 @@ function LiveDot() {
   return <span className="w-2 h-2 rounded-full pulse-crit" style={{ background: "var(--status-good)" }} aria-label="live" />;
 }
 
-// ── Role hierarchy: Store (Manager | Staff) · Planning · Super Admin ─────────
+// ── Role hierarchy: Store (Manager | Staff) · Planning (Regional | Category) · Super Admin
 
 function RoleSwitcher() {
   const app = useApp();
   const storeSide = app.role === "store" || app.role === "staff";
+  const planningSide = app.role === "planner" || app.role === "catplan";
 
   const pill = (active: boolean) =>
     `px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
@@ -323,9 +324,16 @@ function RoleSwitcher() {
 
       <span className="w-px h-5 bg-[color:var(--line)]" />
 
-      <button data-role="planner" onClick={() => app.setRole("planner")} title="Retail Planning" className={pill(app.role === "planner")}>
-        Planning
-      </button>
+      {/* Planning is two jobs: regional runs the estate day to day, category owns the season. */}
+      <div className={`flex items-center gap-0.5 rounded-lg px-1 py-0.5 ${planningSide ? "bg-[color:var(--brand-soft)]" : ""}`}>
+        <span className={`text-2xs font-semibold px-1 ${planningSide ? "text-[color:var(--brand)]" : "text-muted"}`}>Planning</span>
+        <button data-role="planner" onClick={() => app.setRole("planner")} title="Regional Planning — the estate day to day" className={pill(app.role === "planner")}>
+          Regional
+        </button>
+        <button data-role="catplan" onClick={() => app.setRole("catplan")} title="Category Planning — season, OTB, buy depth" className={pill(app.role === "catplan")}>
+          Category
+        </button>
+      </div>
       <button data-role="leadership" onClick={() => app.setRole("leadership")} title="Leadership view" className={pill(app.role === "leadership")}>
         Super Admin
       </button>
