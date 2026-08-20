@@ -237,25 +237,6 @@ export default function Cash() {
         </Card>
       </div>
 
-      {/* Who handed what to whom, so a shortage has an owner. */}
-      <Card>
-        <SectionTitle title="Shift handovers today" right={<Chip>{app.handovers.length}</Chip>} />
-        <Table>
-          <thead>
-            <tr><Th>When</Th><Th>From</Th><Th>To</Th><Th align="right">Cash handed</Th></tr>
-          </thead>
-          <tbody>
-            {[...app.handovers].reverse().map((h) => (
-              <tr key={h.id}>
-                <Td className="text-xs text-ink2 whitespace-nowrap">{h.atLabel}</Td>
-                <Td className="text-sm text-ink">{h.from}</Td>
-                <Td className="text-sm text-ink">{h.to}</Td>
-                <Td align="right" className="num text-sm font-semibold text-ink">{inr(h.cash)}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      </Card>
     </div>
   );
 }

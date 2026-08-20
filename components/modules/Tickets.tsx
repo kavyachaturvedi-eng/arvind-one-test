@@ -69,6 +69,7 @@ const ASSETS: StoreAsset[] = [
   { id: "AST-FIRE-A", name: "Fire extinguisher A", kind: "safety" },
   { id: "AST-FLR-01", name: "Floor stock, piece missing", kind: "stock_missing" },
   { id: "AST-STK-01", name: "Stockroom, piece missing", kind: "stock_missing" },
+  { id: "AST-TAG-01", name: "Tag or barcode missing on an item", kind: "tag_reprint" },
   { id: "AST-OTH-01", name: "Something else in the store", kind: "other" },
 ];
 
@@ -209,7 +210,7 @@ export default function Tickets() {
               ]}
             />
           )}
-          <button className="btn-primary" onClick={() => { setRaiseOpen(true); setErr(null); }}>Report a problem</button>
+          <button data-raise className="btn-primary" onClick={() => { setRaiseOpen(true); setErr(null); }}>Report a problem</button>
         </div>
       </div>
 

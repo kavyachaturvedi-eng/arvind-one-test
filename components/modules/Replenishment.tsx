@@ -26,6 +26,9 @@ export default function Replenishment() {
   const others = all.filter((s) => s.decision.action !== "replenish_from_dc" && s.decision.action !== "transfer_in");
   const pullUnits = pulls.reduce((a, s) => a + (s.decision.units || 0), 0);
   const atRiskValue = all.reduce((a, s) => a + s.valueAtRisk, 0);
+  // The thinnest style on the floor, in days of cover at today's rate of sale.
+  const covers = all.map((s) => s.cover).filter((c) => Number.isFinite(c)).sort((a, b) => a - b);
+  const thinnestCover = covers.length ? Math.round(covers[0]) : 0;
   const openPulls = pulls.filter((s) => !raised.includes(s.style.id));
 
   function raisePull(sig: StyleSignal) {
@@ -77,11 +80,17 @@ export default function Replenishment() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Stat label="Warehouse pulls" value={String(pulls.length)} tone={pulls.length ? "warn" : "good"} sub={`${pullUnits} units recommended`} emphasis />
         <Stat label="Store transfers" value={String(transfers.length)} sub="Warehouse empty, a peer store has it" />
         <Stat label="Other exceptions" value={String(others.length)} sub="Stop-sell or monitor" />
-        <Stat label="Value at risk" value={inr(atRiskValue, { compact: true })} tone="critical" sub="Full-price sales if nothing moves" />
+        <Stat
+          label="Cover left, thinnest style"
+          value={`${thinnestCover} days`}
+          tone={thinnestCover <= 7 ? "critical" : thinnestCover <= 14 ? "warn" : "good"}
+          sub="At today's rate of sale"
+        />
+        <Stat label="Value at risk" value={inr(atRiskValue, { compact: true })} tone="critical" sub="Next 7 days" />
       </div>
 
       <Card>
@@ -95,7 +104,7 @@ export default function Replenishment() {
                 <Th>Style</Th><Th>Missing</Th>
                 <Th align="right">RoS</Th><Th align="right">Cover</Th>
                 <Th align="right">Warehouse</Th><Th align="right">Pull</Th>
-                <Th align="right">At risk</Th><Th align="right" />
+                <Th align="right">At risk · 7 days</Th><Th align="right" />
               </tr>
             </thead>
             <tbody>

@@ -33,7 +33,6 @@ import Agents from "@/components/modules/Agents";
 import Team from "@/components/modules/Team";
 import MerchMoves from "@/components/modules/MerchMoves";
 import StockLookup from "@/components/modules/StockLookup";
-import MyShift from "@/components/modules/MyShift";
 import Attendance from "@/components/modules/Attendance";
 import Offers from "@/components/modules/Offers";
 import Health from "@/components/modules/Health";
@@ -96,8 +95,6 @@ function Router() {
       return <MerchMoves />;
     case "lookup":
       return <StockLookup />;
-    case "shift":
-      return <MyShift />;
     case "attendance":
       return <Attendance />;
     case "offers":

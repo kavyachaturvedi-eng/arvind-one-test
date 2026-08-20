@@ -61,7 +61,6 @@ export type ModuleId =
   | "team"
   | "merch"
   | "lookup"
-  | "shift"
   | "bills"
   | "attendance"
   | "offers"
@@ -90,8 +89,6 @@ interface AppState {
   dayClosed: boolean;
   /** Cash counted into the drawer at day open. */
   openFloat: number;
-  /** Shift handovers at this counter, newest last. */
-  handovers: Handover[];
   /** Who is signed in, once a PIN is entered. */
   userName: string | null;
   users: StoreUser[];
@@ -134,14 +131,6 @@ export interface CreditNote {
   issuedLabel: string;
 }
 
-export interface Handover {
-  id: string;
-  from: string;
-  to: string;
-  cash: number;
-  atLabel: string;
-}
-
 export interface LeaveRequest {
   id: string;
   who: string;
@@ -176,7 +165,6 @@ type Action =
   | { type: "day:open"; by: string; float?: number }
   | { type: "day:close"; by: string }
   | { type: "day:reopen" }
-  | { type: "shift:handover"; from: string; to: string; cash: number }
   | { type: "leave:apply"; leave: LeaveRequest }
   | { type: "leave:decide"; id: string; status: "approved" | "declined"; by: string }
   | { type: "audit"; entry: AuditEntry }
@@ -310,8 +298,6 @@ const initial: AppState = {
   dayOpen: false,
   dayClosed: false,
   openFloat: 8000,
-  // Yesterday's late-shift handover, so the pattern is visible from the start.
-  handovers: [{ id: "HO-1", from: "Kiran Joshi", to: "Sana Qureshi", cash: 14600, atLabel: "Yesterday · 15:00" }],
   userName: null,
   users: [
     { name: "Rohit Sharma", role: "Store Manager", pin: "1234", permissions: ["bill", "refund", "discount", "receive", "transfer", "reports"] },
@@ -418,18 +404,6 @@ function reducer(state: AppState, action: Action): AppState {
       };
     case "day:reopen":
       return { ...state, dayClosed: false };
-    case "shift:handover":
-      return {
-        ...state,
-        handovers: [
-          ...state.handovers,
-          { id: `HO-${state.handovers.length + 1}`, from: action.from, to: action.to, cash: action.cash, atLabel: "Today · 11:42" },
-        ],
-        audit: [
-          { at: NOW, actor: action.from, action: `Shift ended, till handed to ${action.to} with ${action.cash} counted`, object: "shift", system: "Arvind One" },
-          ...state.audit,
-        ],
-      };
     case "leave:apply":
       return {
         ...state,

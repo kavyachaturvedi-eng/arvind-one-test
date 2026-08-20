@@ -17,8 +17,8 @@ const ROLES = [
   ["leadership", "CEO"],
 ];
 const MODULES_BY_ROLE = {
-  store: ["pos", "bills", "offers", "health", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "reports", "agents", "ask"],
-  staff: ["pos", "bills", "offers", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift", "attendance"],
+  store: ["pos", "bills", "offers", "health", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "sizeset", "replenish", "cash", "reports", "agents", "ask"],
+  staff: ["pos", "bills", "offers", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "attendance"],
   planner: ["live", "performance", "tickets", "allocate", "merch", "moves", "catchment", "trainings", "truth", "reports", "governance", "agents", "ask"],
   leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "agents", "ask"],
 };
@@ -375,14 +375,26 @@ async function expandNav(page) {
     await page.screenshot({ path: `${SHOTS}/till-profile.png` });
     await page.locator("[data-profile-return]").first().click();
     await page.waitForTimeout(200);
-    await page.locator("[data-profile-reason]").first().click();
-    await page.waitForTimeout(300);
-    if (/Returned ·/.test(await page.locator("body").innerText())) pass("return settled from the profile with a reason");
-    else fail("return from the profile did not settle");
+    // A refund can leave as a credit note instead of going back on the card.
+    const creditBtn = page.locator("[data-profile-credit]").first();
+    if ((await creditBtn.count()) === 0) fail("credit-note option missing on a return from the profile");
+    else {
+      await creditBtn.click();
+      await page.waitForTimeout(180);
+      await page.locator("[data-profile-reason]").first().click();
+      await page.waitForTimeout(320);
+      if (/Credit note ·/.test(await page.locator("body").innerText())) pass("return from the profile issued a credit note");
+      else fail("credit note not issued from the profile");
+    }
     await page.locator("[data-start-bill]").click();
     await page.waitForTimeout(300);
-    if ((await page.locator("[data-past-orders]").count()) > 0) pass("their past orders stay on the bill panel until items are added");
-    else fail("past-orders panel missing for a known customer");
+    if ((await page.locator("[data-past-orders]").count()) === 0) pass("the bill panel stays clear of past orders");
+    else fail("past-orders list still on the billing screen");
+    // Who is on the till is picked at the counter.
+    const billedBy = page.locator("[data-billed-by]");
+    if ((await billedBy.count()) > 0 && (await billedBy.locator("option").count()) > 1) {
+      pass(`billing-by picker offers ${await billedBy.locator("option").count()} people`);
+    } else fail("billing-by picker missing from the till bar");
   } else fail("customer profile popup did not open on a known number");
 
   // Held bills: confirm the drawer opens and reads honestly.
@@ -422,6 +434,28 @@ async function expandNav(page) {
       await page.waitForTimeout(280);
       if (/Coupon FESTIVE10/.test(await page.locator("body").innerText())) pass("coupon applied at payment and shown on the bill");
       else fail("coupon did not apply at payment");
+      // This customer has an open credit note: it pays first, from this page.
+      const useNote = page.locator("[data-use-note]");
+      if ((await useNote.count()) > 0) {
+        await useNote.click();
+        await page.waitForTimeout(260);
+        if (/Credit note CN-/.test(await page.locator("body").innerText())) pass("credit note applied at payment and shown on the bill");
+        else fail("credit note did not come off the bill");
+        await page.screenshot({ path: `${SHOTS}/credit-note.png` });
+        await page.locator("[data-note-remove]").click();
+        await page.waitForTimeout(200);
+      } else fail("credit note not offered at payment for a customer who has one");
+
+      // Loyalty points are spent here, not in the cart.
+      const redeem = page.locator("[data-redeem]");
+      if ((await redeem.count()) > 0) {
+        await redeem.click();
+        await page.waitForTimeout(260);
+        if (/Points \(/.test(await page.locator("body").innerText())) pass("loyalty points spent from the payment page");
+        else fail("points did not come off the bill");
+        await page.locator("[data-redeem-remove]").click();
+        await page.waitForTimeout(200);
+      } else fail("loyalty points section missing on the payment page");
       await page.screenshot({ path: `${SHOTS}/coupon.png` });
     }
   }
@@ -547,27 +581,12 @@ async function expandNav(page) {
   else fail("leave request missing");
   await page.screenshot({ path: `${SHOTS}/attendance.png`, fullPage: true });
 
-  // Shifts: now, upcoming, cash at the counter, then end the shift from the
-  // top-bar CTA with a counted handover.
-  await page.locator('nav [data-module="shift"]').first().click();
-  await page.waitForTimeout(320);
-  const shiftText = await page.locator("main").innerText();
-  if (/Upcoming shifts/i.test(shiftText) && /Cash at this counter/i.test(shiftText)) pass("shifts screen shows now, upcoming and cash operations");
-  else fail("shifts screen incomplete");
-  if (/handed/i.test(shiftText)) pass("shift-change cash movements listed");
-  else fail("handover history missing");
-  await page.screenshot({ path: `${SHOTS}/shifts.png`, fullPage: true });
-
-  await page.locator("[data-end-shift-cta]").click();
-  await page.waitForTimeout(300);
-  if ((await page.locator("[data-handover-count]").count()) === 0) fail("end-shift dialog did not ask for cash");
-  else {
-    pass("end-shift CTA in the top bar asks for the cash count");
-    await page.locator("[data-handover]").click();
-    await page.waitForTimeout(320);
-    const afterShift = await page.locator("body").innerText();
-    if (/Shift handed over/i.test(afterShift)) pass("shift handed over with cash, CTA turns into a status");
-    else fail("handover did not complete");
+  // No shift start or stop anywhere: the day is the only open and close.
+  {
+    const navText = await page.locator("nav").innerText();
+    if (!/Shifts?$/im.test(navText.replace(/Staff & Shifts/g, "")) && (await page.locator("[data-end-shift-cta]").count()) === 0) {
+      pass("no shift start or end for the floor, only the day");
+    } else fail("shift start/end still present for staff");
   }
 
   // Manager sees and approves the leave.
@@ -585,21 +604,12 @@ async function expandNav(page) {
     pass("manager approved a leave request from Staff & Shifts");
   }
 
-  // ── 4e. Smart Moves — merchandising intelligence in plain words ─────────
-  console.log(`\n[Flow] Smart Moves`);
-  await page.locator('nav [data-module="merch"]').first().click();
-  await page.waitForTimeout(340);
-  const moveCards = await page.locator("[data-merch-move]").count();
-  if (moveCards >= 4) pass(`${moveCards} plain-language move cards rendered`);
-  else fail(`expected 4+ move cards, found ${moveCards}`);
-  const merchText = await page.locator("main").innerText();
-  if (/Onam/.test(merchText) && /last year/i.test(merchText)) pass("festival + last-year evidence shown");
-  else fail("festival evidence missing from move cards");
-  await page.locator("[data-merch-approve]").first().click();
-  await page.waitForTimeout(260);
-  if (/Approved. Transfer raised/.test(await page.locator("main").innerText())) pass("move approved, transfer raised");
-  else fail("approving a move did not confirm");
-  await page.screenshot({ path: `${SHOTS}/merch.png`, fullPage: true });
+  // Smart Moves is a planning call, not the store manager's: it should be gone
+  // from the manager's nav.
+  {
+    if ((await page.locator('nav [data-module="merch"]').count()) === 0) pass("Smart Moves off the manager's nav");
+    else fail("Smart Moves still on the manager's nav");
+  }
 
   // ── 4f. Staff & Shifts — the manager's people screen ────────────────────
   console.log(`\n[Flow] Staff & Shifts`);
@@ -634,6 +644,30 @@ async function expandNav(page) {
   if (/Week published/.test(await page.locator("main").innerText())) pass("week published to staff phones");
   else fail("publish did not confirm");
   await page.screenshot({ path: `${SHOTS}/team.png`, fullPage: true });
+
+  // Inventory exposure is stated over a window in days, not a bare rupee number.
+  await page.locator('nav [data-module="replenish"]').first().click();
+  await page.waitForTimeout(320);
+  const repText = await page.locator("main").innerText();
+  if (/Cover left/i.test(repText) && /\d+ days/.test(repText)) pass("replenishment shows cover left in days");
+  else fail("cover-in-days stat missing on replenishment");
+  if (/Next 7 days/i.test(repText)) pass("value at risk carries its window in days");
+  else fail("value at risk has no window");
+  await page.locator('nav [data-module="sizeset"]').first().click();
+  await page.waitForTimeout(320);
+  if (/next 7 days/i.test(await page.locator("main").innerText())) pass("size & stock states the risk window in days");
+  else fail("size & stock risk window missing");
+
+  // Report a problem: a lost tag or barcode is its own category.
+  await page.locator('nav [data-module="tickets"]').first().click();
+  await page.waitForTimeout(320);
+  await page.locator("[data-raise]").first().click();
+  await page.waitForTimeout(280);
+  const raiseText = await page.locator("body").innerText();
+  if (/Tag or barcode missing/i.test(raiseText)) pass("tag or barcode missing is a category on the ticket form");
+  else fail("tag/barcode category missing");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
 
   // ── 5. Ask One — every suggested question answers ──────────────────────
   console.log(`\n[Flow] Ask One`);
@@ -687,6 +721,22 @@ async function expandNav(page) {
   if (reconOk === Math.min(optCount, 6)) pass(`reconciliation held for ${reconOk} styles`);
   else fail(`reconciliation broke on ${Math.min(optCount, 6) - reconOk} styles`);
   await page.screenshot({ path: `${SHOTS}/onenumber.png`, fullPage: true });
+
+  // ── 6a. Smart Moves — planning's merchandising calls ────────────────────
+  console.log(`\n[Flow] Smart Moves (planning)`);
+  await page.locator('nav [data-module="merch"]').first().click();
+  await page.waitForTimeout(340);
+  const moveCards = await page.locator("[data-merch-move]").count();
+  if (moveCards >= 4) pass(`${moveCards} plain-language move cards rendered`);
+  else fail(`expected 4+ move cards, found ${moveCards}`);
+  const merchText = await page.locator("main").innerText();
+  if (/Onam/.test(merchText) && /last year/i.test(merchText)) pass("festival + last-year evidence shown");
+  else fail("festival evidence missing from move cards");
+  await page.locator("[data-merch-approve]").first().click();
+  await page.waitForTimeout(260);
+  if (/Approved. Transfer raised/.test(await page.locator("main").innerText())) pass("move approved, transfer raised");
+  else fail("approving a move did not confirm");
+  await page.screenshot({ path: `${SHOTS}/merch.png`, fullPage: true });
 
   // ── 6b. Command palette — ⌘K jump-to-anything ───────────────────────────
   console.log(`\n[Flow] Command palette`);

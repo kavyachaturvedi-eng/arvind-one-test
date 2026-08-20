@@ -11,7 +11,7 @@ import { useApp } from "@/lib/state";
 import { Card, Chip, ColumnChart, Empty, Modal, SectionTitle, Stat, StatusDot, Table, Td, Th, fmtTime, inr, pct } from "@/components/ui";
 import { applyCoupon } from "@/lib/offers";
 import { feedbackFor } from "@/lib/offers";
-import { RETURN_REASONS, ordersForPhone } from "./BillHistory";
+import { RETURN_REASONS, ordersForPhone, type PastBill } from "./BillHistory";
 import type { Category, Style } from "@/lib/types";
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
@@ -133,6 +133,8 @@ export default function Pos() {
   const [coupon, setCoupon] = useState<{ code: string; amount: number } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [useNote, setUseNote] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [noteError, setNoteError] = useState<string | null>(null);
   const [paid, setPaid] = useState<{ mode: "UPI" | "Card" | "Cash"; amount: number }[]>([]);
   const [partText, setPartText] = useState("");
   const [paidLabel, setPaidLabel] = useState("");
@@ -141,10 +143,15 @@ export default function Pos() {
 
   // Opening the day at the counter, held bills, and the customer's profile.
   const [floatText, setFloatText] = useState("8000");
+  // Who is on the till right now — the bill and the audit line carry their name.
+  const billers = useMemo(() => app.users.filter((u) => u.permissions.includes("bill")), [app.users]);
+  const [billedBy, setBilledBy] = useState(app.userName ?? billers[0]?.name ?? "");
+  const cashier = billedBy || app.actorName;
   const [heldOpen, setHeldOpen] = useState(false);
   const [dayEndOpen, setDayEndOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ id: string; kind: "returned" | "exchanged" } | null>(null);
+  const [refundMode, setRefundMode] = useState<"original" | "credit">("original");
   const [settled, setSettled] = useState<Record<string, string>>({});
 
   const seeded = useMemo(() => buildBills(app.storeId, v.todaySales, v.bills), [app.storeId, v.todaySales, v.bills]);
@@ -184,8 +191,13 @@ export default function Pos() {
   const gross = subtotal + bagValue;
   const couponValue = coupon?.amount ?? 0;
   const afterCoupon = Math.max(0, gross - couponValue);
-  // A credit note from an earlier return pays first, then points.
-  const openNote = member ? app.creditNotes.find((n) => n.phone === member.phone && n.balance > 0) ?? null : null;
+  // A credit note from an earlier return pays first, then points. It is found
+  // by the customer's number, or keyed in from the printed slip.
+  const memberNote = member ? app.creditNotes.find((n) => n.phone === member.phone && n.balance > 0) ?? null : null;
+  const keyedNote = noteText.trim()
+    ? app.creditNotes.find((n) => n.id.toUpperCase() === noteText.trim().toUpperCase() && n.balance > 0) ?? null
+    : null;
+  const openNote = memberNote ?? keyedNote;
   const noteUsed = useNote && openNote ? Math.min(openNote.balance, afterCoupon) : 0;
   const afterNote = afterCoupon - noteUsed;
   const redeemValue = redeemPts && member ? Math.min(Math.floor(member.points * 0.25), afterNote) : 0;
@@ -223,17 +235,52 @@ export default function Pos() {
     }
   }
 
-  function settle(orderId: string, kind: "returned" | "exchanged", reason: string) {
-    setSettled((s) => ({ ...s, [orderId]: `${kind === "returned" ? "Returned" : "Exchanged"} · ${reason}` }));
+  function checkNote() {
+    const id = noteText.trim().toUpperCase();
+    if (!id) return;
+    const found = app.creditNotes.find((n) => n.id.toUpperCase() === id && n.balance > 0);
+    if (!found) {
+      setNoteError("No open credit note with that number.");
+      return;
+    }
+    setNoteError(null);
+    setUseNote(true);
+    app.toastNow(`Credit note ${found.id} attached. ${inr(found.balance)} available.`, "good");
+  }
+
+  function settle(order: PastBill, kind: "returned" | "exchanged", reason: string) {
+    const orderId = order.id;
+    const asCredit = kind === "returned" && refundMode === "credit";
+    if (asCredit && member) {
+      app.dispatch({
+        type: "credit:issue",
+        note: {
+          id: `CN-${2100 + app.creditNotes.length}`,
+          phone: member.phone,
+          customer: member.name,
+          amount: order.total,
+          balance: order.total,
+          againstBill: orderId,
+          issuedLabel: "Today",
+        },
+      });
+    }
+    setSettled((s) => ({
+      ...s,
+      [orderId]: `${kind === "returned" ? (asCredit ? "Credit note" : "Returned") : "Exchanged"} · ${reason}`,
+    }));
     setPendingAction(null);
+    setRefundMode("original");
     app.dispatch({
       type: "audit",
       entry: {
         at: NOW,
-        actor: app.actorName,
+        actor: cashier,
         action:
           kind === "returned"
-            ? `${orderId} returned at the counter. Reason: ${reason}`
+            ? asCredit
+              ? `${orderId} returned at the counter, ${inr(order.total)} issued as a credit note. Reason: ${reason}`
+              : `${orderId} returned at the counter. Reason: ${reason}`
             : `${orderId} exchanged at the counter. Reason: ${reason}`,
         object: orderId,
         system: "POS",
@@ -241,7 +288,9 @@ export default function Pos() {
     });
     app.toastNow(
       kind === "returned"
-        ? `${orderId} refunded to the original payment mode. Reason recorded.`
+        ? asCredit
+          ? `Credit note for ${inr(order.total)} issued. It shows up on their next bill.`
+          : `${orderId} refunded to the original payment mode. Reason recorded.`
         : `${orderId} exchange started. Bill the new item on this screen.`,
       "good"
     );
@@ -310,7 +359,7 @@ export default function Pos() {
       type: "audit",
       entry: {
         at: NOW,
-        actor: app.actorName,
+        actor: cashier,
         action: `Bill ${bill.id}, ${itemCount} item${itemCount > 1 ? "s" : ""}, ${inr(total)} on ${lines.map((l) => `${l.mode} ${inr(l.amount)}`).join(" + ")}${noteUsed ? `, credit note ${inr(noteUsed)}` : ""}${ptsUsed ? `, ${ptsUsed} points` : ""}`,
         object: bill.id,
         system: "POS",
@@ -333,6 +382,8 @@ export default function Pos() {
     setCouponText("");
     setCouponError(null);
     setUseNote(false);
+    setNoteText("");
+    setNoteError(null);
     setPaid([]);
     setPartText("");
     setPaidLabel("");
@@ -369,7 +420,20 @@ export default function Pos() {
         <div className="w-8 h-8 grid place-items-center text-white text-sm font-medium" style={{ background: "var(--text-primary)" }}>1</div>
         <div className="leading-tight">
           <h1 className="text-sm font-semibold text-ink">Billing · Counter {store.code}-01</h1>
-          <div className="text-2xs text-muted">{store.name} · {app.actorName}</div>
+          <div className="text-2xs text-muted">{store.name}</div>
+        </div>
+        <div className="flex items-center gap-1.5 ml-2">
+          <span className="label hidden sm:inline">Billing by</span>
+          <select
+            data-billed-by
+            value={cashier}
+            onChange={(e) => setBilledBy(e.target.value)}
+            className="border border-line bg-raised px-2 py-1.5 text-xs text-ink"
+          >
+            {billers.map((u) => (
+              <option key={u.name} value={u.name}>{u.name}</option>
+            ))}
+          </select>
         </div>
         <div className="flex-1" />
         <button
@@ -449,10 +513,10 @@ export default function Pos() {
               className="btn-primary w-full mt-4 !py-4 !text-base"
               disabled={!floatText || Number(floatText) <= 0}
               onClick={() => {
-                app.dispatch({ type: "day:open", by: app.actorName, float: Math.round((Number(floatText) || 0) * 100) / 100 });
+                app.dispatch({ type: "day:open", by: cashier, float: Math.round((Number(floatText) || 0) * 100) / 100 });
                 app.dispatch({
                   type: "audit",
-                  entry: { at: NOW, actor: app.actorName, action: `Till opened with ${inr(Number(floatText))} counted in the drawer`, object: "day-open", system: "POS" },
+                  entry: { at: NOW, actor: cashier, action: `Till opened with ${inr(Number(floatText))} counted in the drawer`, object: "day-open", system: "POS" },
                 });
                 app.toastNow(`Day open. Float ${inr(Number(floatText))} confirmed. Good selling.`, "good");
               }}
@@ -478,39 +542,16 @@ export default function Pos() {
                   <div className="text-sm text-muted">No customer yet</div>
                 )}
               </div>
-              <span className="text-2xs text-muted num shrink-0">{itemCount} item{itemCount === 1 ? "" : "s"}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                {member && (
+                  <button className="btn !py-1 !text-2xs" onClick={() => setProfileOpen(true)}>Open profile</button>
+                )}
+                <span className="text-2xs text-muted num">{itemCount} item{itemCount === 1 ? "" : "s"}</span>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto min-h-0">
-              {cart.length === 0 && member ? (
-                /* A known customer: their recent orders sit here until the bill starts. */
-                <div data-past-orders>
-                  <div className="px-4 py-2.5 border-b border-line flex items-center justify-between bg-[color:var(--plane)]">
-                    <span className="label">Their recent orders</span>
-                    <button className="btn-ghost !px-1 !text-2xs" onClick={() => setProfileOpen(true)}>Open profile</button>
-                  </div>
-                  {ordersForPhone(member.phone).map((o) => (
-                    <div key={o.id} className="px-4 py-2.5 border-b border-[color:var(--grid)]">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs num font-medium text-ink">{o.id}</span>
-                        <span className="text-2xs text-muted num">{o.dateLabel}</span>
-                      </div>
-                      <div className="text-xs text-ink2 mt-0.5">{o.items[0].qty} × {o.items[0].name} ({o.items[0].size})</div>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-xs num font-semibold text-ink">{inr(o.total)}</span>
-                        {settled[o.id] ? (
-                          <span className="text-2xs" style={{ color: "var(--status-good)" }}>{settled[o.id]}</span>
-                        ) : (
-                          <span className="text-2xs num" style={{ color: "var(--status-good)" }}>+{o.pointsEarned} pts</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  <div className="px-4 py-3 text-2xs text-muted">
-                    Scan an item to start their new bill, or open the profile to return or exchange.
-                  </div>
-                </div>
-              ) : cart.length === 0 ? (
+              {cart.length === 0 ? (
                 <div className="px-4 py-12 text-center text-xs text-muted">Bill is empty</div>
               ) : (
                 cart.map((l, i) => (
@@ -555,17 +596,6 @@ export default function Pos() {
                   >
                     {bag ? "✓ Carry bag ₹10" : "Ask: carry bag? +₹10"}
                   </button>
-                  {member && member.points > 0 && (
-                    <button
-                      data-redeem
-                      onClick={() => setRedeemPts((v) => !v)}
-                      className={`btn !py-1.5 !text-xs ${redeemPts ? "!border-[color:var(--brand)] !text-[color:var(--brand)]" : ""}`}
-                    >
-                      {redeemPts
-                        ? `✓ Paying ${inr(redeemValue)} by points`
-                        : `Use ${member.points.toLocaleString("en-IN")} pts (worth ${inr(Math.floor(member.points * 0.25))})`}
-                    </button>
-                  )}
                 </div>
               )}
               <div className="flex justify-between text-xs text-ink2"><span>Subtotal</span><span className="num">{inr(subtotal)}</span></div>
@@ -605,8 +635,7 @@ export default function Pos() {
               <div className="h-full flex items-center justify-center p-6">
                 <div className="w-full max-w-sm">
                   <div className="label mb-1.5">New bill · step 1 of 3</div>
-                  <h2 className="text-xl font-medium text-ink mb-1">Customer&apos;s mobile number</h2>
-                  <p className="text-xs text-muted mb-4">Points and offers attach to the bill. Skip for a walk-in.</p>
+                  <h2 className="text-xl font-medium text-ink mb-4">Customer&apos;s mobile number</h2>
 
                   <div className="border border-line bg-raised px-4 py-3 text-center text-2xl num tracking-widest min-h-[56px]">
                     {phone || <span className="text-muted text-base">—. —. —. —. — —</span>}
@@ -808,17 +837,57 @@ export default function Pos() {
                     )}
                   </div>
 
-                  {/* Credit note, if this customer has one open. */}
-                  {member && openNote && (
-                    <div className="border p-3 mb-4" style={{ borderColor: "var(--brand)" }}>
+                  {/* Credit note: found on the customer's number, or keyed in. */}
+                  <div className="border p-3 mb-4" style={{ borderColor: openNote ? "var(--brand)" : "var(--line)" }}>
+                    <div className="label mb-1.5" style={openNote ? { color: "var(--brand)" } : undefined}>Credit note</div>
+                    {openNote ? (
                       <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="label" style={{ color: "var(--brand)" }}>Credit note</span>
+                        <StatusDot tone="good" />
                         <span className="text-sm text-ink flex-1 num">{openNote.id} · {inr(openNote.balance)} left</span>
                         {noteUsed > 0 ? (
-                          <button className="btn !py-1 !text-2xs" onClick={() => setUseNote(false)}>Remove</button>
+                          <button data-note-remove className="btn !py-1 !text-2xs" onClick={() => setUseNote(false)}>Remove</button>
                         ) : (
                           <button data-use-note className="btn !py-1 !text-2xs" onClick={() => setUseNote(true)}>
                             Use {inr(Math.min(openNote.balance, afterCoupon))}
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex gap-2">
+                          <input
+                            data-note-input
+                            value={noteText}
+                            onChange={(e) => { setNoteText(e.target.value.toUpperCase()); setNoteError(null); }}
+                            onKeyDown={(e) => e.key === "Enter" && checkNote()}
+                            placeholder="Type or scan the note number"
+                            className="flex-1 border border-line bg-raised px-3 py-2.5 text-sm num tracking-wide"
+                          />
+                          <button data-note-check className="btn !py-2.5 !text-xs" onClick={checkNote}>Check</button>
+                        </div>
+                        {noteError && (
+                          <div className="text-2xs mt-1.5" style={{ color: "var(--status-critical)" }}>{noteError}</div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Loyalty points, spent here at the payment step. */}
+                  {member && member.points > 0 && (redeemPts || afterNote > 0) && (
+                    <div className="border border-line bg-raised p-3 mb-4">
+                      <div className="label mb-1.5">Loyalty points</div>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="text-sm text-ink flex-1 num">
+                          {member.points.toLocaleString("en-IN")} pts · worth {inr(Math.floor(member.points * 0.25))}
+                        </span>
+                        {redeemPts ? (
+                          <>
+                            <span className="text-sm num" style={{ color: "var(--status-good)" }}>−{inr(redeemValue)}</span>
+                            <button data-redeem-remove className="btn !py-1 !text-2xs" onClick={() => setRedeemPts(false)}>Remove</button>
+                          </>
+                        ) : (
+                          <button data-redeem className="btn !py-1 !text-2xs" onClick={() => setRedeemPts(true)}>
+                            Use {inr(Math.min(Math.floor(member.points * 0.25), afterNote))}
                           </button>
                         )}
                       </div>
@@ -973,12 +1042,12 @@ export default function Pos() {
               data-day-end-confirm
               className="btn-primary"
               onClick={() => {
-                app.dispatch({ type: "day:close", by: app.actorName });
+                app.dispatch({ type: "day:close", by: cashier });
                 app.dispatch({
                   type: "audit",
                   entry: {
                     at: NOW,
-                    actor: app.actorName,
+                    actor: cashier,
                     action: `Day closed at the till: ${billCount} bills, ${inr(salesToday)} billed, ${inr(cashForDeposit)} cash for deposit`,
                     object: "day-close",
                     system: "POS",
@@ -1165,6 +1234,26 @@ export default function Pos() {
                     {/* One tap on a reason completes it. No second screen. */}
                     {pendingAction?.id === o.id && (
                       <div className="mt-3 pt-3 border-t border-line">
+                        {pendingAction.kind === "returned" && (
+                          <div className="mb-3">
+                            <div className="label mb-1.5">Money goes</div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() => setRefundMode("original")}
+                                className={`border p-2.5 text-left ${refundMode === "original" ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)]" : "border-line"}`}
+                              >
+                                <div className="text-xs font-medium text-ink">Back on {o.tender}</div>
+                              </button>
+                              <button
+                                data-profile-credit
+                                onClick={() => setRefundMode("credit")}
+                                className={`border p-2.5 text-left ${refundMode === "credit" ? "border-[color:var(--brand)] bg-[color:var(--brand-soft)]" : "border-line"}`}
+                              >
+                                <div className="text-xs font-medium text-ink">Credit note {inr(o.total)}</div>
+                              </button>
+                            </div>
+                          </div>
+                        )}
                         <div className="label mb-1.5">
                           {pendingAction.kind === "returned" ? "Refund reason" : "Exchange reason"}
                         </div>
@@ -1174,17 +1263,12 @@ export default function Pos() {
                               key={rsn}
                               data-profile-reason
                               className="btn !py-1.5 !text-xs"
-                              onClick={() => settle(o.id, pendingAction.kind, rsn)}
+                              onClick={() => settle(o, pendingAction.kind, rsn)}
                             >
                               {rsn}
                             </button>
                           ))}
                           <button className="btn-ghost !text-xs" onClick={() => setPendingAction(null)}>Cancel</button>
-                        </div>
-                        <div className="text-2xs text-muted mt-2">
-                          {pendingAction.kind === "returned"
-                            ? "Refund goes back to the original payment mode. Points on that bill reverse."
-                            : "The new item is billed on this screen. Any difference settles there."}
                         </div>
                       </div>
                     )}

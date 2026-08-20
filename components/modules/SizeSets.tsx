@@ -168,6 +168,7 @@ export default function SizeSets() {
           label="Size-set health"
           value={pct(vitals.sizeSetScore)}
           tone={vitals.sizeSetScore < 0.7 ? "critical" : vitals.sizeSetScore < 0.85 ? "warn" : "good"}
+          sub="core sizes on the floor"
           freshness={4}
         />
         <Stat label="Broken sets" value={String(vitals.brokenStyles)} tone="critical" sub="two or more core sizes gone" />
@@ -176,6 +177,7 @@ export default function SizeSets() {
           label="Value at risk"
           value={inr(vitals.valueAtRisk, { compact: true })}
           tone="critical"
+          sub="next 7 days"
           emphasis
         />
       </div>
@@ -224,7 +226,7 @@ export default function SizeSets() {
                 <Th align="right">Cover</Th>
                 <Th align="right">Window left</Th>
                 <Th>Recommended action</Th>
-                <Th align="right">Value at risk</Th>
+                <Th align="right">At risk · 7 days</Th>
               </tr>
             </thead>
             <tbody>

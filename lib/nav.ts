@@ -48,7 +48,6 @@ export const NAV_GROUPS: NavGroup[] = [
     children: [
       { id: "lookup", label: "Check stock" },
       { id: "savesale", label: "Inter-store transfer" },
-      { id: "merch", label: "Smart Moves" },
       { id: "sizeset", label: "Size & Stock" },
       { id: "replenish", label: "Replenishment" },
     ],
@@ -77,10 +76,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     key: "shiftg", label: "Me", glyph: "◷", roles: ["staff"], section: "Operations",
-    children: [
-      { id: "shift", label: "Shifts" },
-      { id: "attendance", label: "Attendance" },
-    ],
+    children: [{ id: "attendance", label: "Attendance" }],
   },
   {
     key: "teamg", label: "Team", glyph: "◔", roles: ["store"], section: "Operations",
@@ -198,12 +194,11 @@ export const NAV_ACTIONS: NavAction[] = [
   { label: "What offers are running", hint: "Offers and coupon codes", id: "offers", roles: ["staff", "store"] },
   { label: "Add a member", hint: "Name and mobile, done", id: "crm", focus: "enrol", roles: ["staff", "store"] },
   { label: "Report a problem", hint: "Opens tickets", id: "tickets", roles: ["staff", "store"] },
-  { label: "End my shift", hint: "Count the cash and hand over", id: "shift", roles: ["staff"] },
   { label: "Ask for leave", hint: "Attendance and the holiday calendar", id: "attendance", roles: ["staff"] },
   { label: "Pull stock from the warehouse", hint: "Replenishment", id: "replenish", roles: ["store"] },
   { label: "Plan next week's shifts", hint: "Staff & Shifts", id: "team", roles: ["store"] },
   { label: "Check if devices are working", hint: "Systems", id: "health", roles: ["store"] },
-  { label: "Review smart stock moves", hint: "Festival & swap suggestions", id: "merch", roles: ["store", "planner"] },
+  { label: "Review smart stock moves", hint: "Festival & swap suggestions", id: "merch", roles: ["planner"] },
   { label: "Review agent approvals", hint: "AI agents waiting on you", id: "agents", roles: ["store", "planner", "leadership"] },
   { label: "Create a training", hint: "Publishes to every store", id: "trainings", roles: ["planner"] },
   { label: "Open live execution", hint: "The estate right now", id: "live", roles: ["planner", "leadership"] },
