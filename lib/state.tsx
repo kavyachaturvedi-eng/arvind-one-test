@@ -63,6 +63,7 @@ export type ModuleId =
   | "lookup"
   | "shift"
   | "hub"
+  | "bills"
 ;
 
 interface AppState {

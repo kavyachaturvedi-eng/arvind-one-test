@@ -17,8 +17,8 @@ const ROLES = [
   ["leadership", "CEO"],
 ];
 const MODULES_BY_ROLE = {
-  store: ["pos", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "reports", "agents", "ask"],
-  staff: ["hub", "pos", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift"],
+  store: ["pos", "bills", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "reports", "agents", "ask"],
+  staff: ["hub", "pos", "bills", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift"],
   planner: ["live", "performance", "tickets", "allocate", "merch", "moves", "catchment", "trainings", "truth", "reports", "governance", "agents", "ask"],
   leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "agents", "ask"],
 };
@@ -361,6 +361,30 @@ async function expandNav(page) {
   else fail("points lookup produced nothing");
   if (!/Points liability/i.test(crmText)) pass("points liability removed from the store view");
   else fail("points liability still shown to the store");
+  if (/Their orders, last 30 days/i.test(crmText) ? /Points earned/i.test(crmText) : /Not a member yet/i.test(crmText)) {
+    pass("loyalty answers with per-order points, not a customer list");
+  } else fail("member orders with points missing");
+  if (!/Members in the store recently/i.test(crmText)) pass("no laundry list of customers");
+  else fail("recent-members list still shown");
+  if (!/Capture rate/i.test(crmText)) pass("programme stats hidden from staff");
+  else fail("programme stats still visible to staff");
+
+  // Bills & Returns: find a bill, return it with a reason.
+  await page.locator('nav [data-module="bills"]').first().click();
+  await page.waitForTimeout(320);
+  const billText = await page.locator("main").innerText();
+  if (/B-41\d\d/.test(billText) && /\+\d+/.test(billText)) pass("30-day bill list with points per order");
+  else fail("bill list missing");
+  const act = page.locator("[data-bill-action]").first();
+  await act.selectOption("returned");
+  await page.waitForTimeout(280);
+  if ((await page.locator("[data-bill-confirm]").count()) > 0) {
+    await page.locator("[data-bill-confirm]").click();
+    await page.waitForTimeout(280);
+    if (/Returned/.test(await page.locator("main").innerText())) pass("return recorded with reason and refund to original mode");
+    else fail("return did not record");
+  } else fail("return modal did not open");
+  await page.screenshot({ path: `${SHOTS}/bills.png`, fullPage: true });
 
   await page.locator('nav [data-module="shift"]').first().click();
   await page.waitForTimeout(320);

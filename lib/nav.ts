@@ -35,6 +35,7 @@ export const NAV_GROUPS: NavGroup[] = [
     key: "sell", label: "Sell", glyph: "▣", roles: ["staff", "store"], section: "Operations",
     children: [
       { id: "pos", label: "Billing" },
+      { id: "bills", label: "Bills & Returns" },
       { id: "omni", label: "Online Orders" },
     ],
   },
@@ -66,7 +67,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     key: "customers", label: "Customers", glyph: "◐", roles: ["staff", "store"], section: "Operations",
     children: [
-      { id: "crm", label: "Check points", focus: "points" },
+      { id: "crm", label: "Loyalty", focus: "points" },
       { id: "crm", label: "Add a member", focus: "enrol" },
     ],
   },
@@ -188,7 +189,8 @@ export interface NavAction {
 export const NAV_ACTIONS: NavAction[] = [
   { label: "Start a new bill", hint: "Opens the billing screen", id: "pos", roles: ["staff", "store"] },
   { label: "Check stock in another store", hint: "Every store and the warehouse", id: "lookup", roles: ["staff", "store"] },
-  { label: "Check a member's points", hint: "Ten seconds, no queue held up", id: "crm", focus: "points", roles: ["staff", "store"] },
+  { label: "Check loyalty points", hint: "Ten seconds, no queue held up", id: "crm", focus: "points", roles: ["staff", "store"] },
+  { label: "Return or exchange a bill", hint: "Last 30 days, with a reason", id: "bills", roles: ["staff", "store"] },
   { label: "Add a member", hint: "Name and mobile, done", id: "crm", focus: "enrol", roles: ["staff", "store"] },
   { label: "Report a problem", hint: "Opens tickets", id: "tickets", roles: ["staff", "store"] },
   { label: "End my shift", hint: "Handover and daily report", id: "shift", roles: ["staff"] },

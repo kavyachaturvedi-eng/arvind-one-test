@@ -4,10 +4,11 @@
 // up the billing queue: check a member's points, and add a new member.
 // Campaigns and offers are run by the national marketing team, not the store.
 
-import React, { useEffect, useMemo, useState } from "react";
-import { NOW, STYLES, rng, storeById } from "@/lib/seed";
+import React, { useEffect, useState } from "react";
+import { NOW, STYLES, rng } from "@/lib/seed";
 import { useApp } from "@/lib/state";
-import { BarChart, Card, Chip, Empty, Modal, SectionTitle, Stat, StatusDot, Table, Tabs, Td, Th, inr, pct } from "@/components/ui";
+import { BarChart, Card, Chip, Modal, SectionTitle, Stat, StatusDot, Table, Tabs, Td, Th, inr, pct } from "@/components/ui";
+import { ordersForPhone } from "./BillHistory";
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
 
@@ -28,30 +29,8 @@ interface Customer {
   lastVisitDays: number;
 }
 
-function buildCustomers(storeId: string): Customer[] {
-  const r = rng(hash("crm" + storeId));
-  const out: Customer[] = [];
-  for (let i = 0; i < 8; i++) {
-    const tier = r() < 0.2 ? "Platinum" : r() < 0.55 ? "Gold" : "Silver";
-    const points = 200 + Math.floor(r() * 4200);
-    out.push({
-      name: `${FIRST[Math.floor(r() * FIRST.length)]} ${LAST[Math.floor(r() * LAST.length)]}`,
-      phone: `98${String(10000000 + Math.floor(r() * 89999999)).slice(0, 8)}`,
-      tier,
-      points,
-      expiring: r() < 0.4 ? Math.floor(points * (0.1 + r() * 0.3)) : 0,
-      spend12m: Math.round((14000 + r() * 160000) / 100) * 100,
-      visits12m: 2 + Math.floor(r() * 14),
-      lastVisitDays: 4 + Math.floor(r() * 130),
-    });
-  }
-  return out.sort((a, b) => b.spend12m - a.spend12m);
-}
-
 /** Any 10-digit number resolves deterministically, member or not. */
-function lookupByPhone(phone: string, storeId: string, known: Customer[]): Customer | null {
-  const exact = known.find((c) => c.phone === phone);
-  if (exact) return exact;
+function lookupByPhone(phone: string): Customer | null {
   const h = hash("mem" + phone);
   if (h % 4 === 0) return null; // not a member
   const r = rng(h);
@@ -73,10 +52,10 @@ type TabId = "points" | "enrol";
 
 export default function Crm() {
   const app = useApp();
-  const store = storeById(app.storeId);
-  const customers = useMemo(() => buildCustomers(app.storeId), [app.storeId]);
+  const manager = app.role === "store";
   const [tab, setTab] = useState<TabId>(app.focus === "enrol" ? "enrol" : "points");
-  const [phone, setPhone] = useState("");
+  // Pre-filled so the demo answers in one tap. Any 10-digit number works.
+  const [phone, setPhone] = useState("9812345678");
   const [looked, setLooked] = useState<{ phone: string; member: Customer | null } | null>(null);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
@@ -87,6 +66,11 @@ export default function Crm() {
     if (app.focus === "enrol") setTab("enrol");
     else if (app.focus === "points") setTab("points");
   }, [app.focus]);
+
+  // Answer for the pre-filled number straight away, so the screen opens useful.
+  useEffect(() => {
+    setLooked((cur) => cur ?? { phone: "9812345678", member: lookupByPhone("9812345678") });
+  }, []);
 
   const r = rng(hash("crmk" + app.storeId));
   const captureRate = 0.62 + r() * 0.3;
@@ -104,7 +88,7 @@ export default function Crm() {
     const q = (p ?? phone).replace(/[^\d]/g, "");
     if (q.length !== 10) return;
     setPhone(q);
-    setLooked({ phone: q, member: lookupByPhone(q, app.storeId, customers) });
+    setLooked({ phone: q, member: lookupByPhone(q) });
   }
 
   function addMember() {
@@ -127,24 +111,27 @@ export default function Crm() {
           value={tab}
           onChange={setTab}
           options={[
-            { id: "points", label: "Check points" },
+            { id: "points", label: "Loyalty" },
             { id: "enrol", label: "Add a member" },
           ]}
         />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Capture rate today" value={pct(captureRate)} tone={captureRate >= 0.8 ? "good" : "warn"} sub="Bills with a member attached" emphasis />
-        <Stat label="Members" value={(members + added).toLocaleString("en-IN")} sub={`+${newToday + added} new today`} />
-        <Stat label="Repeat share" value={pct(repeatShare)} sub="Of this month's bills" />
-        <Stat label="New this session" value={String(added)} tone={added > 0 ? "good" : undefined} sub="Added by you" />
-      </div>
+      {/* Programme numbers are the manager's business, not the counter's. */}
+      {manager && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Stat label="Capture rate today" value={pct(captureRate)} tone={captureRate >= 0.8 ? "good" : "warn"} sub="Bills with a member attached" emphasis />
+          <Stat label="Members" value={(members + added).toLocaleString("en-IN")} sub={`+${newToday + added} new today`} />
+          <Stat label="Repeat share" value={pct(repeatShare)} sub="Of this month's bills" />
+          <Stat label="New this session" value={String(added)} tone={added > 0 ? "good" : undefined} sub="Added by you" />
+        </div>
+      )}
 
-      <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
+      <div className={`grid gap-4 ${manager ? "lg:grid-cols-3" : ""}`}>
+        <div className={manager ? "lg:col-span-2" : ""}>
           {tab === "points" ? (
             <Card>
-              <SectionTitle title="Check a member's points" />
+              <SectionTitle title="Loyalty · check a member" />
               <div className="flex gap-2 max-w-md">
                 <input
                   data-points-phone
@@ -209,34 +196,34 @@ export default function Crm() {
                 </div>
               )}
 
-              <div className="mt-5">
-                <div className="label mb-2">Members in the store recently</div>
-                <Table>
-                  <thead>
-                    <tr><Th>Member</Th><Th align="right">Points</Th><Th align="right">Expiring</Th><Th align="right">Last visit</Th><Th align="right" /></tr>
-                  </thead>
-                  <tbody>
-                    {customers.slice(0, 6).map((c) => (
-                      <tr key={c.phone}>
-                        <Td>
-                          <button className="text-left" onClick={() => setProfile(c)}>
-                            <div className="text-sm text-ink underline decoration-dotted underline-offset-2">{c.name}</div>
-                            <div className="text-2xs text-muted num">{c.phone}</div>
-                          </button>
-                        </Td>
-                        <Td align="right" className="num text-sm font-semibold text-ink">{c.points.toLocaleString("en-IN")}</Td>
-                        <Td align="right" className="num text-xs" style={{ color: c.expiring ? "var(--status-warning)" : "var(--text-muted)" }}>
-                          {c.expiring || "—"}
-                        </Td>
-                        <Td align="right" className="num text-xs">{c.lastVisitDays}d ago</Td>
-                        <Td align="right">
-                          <button className="btn !py-1 !text-2xs" onClick={() => { setPhone(c.phone); check(c.phone); }}>Check</button>
-                        </Td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
+              {/* Their orders, with the points story per bill. Shown after a search only. */}
+              {looked?.member && (
+                <div className="mt-5" data-member-orders>
+                  <div className="label mb-2">Their orders, last 30 days</div>
+                  <Table>
+                    <thead>
+                      <tr><Th>When</Th><Th>Bill</Th><Th>Item</Th><Th align="right">Amount</Th><Th align="right">Points earned</Th><Th align="right">Points used</Th></tr>
+                    </thead>
+                    <tbody>
+                      {ordersForPhone(looked.phone).map((o) => (
+                        <tr key={o.id}>
+                          <Td className="text-xs text-ink2 num whitespace-nowrap">{o.dateLabel}</Td>
+                          <Td className="num text-xs text-ink">{o.id}</Td>
+                          <Td className="text-xs text-ink">{o.items[0].qty} × {o.items[0].name} ({o.items[0].size})</Td>
+                          <Td align="right" className="num text-xs font-semibold text-ink">{inr(o.total)}</Td>
+                          <Td align="right" className="num text-xs" style={{ color: "var(--status-good)" }}>+{o.pointsEarned}</Td>
+                          <Td align="right" className="num text-xs" style={{ color: o.pointsUsed ? "var(--status-warning)" : "var(--text-muted)" }}>
+                            {o.pointsUsed ? `−${o.pointsUsed}` : "—"}
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                  <div className="text-2xs text-muted mt-2">
+                    Returns and exchanges for this customer live in Bills &amp; Returns, under Sell.
+                  </div>
+                </div>
+              )}
             </Card>
           ) : (
             <Card>
@@ -268,14 +255,16 @@ export default function Crm() {
           )}
         </div>
 
-        <Card>
-          <SectionTitle title="Member base" />
-          <BarChart data={tierMix} format={(n) => n.toLocaleString("en-IN")} />
-          <div className="mt-4 pt-3 border-t border-line space-y-2 text-xs">
-            <div className="flex justify-between"><span className="text-muted">Member bill vs walk-in bill</span><span className="num font-semibold text-ink">1.4×</span></div>
-            <div className="flex justify-between"><span className="text-muted">Points used, last 90 days</span><span className="num font-semibold text-ink">{pct(0.18 + r() * 0.2)}</span></div>
-          </div>
-        </Card>
+        {manager && (
+          <Card>
+            <SectionTitle title="Member base" />
+            <BarChart data={tierMix} format={(n) => n.toLocaleString("en-IN")} />
+            <div className="mt-4 pt-3 border-t border-line space-y-2 text-xs">
+              <div className="flex justify-between"><span className="text-muted">Member bill vs walk-in bill</span><span className="num font-semibold text-ink">1.4×</span></div>
+              <div className="flex justify-between"><span className="text-muted">Points used, last 90 days</span><span className="num font-semibold text-ink">{pct(0.18 + r() * 0.2)}</span></div>
+            </div>
+          </Card>
+        )}
       </div>
 
       {profile && <Customer360 c={profile} onClose={() => setProfile(null)} onBill={() => { setProfile(null); app.go("pos"); }} />}

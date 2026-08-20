@@ -10,14 +10,14 @@ import { Chip } from "@/components/ui";
 
 const TILES: { id: ModuleId; glyph: string; label: string; focus?: string }[] = [
   { id: "pos", glyph: "▣", label: "Billing" },
+  { id: "bills", glyph: "⎌", label: "Returns & exchange" },
   { id: "omni", glyph: "◱", label: "Online orders" },
   { id: "lookup", glyph: "▦", label: "Check stock" },
   { id: "savesale", glyph: "⇄", label: "Inter-store transfer" },
   { id: "grn", glyph: "▼", label: "Receive stock" },
   { id: "outward", glyph: "⇥", label: "Send stock out" },
   { id: "storeday", glyph: "☰", label: "Tasks" },
-  { id: "crm", glyph: "◐", label: "Customers", focus: "points" },
-  { id: "tickets", glyph: "⚑", label: "Report a problem" },
+  { id: "crm", glyph: "◐", label: "Loyalty", focus: "points" },
   { id: "shift", glyph: "◷", label: "My shift" },
 ];
 

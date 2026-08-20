@@ -98,6 +98,8 @@ function attachSuggestion(cart: CartLine[], carried: Style[]): { style: Style; w
 }
 
 type Stage = "customer" | "items" | "pay" | "done";
+
+const CARRY_BAG_PRICE = 10;
 type PayMode = "UPI" | "Card" | "Cash" | null;
 
 export default function Pos() {
@@ -122,6 +124,8 @@ export default function Pos() {
   const [parked, setParked] = useState<{ id: string; lines: CartLine[]; member: Member | null; walkIn: boolean }[]>([]);
   const [payMode, setPayMode] = useState<PayMode>(null);
   const [cash, setCash] = useState(0);
+  const [bag, setBag] = useState(false);
+  const [redeemPts, setRedeemPts] = useState(false);
   const [lastBill, setLastBill] = useState<Bill | null>(null);
   const [newBills, setNewBills] = useState<Bill[]>([]);
 
@@ -153,7 +157,14 @@ export default function Pos() {
   const gst = Math.round((subtotal * 12) / 112);
   const itemCount = cart.reduce((a, l) => a + l.qty, 0);
   const suggestion = attachSuggestion(cart, carried);
-  const change = payMode === "Cash" ? Math.max(0, cash - subtotal) : 0;
+
+  // Carry bag and loyalty-point payment. One point is worth 25 paise.
+  const bagValue = bag ? CARRY_BAG_PRICE : 0;
+  const gross = subtotal + bagValue;
+  const redeemValue = redeemPts && member ? Math.min(Math.floor(member.points * 0.25), gross) : 0;
+  const ptsUsed = redeemValue > 0 ? Math.min(member?.points ?? 0, Math.ceil(redeemValue / 0.25)) : 0;
+  const total = gross - redeemValue;
+  const change = payMode === "Cash" ? Math.max(0, cash - total) : 0;
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -201,7 +212,7 @@ export default function Pos() {
       id: `B-${4300 + newBills.length}`,
       at: NOW,
       items: itemCount,
-      value: subtotal,
+      value: total,
       tender: payMode,
       customer: member ? member.name : undefined,
       status: "billed",
@@ -210,7 +221,7 @@ export default function Pos() {
     setLastBill(bill);
     app.dispatch({
       type: "audit",
-      entry: { at: NOW, actor: app.actorName, action: `Bill ${bill.id}. ${itemCount} item${itemCount > 1 ? "s" : ""}, ${inr(subtotal)} by ${payMode}`, object: bill.id, system: "POS" },
+      entry: { at: NOW, actor: app.actorName, action: `Bill ${bill.id}. ${itemCount} item${itemCount > 1 ? "s" : ""}, ${inr(total)} by ${payMode}${ptsUsed ? ` (${ptsUsed} points used)` : ""}`, object: bill.id, system: "POS" },
     });
     setStage("done");
   }
@@ -222,6 +233,8 @@ export default function Pos() {
     setWalkIn(false);
     setPayMode(null);
     setCash(0);
+    setBag(false);
+    setRedeemPts(false);
     setLastBill(null);
     resetPending();
     setStage("customer");
@@ -334,13 +347,42 @@ export default function Pos() {
             </div>
 
             <div className="p-4 border-t border-line shrink-0 space-y-1.5">
+              {/* Ask every customer: carry bag? Points if they're a member. */}
+              {stage === "items" && cart.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap pb-1">
+                  <button
+                    data-bag
+                    onClick={() => setBag((v) => !v)}
+                    className={`btn !py-1.5 !text-xs ${bag ? "!border-[color:var(--brand)] !text-[color:var(--brand)]" : ""}`}
+                  >
+                    {bag ? "✓ Carry bag ₹10" : "Ask: carry bag? +₹10"}
+                  </button>
+                  {member && member.points > 0 && (
+                    <button
+                      data-redeem
+                      onClick={() => setRedeemPts((v) => !v)}
+                      className={`btn !py-1.5 !text-xs ${redeemPts ? "!border-[color:var(--brand)] !text-[color:var(--brand)]" : ""}`}
+                    >
+                      {redeemPts
+                        ? `✓ Paying ${inr(redeemValue)} by points`
+                        : `Use ${member.points.toLocaleString("en-IN")} pts (worth ${inr(Math.floor(member.points * 0.25))})`}
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="flex justify-between text-xs text-ink2"><span>Subtotal</span><span className="num">{inr(subtotal)}</span></div>
+              {bag && <div className="flex justify-between text-xs text-ink2"><span>Carry bag</span><span className="num">{inr(bagValue)}</span></div>}
+              {redeemValue > 0 && (
+                <div className="flex justify-between text-xs" style={{ color: "var(--status-good)" }}>
+                  <span>Points ({ptsUsed.toLocaleString("en-IN")} used)</span><span className="num">−{inr(redeemValue)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-2xs text-muted"><span>Includes GST (12%)</span><span className="num">{inr(gst)}</span></div>
-              <div className="flex justify-between text-xl font-semibold text-ink pt-2 border-t border-line"><span>Total</span><span className="num">{inr(subtotal)}</span></div>
+              <div className="flex justify-between text-xl font-semibold text-ink pt-2 border-t border-line"><span>Total</span><span className="num">{inr(total)}</span></div>
               {stage === "items" && (
                 <div className="pt-2 grid grid-cols-[1fr_auto_auto] gap-2">
                   <button className="btn-primary !py-4 !text-base" disabled={cart.length === 0} onClick={() => setStage("pay")}>
-                    Charge {inr(subtotal)}
+                    Charge {inr(total)}
                   </button>
                   <button className="btn !py-4" disabled={cart.length === 0} onClick={hold}>Hold bill</button>
                   <button className="btn !py-4" disabled={cart.length === 0} onClick={() => setCart([])}>Clear</button>
@@ -522,7 +564,7 @@ export default function Pos() {
               <div className="h-full flex items-center justify-center p-6">
                 <div className="w-full max-w-md">
                   <div className="label mb-1.5">Step 3 of 3</div>
-                  <h2 className="text-xl font-medium text-ink mb-4">Take {inr(subtotal)}</h2>
+                  <h2 className="text-xl font-medium text-ink mb-4">Take {inr(total)}</h2>
 
                   <div className="grid grid-cols-3 gap-2 mb-4">
                     {(["UPI", "Card", "Cash"] as const).map((t) => (
@@ -541,23 +583,23 @@ export default function Pos() {
                     <div className="border border-line bg-raised p-5 text-center">
                       <div className="mx-auto w-32 h-32 grid grid-cols-8 gap-0.5 p-2 border border-line mb-3">
                         {Array.from({ length: 64 }, (_, i) => (
-                          <span key={i} style={{ background: rng(hash("qr" + subtotal) + i)() > 0.5 ? "var(--text-primary)" : "transparent" }} />
+                          <span key={i} style={{ background: rng(hash("qr" + total) + i)() > 0.5 ? "var(--text-primary)" : "transparent" }} />
                         ))}
                       </div>
-                      <div className="text-xs text-ink2">Customer scans to pay {inr(subtotal)}</div>
+                      <div className="text-xs text-ink2">Customer scans to pay {inr(total)}</div>
                     </div>
                   )}
                   {payMode === "Card" && (
                     <div className="border border-line bg-raised p-5 text-center">
                       <div className="text-sm text-ink mb-1">Tap or insert on the terminal</div>
-                      <div className="text-xs text-muted">Amount pushed: {inr(subtotal)}</div>
+                      <div className="text-xs text-muted">Amount pushed: {inr(total)}</div>
                     </div>
                   )}
                   {payMode === "Cash" && (
                     <div className="border border-line bg-raised p-4">
                       <div className="label mb-2">Cash received</div>
                       <div className="grid grid-cols-4 gap-2 mb-3">
-                        {[subtotal, Math.ceil(subtotal / 500) * 500, Math.ceil(subtotal / 1000) * 1000, Math.ceil(subtotal / 1000) * 1000 + 1000]
+                        {[total, Math.ceil(total / 500) * 500, Math.ceil(total / 1000) * 1000, Math.ceil(total / 1000) * 1000 + 1000]
                           .filter((v2, i, a) => a.indexOf(v2) === i)
                           .map((amt) => (
                             <button key={amt} onClick={() => setCash(amt)} className={`h-12 border text-sm num ${cash === amt ? "border-[color:var(--brand)] text-[color:var(--brand)]" : "border-line bg-raised text-ink"}`}>
@@ -565,7 +607,7 @@ export default function Pos() {
                             </button>
                           ))}
                       </div>
-                      {cash >= subtotal && cash > 0 && (
+                      {cash >= total && cash > 0 && (
                         <div className="flex justify-between text-sm text-ink pt-2 border-t border-line">
                           <span>Change to return</span>
                           <span className="num font-semibold">{inr(change)}</span>
@@ -578,7 +620,7 @@ export default function Pos() {
                     <button
                       data-confirm-pay
                       className="btn-primary !py-4 !text-base"
-                      disabled={!payMode || (payMode === "Cash" && cash < subtotal)}
+                      disabled={!payMode || (payMode === "Cash" && cash < total)}
                       onClick={confirmPayment}
                     >
                       {payMode ? `Payment received. ${payMode}` : "Pick a tender"}
