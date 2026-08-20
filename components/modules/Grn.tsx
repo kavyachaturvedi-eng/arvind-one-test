@@ -27,7 +27,7 @@ interface Asn {
 
 function buildAsns(storeId: string): Asn[] {
   const r = rng(hash("grn" + storeId));
-  const sources = ["RPC Bhiwandi", "RPC Bengaluru", "Linking Road", "Vendor — Arvind Mills", "Phoenix Marketcity"];
+  const sources = ["RPC Bhiwandi", "RPC Bengaluru", "Linking Road", "Vendor. Arvind Mills", "Phoenix Marketcity"];
   const kinds: Asn["kind"][] = ["Warehouse", "Warehouse", "Store transfer", "Vendor", "Store transfer"];
   const out: Asn[] = [];
   for (let i = 0; i < 5; i++) {
@@ -82,7 +82,7 @@ export default function Grn() {
       entry: {
         at: NOW,
         actor: app.actorName,
-        action: `${receiving.id} received against ${receiving.po} — ${got} of ${receiving.units} units${short ? ` (${short} short: ${reason})` : ""}`,
+        action: `${receiving.id} received against ${receiving.po}. ${got} of ${receiving.units} units${short ? ` (${short} short: ${reason})` : ""}`,
         object: receiving.po,
         system: "Arvind One",
       },
@@ -93,7 +93,7 @@ export default function Grn() {
         task: {
           id: `T-GRN-${receiving.id}`,
           storeId: app.storeId,
-          title: `${short} units short on ${receiving.id} — ${reason}`,
+          title: `${short} units short on ${receiving.id}. ${reason}`,
           detail: `${receiving.from} · ${receiving.po}. Photo of carton seals attached at receipt.`,
           origin: "replenishment",
           assignedTo: app.actorName,
@@ -105,9 +105,9 @@ export default function Grn() {
           slaHours: 24,
         },
       });
-      app.toastNow(`${receiving.id}: ${got} received, ${short} short — recorded against ${receiving.po}`, "warn");
+      app.toastNow(`${receiving.id}: ${got} received, ${short} short, recorded against ${receiving.po}`, "warn");
     } else {
-      app.toastNow(`${receiving.id} received in full — stock is sellable now`, "good");
+      app.toastNow(`${receiving.id} received in full, stock is sellable now`, "good");
     }
     setReceiving(null);
   }
@@ -242,7 +242,7 @@ export default function Grn() {
                   ))}
                 </select>
                 <div className="text-2xs text-muted mt-1.5">
-                  The short is recorded against {receiving.po} and a photo task is raised — you are never blamed for a
+                  The short is recorded against {receiving.po} and a photo task is raised, you are never blamed for a
                   carton that arrived light.
                 </div>
               </div>

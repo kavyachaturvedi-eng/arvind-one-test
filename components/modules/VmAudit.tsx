@@ -120,7 +120,7 @@ export function VmAuditModal({
         {/* Inspector panel */}
         {stage === "capture" && (
           <div className="text-xs text-ink2 leading-relaxed">
-            Arvi Vision checks the photo against the HQ creative guideline the moment it is captured — mannequin
+            Arvi Vision checks the photo against the HQ creative guideline the moment it is captured, mannequin
             styling, banner placement, price tags, lighting. A compliant photo closes the task and the HQ SLA
             immediately; nobody at head office has to open an email.
           </div>
@@ -160,11 +160,11 @@ export function VmAuditModal({
         {stage === "result" && (
           <div className="border-l-2 pl-3 py-1" style={{ borderColor: "var(--status-good)" }}>
             <div className="text-sm font-semibold" style={{ color: "var(--status-good)" }} data-vm-verdict>
-              {overall}% VM compliance — auto-approved
+              {overall}% VM compliance, auto-approved
             </div>
             <div className="text-2xs text-ink2 mt-0.5 leading-relaxed">
               The photo meets guideline kit 24B. Closing the task resolves the HQ SLA now and files the photo and
-              this score against the task record — auditable later, invisible work removed today.
+              this score against the task record, auditable later, invisible work removed today.
             </div>
           </div>
         )}

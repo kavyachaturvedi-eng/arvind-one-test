@@ -70,7 +70,7 @@ export default function Team() {
       type: "audit",
       entry: { at: NOW, actor: app.actorName, action: `Added ${clean} (${role}) to the team at ${store.name}`, object: clean, system: "Arvind One" },
     });
-    app.toastNow(`${clean} added — they get the app invite by SMS`, "good");
+    app.toastNow(`${clean} added, they get the app invite by SMS`, "good");
   }
 
   function cycle(nameKey: string, day: number) {
@@ -89,7 +89,7 @@ export default function Team() {
       type: "audit",
       entry: { at: NOW, actor: app.actorName, action: `Published next week's shifts for ${team.length} people at ${store.name}`, object: "shifts", system: "Arvind One" },
     });
-    app.toastNow(`Week published — ${team.length} people get their shifts on their phone`, "good");
+    app.toastNow(`Week published. ${team.length} people get their shifts on their phone`, "good");
   }
 
   return (
@@ -147,7 +147,7 @@ export default function Team() {
                         <button
                           data-shift-cell
                           onClick={() => cycle(m.name, d)}
-                          title={`${m.name} · ${DAYS[d]} · ${SHIFT_LABEL[s]} — tap to change`}
+                          title={`${m.name} · ${DAYS[d]} · ${SHIFT_LABEL[s]}, tap to change`}
                           className="w-11 h-10 border border-line font-semibold text-sm transition-transform hover:scale-105"
                           style={{ background: SHIFT_BG[s], color: SHIFT_FG[s] }}
                         >
@@ -177,7 +177,7 @@ export default function Team() {
         </div>
         {thin.some(Boolean) && (
           <div className="mt-2 text-xs" style={{ color: "var(--status-critical)" }}>
-            {DAYS.filter((_, d) => thin[d]).join(", ")} look thin — weekends need at least 5 people in, weekdays 4.
+            {DAYS.filter((_, d) => thin[d]).join(", ")} look thin, weekends need at least 5 people in, weekdays 4.
           </div>
         )}
       </Card>
@@ -203,7 +203,7 @@ export default function Team() {
                       className="btn-primary !py-1.5 !text-xs"
                       onClick={() => {
                         app.dispatch({ type: "leave:decide", id: l.id, status: "approved", by: app.actorName });
-                        app.toastNow(`${l.who}'s leave approved — the shift grid needs one change for ${l.date.split(" ")[0]}`, "good");
+                        app.toastNow(`${l.who}'s leave approved, the shift grid needs one change for ${l.date.split(" ")[0]}`, "good");
                       }}
                     >
                       Approve
@@ -212,7 +212,7 @@ export default function Team() {
                       className="btn !py-1.5 !text-xs"
                       onClick={() => {
                         app.dispatch({ type: "leave:decide", id: l.id, status: "declined", by: app.actorName });
-                        app.toastNow(`${l.who}'s leave declined — tell them why in person`, "warn");
+                        app.toastNow(`${l.who}'s leave declined, tell them why in person`, "warn");
                       }}
                     >
                       Decline

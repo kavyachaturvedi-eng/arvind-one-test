@@ -47,7 +47,7 @@ export const AGENTS: AgentDef[] = [
     tagline: "Guided selling at the counter",
     glyph: "▣",
     roles: ["store", "staff"],
-    autonomy: "Suggests only — the cashier decides",
+    autonomy: "Suggests only, the cashier decides",
     watches: "The open basket, live stock by size, the customer's history",
     impactToday: "+₹9,400 attach revenue",
   },
@@ -67,7 +67,7 @@ export const AGENTS: AgentDef[] = [
     tagline: "Protects full-price sell-through",
     glyph: "%",
     roles: ["planner", "leadership"],
-    autonomy: "Proposes only — pricing changes always need Planning",
+    autonomy: "Proposes only, pricing changes always need Planning",
     watches: "Sell-through vs the full-price window, cover vs days left, by style",
     impactToday: "3 proposals open · ₹4.1 L margin protected MTD",
   },
@@ -125,39 +125,39 @@ export function agentActivity(agentId: AgentId, storeId: string): AgentAction[] 
   switch (agentId) {
     case "till":
       return [
-        { at: min(9), label: "Suggested Slim Fit Stretch Polo as add-on — accepted, +₹3,299", kind: "did" },
-        { at: min(41), label: "Answered “do we have this in 32?” from live stock — yes, 4 on floor", kind: "did" },
-        { at: min(67), label: "Suggested belt attach on denim basket — declined", kind: "suggested" },
-        { at: min(118), label: `Flagged a Platinum member at the till — points expiring this week`, kind: "flagged" },
+        { at: min(9), label: "Suggested Slim Fit Stretch Polo as add-on, accepted, +₹3,299", kind: "did" },
+        { at: min(41), label: "Answered “do we have this in 32?” from live stock, yes, 4 on floor", kind: "did" },
+        { at: min(67), label: "Suggested belt attach on denim basket, declined", kind: "suggested" },
+        { at: min(118), label: `Flagged a Platinum member at the till, points expiring this week`, kind: "flagged" },
       ];
     case "replenish":
       return [
-        { at: min(22), label: `Raised pull: 52 × FM Straight Jean from RPC — inside autonomy limit`, kind: "did" },
+        { at: min(22), label: `Raised pull: 52 × FM Straight Jean from RPC, inside autonomy limit`, kind: "did" },
         { at: min(22), label: `Raised pull: 33 × FM Skinny Jean from RPC`, kind: "did" },
-        { at: min(84), label: `Routed FM Printed Shirt (L) to a store transfer — warehouse empty`, kind: "did" },
-        { at: min(140), label: `Held a 96-unit pull for approval — above the 40-unit autonomy limit`, kind: "suggested" },
+        { at: min(84), label: `Routed FM Printed Shirt (L) to a store transfer, warehouse empty`, kind: "did" },
+        { at: min(140), label: `Held a 96-unit pull for approval, above the 40-unit autonomy limit`, kind: "suggested" },
       ];
     case "markdown":
       return [
-        { at: min(35), label: "Proposed 20% on Linen Resort Shirt — 41 days cover, 12 days of window left", kind: "suggested" },
-        { at: min(35), label: "Proposed 15% on Monogram Tee — sell-through 22 pts behind pattern", kind: "suggested" },
-        { at: min(190), label: "Withdrew last week's proposal on Varsity Jacket — velocity recovered", kind: "did" },
+        { at: min(35), label: "Proposed 20% on Linen Resort Shirt. 41 days cover, 12 days of window left", kind: "suggested" },
+        { at: min(35), label: "Proposed 15% on Monogram Tee, sell-through 22 pts behind pattern", kind: "suggested" },
+        { at: min(190), label: "Withdrew last week's proposal on Varsity Jacket, velocity recovered", kind: "did" },
       ];
     case "outreach":
       return [
         { at: min(52), label: `Drafted 8 WhatsApp messages for today's contact list at ${store.name}`, kind: "did" },
         { at: min(52), label: "Built the list: 2 birthdays, 3 lapsing, 2 expiring points, 1 anniversary", kind: "did" },
-        { at: min(300), label: "Queued win-back campaign to the At-risk segment — awaiting send", kind: "suggested" },
+        { at: min(300), label: "Queued win-back campaign to the At-risk segment, awaiting send", kind: "suggested" },
       ];
     case "festival":
       return [
-        { at: min(46), label: "Onam is in 13 days — Forum Kochi sold 2.3× more linen this week last year", kind: "flagged" },
+        { at: min(46), label: "Onam is in 13 days. Forum Kochi sold 2.3× more linen this week last year", kind: "flagged" },
         { at: min(46), label: `Suggested: send 40 × Linen Blend Shirt from ${store.name} to Forum Kochi`, kind: "suggested" },
-        { at: min(180), label: "Raksha Bandhan (28 Aug) — gifting packs move 1.8× in Delhi NCR; suggested a top-up", kind: "suggested" },
+        { at: min(180), label: "Raksha Bandhan (28 Aug), gifting packs move 1.8× in Delhi NCR; suggested a top-up", kind: "suggested" },
       ];
     case "swap":
       return [
-        { at: min(64), label: `Monogram Print Tee sells 0.3/day at ${store.name} but 1.1/day at Linking Road — suggested a swap`, kind: "suggested" },
+        { at: min(64), label: `Monogram Print Tee sells 0.3/day at ${store.name} but 1.1/day at Linking Road, suggested a swap`, kind: "suggested" },
         { at: min(210), label: `Spotted 18 × Bomber Jacket sitting at VR Surat that would sell at ${store.name}`, kind: "suggested" },
       ];
     case "watchtower":
@@ -228,7 +228,7 @@ export interface MerchMove {
   kind: "festival" | "swap";
   /** One plain sentence: what to do. */
   headline: string;
-  /** Two or three plain reasons — no jargon. */
+  /** Two or three plain reasons, no jargon. */
   why: string[];
   /** Rupees protected or unlocked if approved. */
   worth: number;
@@ -254,7 +254,7 @@ export function merchMoves(storeId: string): MerchMove[] {
       kind: "festival",
       headline: `Send ${linenUnits} × Linen Blend Shirt to Forum Kochi before Onam`,
       why: [
-        "Onam is on 26 Aug — 13 days away.",
+        "Onam is on 26 Aug. 13 days away.",
         `This same week last year, Forum Kochi sold 2.3× more linen than ${store.name}.`,
         `Here it will last ${34 + Math.floor(r() * 10)} days at today's speed; Kochi runs out in 9.`,
       ],
@@ -270,7 +270,7 @@ export function merchMoves(storeId: string): MerchMove[] {
       kind: "festival",
       headline: `Send ${giftUnits} × Leather Belt Reversible to Pacific Delhi before Raksha Bandhan`,
       why: [
-        "Raksha Bandhan is on 28 Aug — gifting week in the North.",
+        "Raksha Bandhan is on 28 Aug, gifting week in the North.",
         "Delhi NCR stores sold 1.8× more accessories that week last year.",
         "Belts are a top-3 gift item and this store has double its usual cover.",
       ],
@@ -286,7 +286,7 @@ export function merchMoves(storeId: string): MerchMove[] {
       kind: "festival",
       headline: `Plan ${pujaUnits} × Check Casual Shirt for Quest Kolkata before Durga Puja`,
       why: [
-        "Durga Puja starts mid-October — new-clothes season in Bengal.",
+        "Durga Puja starts mid-October, new-clothes season in Bengal.",
         "Quest Kolkata sold out this style in Puja week last year and lost 11 days of sales.",
         "Booking the move now means it travels with the regular truck, not a rush courier.",
       ],
@@ -300,7 +300,7 @@ export function merchMoves(storeId: string): MerchMove[] {
     {
       id: "MM-4",
       kind: "swap",
-      headline: `Send ${teeUnits} × Monogram Print Tee to Linking Road — it sells 3× faster there`,
+      headline: `Send ${teeUnits} × Monogram Print Tee to Linking Road, it sells 3× faster there`,
       why: [
         `At ${store.name} this tee sells 0.3 a day; at Linking Road it sells 1.1 a day.`,
         "Same stock, better shelf: it earns roughly a month sooner there.",
@@ -316,10 +316,10 @@ export function merchMoves(storeId: string): MerchMove[] {
     {
       id: "MM-5",
       kind: "swap",
-      headline: `Bring ${jacketUnits} × Bomber Jacket in from VR Surat — it sits there, sells here`,
+      headline: `Bring ${jacketUnits} × Bomber Jacket in from VR Surat, it sits there, sells here`,
       why: [
         `VR Surat has ${jacketUnits + 6} bombers moving at 0.1 a day; here they move at 0.8 a day.`,
-        "Evenings are already cooling in your city — jacket season starts earlier here.",
+        "Evenings are already cooling in your city, jacket season starts earlier here.",
         "Surat frees stuck stock, you get a proven seller. Both stores win.",
       ],
       worth: Math.round(jacketUnits * 10999 * 0.45),
@@ -350,7 +350,7 @@ export function copilotSuggestions(role: RoleId, storeId: string): CopilotSugges
     return [
       {
         q: "Do we have this polo in 32?",
-        a: `${topStyle.name}: size 32 is not carried; nearest sizes on the floor are M (23) and L (0). L is available 5.4 km away at Linking Road — Save the Sale can bring it in today.`,
+        a: `${topStyle.name}: size 32 is not carried; nearest sizes on the floor are M (23) and L (0). L is available 5.4 km away at Linking Road. Save the Sale can bring it in today.`,
         action: { label: "Open Save the Sale", toast: "Opening Save the Sale" },
       },
       {
@@ -385,12 +385,12 @@ export function copilotSuggestions(role: RoleId, storeId: string): CopilotSugges
     return [
       {
         q: "Which stores need intervention today?",
-        a: "Five stores are behind plan. The common factor in three (DLF Promenade, Phoenix Marketcity, Seawoods) is briefing done late plus floor walk under 60% — an execution issue, not a demand issue. UB City is a demand anomaly per Watchtower.",
+        a: "Five stores are behind plan. The common factor in three (DLF Promenade, Phoenix Marketcity, Seawoods) is briefing done late plus floor walk under 60%, an execution issue, not a demand issue. UB City is a demand anomaly per Watchtower.",
         action: { label: "Open Live Execution", toast: "Opening Live Execution" },
       },
       {
         q: "Approve everything inside policy",
-        a: "Cleared: 1 transfer inside all gates and 2 replenishment pulls inside cover rules. Held for you: the ₹42,000 lift quote and 2 markdown proposals — pricing always needs a human.",
+        a: "Cleared: 1 transfer inside all gates and 2 replenishment pulls inside cover rules. Held for you: the ₹42,000 lift quote and 2 markdown proposals, pricing always needs a human.",
         action: { label: "Apply", toast: "3 approvals applied, 3 held for review" },
       },
       {
@@ -402,11 +402,11 @@ export function copilotSuggestions(role: RoleId, storeId: string): CopilotSugges
   return [
     {
       q: "Give me the one-paragraph morning brief",
-      a: "Estate at 94% of MTD target. Full-price sell-through 71%. Markdown exposure ₹62 L, two-thirds in two styles — proposals are with Planning. 5 stores behind plan; 3 are execution, 1 is a demand anomaly, 1 reopens after a fit-out today. Customer capture 78% and climbing.",
+      a: "Estate at 94% of MTD target. Full-price sell-through 71%. Markdown exposure ₹62 L, two-thirds in two styles, proposals are with Planning. 5 stores behind plan; 3 are execution, 1 is a demand anomaly, 1 reopens after a fit-out today. Customer capture 78% and climbing.",
     },
     {
       q: "What changed since yesterday?",
-      a: "Sell-through +0.6 pts. Broken size sets down from 26 to 22 — the Replenishment Agent closed 4 overnight with warehouse pulls. One new anomaly: UB City conversion running 38% below pattern since 10:30.",
+      a: "Sell-through +0.6 pts. Broken size sets down from 26 to 22, the Replenishment Agent closed 4 overnight with warehouse pulls. One new anomaly: UB City conversion running 38% below pattern since 10:30.",
     },
   ];
 }

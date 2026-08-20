@@ -181,7 +181,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         >
                           <span className="w-4 text-center opacity-70">{g.glyph}</span>
                           <span className="text-[13px] flex-1">{g.label}</span>
-                          {g.key === "stock" && stockExceptions > 0 && <CountBadge n={stockExceptions} tone="critical" />}
+                          {g.key === "invm" && stockExceptions > 0 && <CountBadge n={stockExceptions} tone="critical" />}
                           {(g.key === "sai" || g.key === "pai" || g.key === "aai") && approvalsWaiting > 0 && (
                             <CountBadge n={approvalsWaiting} tone="brand" />
                           )}
@@ -229,7 +229,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         {/* ── Content ───────────────────────────────────────────────────── */}
         <main className="flex-1 min-w-0 overflow-x-hidden">
-          <div key={`${app.module}:${app.focus ?? ""}`} className="max-w-[1320px] mx-auto p-3 sm:p-6 fade">
+          {/* Bottom padding keeps the floating Arvi launcher clear of tappable content. */}
+          <div key={`${app.module}:${app.focus ?? ""}`} className="max-w-[1320px] mx-auto p-3 sm:p-6 pb-24 fade">
             {crumb && (
               <div className="label mb-3 no-print" aria-label="You are here">
                 {crumb.section} · {crumb.group} · <span style={{ color: "var(--text-primary)" }}>{crumb.label}</span>

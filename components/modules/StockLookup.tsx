@@ -53,12 +53,27 @@ export default function StockLookup() {
 
       <Card>
         <SectionTitle title="1 · Which item?" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Type a name — try “polo” or “jean”"
-          className="w-full rounded-lg border border-line bg-raised px-3 py-3 text-base text-ink placeholder:text-muted"
-        />
+        <div className="flex gap-2">
+          <span className="grid place-items-center w-11 border border-line bg-[color:var(--plane)] text-lg shrink-0" aria-hidden>⌸</span>
+          <input
+            data-lookup-scan
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              // A barcode gun types the item code and presses Enter.
+              const code = query.trim().toUpperCase();
+              const hit = STYLES.find((s) => s.id.toUpperCase() === code) ?? options[0];
+              if (hit) {
+                setStyleId(hit.id);
+                setSize("");
+                app.toastNow(`${hit.name} scanned`, "info");
+              }
+            }}
+            placeholder="Scan the barcode, or type a name like polo"
+            className="w-full rounded-lg border border-line bg-raised px-3 py-3 text-base text-ink placeholder:text-muted"
+          />
+        </div>
         <div className="mt-2.5 max-h-[190px] overflow-y-auto space-y-1 pr-1">
           {options.map((s) => {
             const active = styleId === s.id;
@@ -102,7 +117,7 @@ export default function StockLookup() {
       {style && size && (
         <Card>
           <SectionTitle
-            title={`${style.name} · size ${size} — everywhere`}
+            title={`${style.name} · size ${size}, everywhere`}
             right={<Chip tone={totalElsewhere > 0 ? "good" : "critical"}>{totalElsewhere} elsewhere</Chip>}
           />
           <Table>
@@ -156,7 +171,7 @@ export default function StockLookup() {
                 <tr>
                   <Td colSpan={4}>
                     <div className="flex items-center gap-2 text-xs py-1" style={{ color: "var(--status-critical)" }}>
-                      <StatusDot tone="critical" /> No store and no warehouse has this size — offer the online channel.
+                      <StatusDot tone="critical" /> No store and no warehouse has this size, offer the online channel.
                     </div>
                   </Td>
                 </tr>

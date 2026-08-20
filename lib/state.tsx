@@ -62,6 +62,7 @@ export type ModuleId =
   | "merch"
   | "lookup"
   | "shift"
+  | "hub"
 ;
 
 interface AppState {
@@ -81,6 +82,8 @@ interface AppState {
   cash: CashException[];
   /** Leave requests from staff — the manager decides in Staff & Shifts. */
   leaves: LeaveRequest[];
+  /** The trading day: opened once each morning by the manager or first staff in. */
+  dayOpen: boolean;
   audit: AuditEntry[];
   toast: { id: number; message: string; tone: "good" | "warn" | "info" } | null;
   clockOffsetMinutes: number;
@@ -111,6 +114,7 @@ type Action =
   | { type: "task:create"; task: Task }
   | { type: "training:create"; training: TrainingItem }
   | { type: "cash:update"; id: string; patch: Partial<CashException> }
+  | { type: "day:open"; by: string }
   | { type: "leave:apply"; leave: LeaveRequest }
   | { type: "leave:decide"; id: string; status: "approved" | "declined"; by: string }
   | { type: "audit"; entry: AuditEntry }
@@ -241,6 +245,7 @@ const initial: AppState = {
   trainings: [],
   cash: CASH_EXCEPTIONS,
   leaves: [{ id: "LV-1", who: "Kiran Joshi", date: "Sun 16 Aug", reason: "Family function", status: "pending" }],
+  dayOpen: false,
   audit: [
     { at: NOW - 64 * 60_000, actor: "Commercial", action: "Price revision published", object: "11 styles", system: "Arvind One" },
     { at: NOW - 63 * 60_000, actor: "Arvind One", action: "Created reprint job TK-8803", object: "41 units", system: "Arvind One" },
@@ -273,6 +278,12 @@ function reducer(state: AppState, action: Action): AppState {
     case "module":
       return { ...state, module: action.module, focus: action.focus ?? null };
 
+    case "day:open":
+      return {
+        ...state,
+        dayOpen: true,
+        audit: [{ at: NOW, actor: action.by, action: "Day opened — floor checklist started, till float confirmed", object: "day-open", system: "Arvind One" }, ...state.audit],
+      };
     case "leave:apply":
       return {
         ...state,
@@ -413,9 +424,9 @@ function reducer(state: AppState, action: Action): AppState {
 }
 
 function defaultModule(role: RoleId): ModuleId {
-  // Staff lands on the till; the manager on insights; planning on the live
-  // control tower; the CEO on the executive summary.
-  return role === "staff" ? "pos" : role === "store" ? "home" : role === "planner" ? "live" : "exec";
+  // Staff lands on a launcher and chooses billing or other work; the manager
+  // on insights; planning on the live control tower; the CEO on the summary.
+  return role === "staff" ? "hub" : role === "store" ? "home" : role === "planner" ? "live" : "exec";
 }
 
 // ── Context ──────────────────────────────────────────────────────────────────

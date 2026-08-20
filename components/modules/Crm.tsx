@@ -48,7 +48,7 @@ function buildCustomers(storeId: string): Customer[] {
   return out.sort((a, b) => b.spend12m - a.spend12m);
 }
 
-/** Any 10-digit number resolves deterministically — member or not. */
+/** Any 10-digit number resolves deterministically, member or not. */
 function lookupByPhone(phone: string, storeId: string, known: Customer[]): Customer | null {
   const exact = known.find((c) => c.phone === phone);
   if (exact) return exact;
@@ -114,7 +114,7 @@ export default function Crm() {
       type: "audit",
       entry: { at: NOW, actor: app.actorName, action: `New loyalty member enrolled: ${newName.trim()}`, object: newPhone, system: "Arvind One" },
     });
-    app.toastNow(`${newName.trim()} added — welcome message sent by SMS`, "good");
+    app.toastNow(`${newName.trim()} added, welcome message sent by SMS`, "good");
     setNewName("");
     setNewPhone("");
   }
@@ -152,7 +152,7 @@ export default function Crm() {
                   onChange={(e) => setPhone(e.target.value.replace(/[^\d]/g, "").slice(0, 10))}
                   onKeyDown={(e) => e.key === "Enter" && check()}
                   inputMode="numeric"
-                  placeholder="Customer's mobile — 10 digits"
+                  placeholder="Customer's mobile. 10 digits"
                   className="flex-1 rounded-lg border border-line bg-raised px-3 py-3 text-base num"
                 />
                 <button data-points-check className="btn-primary !px-5" disabled={phone.length !== 10} onClick={() => check()}>
@@ -194,7 +194,7 @@ export default function Crm() {
                   ) : (
                     <div className="border border-line p-4">
                       <div className="text-sm font-medium text-ink">Not a member yet</div>
-                      <div className="text-xs text-ink2 mt-1">No membership on {looked.phone}. Add them in ten seconds — the welcome message goes out by SMS.</div>
+                      <div className="text-xs text-ink2 mt-1">No membership on {looked.phone}. Add them in ten seconds, the welcome message goes out by SMS.</div>
                       <button
                         className="btn-primary mt-3"
                         onClick={() => {
@@ -251,7 +251,7 @@ export default function Crm() {
                 <input
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value.replace(/[^\d]/g, "").slice(0, 10))}
-                  placeholder="Mobile — 10 digits"
+                  placeholder="Mobile. 10 digits"
                   className="w-full rounded-lg border border-line bg-raised px-3 py-3 text-base num"
                 />
                 <button className="btn-primary w-full !py-3" disabled={!newName.trim() || newPhone.length !== 10} onClick={addMember}>
@@ -261,7 +261,7 @@ export default function Crm() {
                   <div className="text-xs text-ink2 flex items-center gap-1.5"><StatusDot tone="good" />{added} added this session</div>
                 )}
                 <div className="text-2xs text-muted leading-relaxed pt-1">
-                  Offers and campaigns go out from the national marketing team — the store never has to write one.
+                  Offers and campaigns go out from the national marketing team, the store never has to write one.
                 </div>
               </div>
             </Card>

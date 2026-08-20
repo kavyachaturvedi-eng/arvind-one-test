@@ -80,7 +80,7 @@ export default function Replenishment() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Warehouse pulls" value={String(pulls.length)} tone={pulls.length ? "warn" : "good"} sub={`${pullUnits} units recommended`} emphasis />
-        <Stat label="Store transfers" value={String(transfers.length)} sub="Warehouse empty — a peer store has it" />
+        <Stat label="Store transfers" value={String(transfers.length)} sub="Warehouse empty, a peer store has it" />
         <Stat label="Other exceptions" value={String(others.length)} sub="Stop-sell or monitor" />
         <Stat label="Value at risk" value={inr(atRiskValue, { compact: true })} tone="critical" sub="Full-price sales if nothing moves" />
       </div>

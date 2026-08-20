@@ -145,7 +145,7 @@ export default function AskOne() {
         <Card>
           <Empty
             title="Nothing asked yet"
-            body="Every answer arrives with the metric it used, the filters applied, the grain, the time range and the data freshness — above the number, not in a footnote."
+            body="Every answer arrives with the metric it used, the filters applied, the grain, the time range and the data freshness, above the number, not in a footnote."
           />
         </Card>
       )}
@@ -157,7 +157,7 @@ export default function AskOne() {
             sub={`Scope: ${store.name} · ${store.brand} · asked by ${app.actorName}`}
             right={
               <div className="flex items-center gap-2">
-                <button className="btn-ghost text-xs" onClick={() => app.toastNow(`Pinned "${asked}" to your home screen — it will refresh on the metric's own contract`, "good")}>
+                <button className="btn-ghost text-xs" onClick={() => app.toastNow(`Pinned "${asked}" to your home screen, it will refresh on the metric's own contract`, "good")}>
                   Pin to my home screen
                 </button>
                 <button className="btn-ghost text-xs" onClick={() => ask(asked!)}>Re-run</button>
@@ -172,11 +172,11 @@ export default function AskOne() {
               {answer.metric && answer.metric.verified ? (
                 <Chip tone="good" icon={<StatusDot tone="good" />}>Verified · governed metric</Chip>
               ) : (
-                <Chip tone="warn" icon={<StatusDot tone="warn" />}>Unverified — generated</Chip>
+                <Chip tone="warn" icon={<StatusDot tone="warn" />}>Unverified, generated</Chip>
               )}
             </div>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <Field label="Metric" value={answer.metric ? `${answer.metric.label} ${answer.metric.version}` : "none — no governed metric matched"} />
+              <Field label="Metric" value={answer.metric ? `${answer.metric.label} ${answer.metric.version}` : "none, no governed metric matched"} />
               <Field label="Filters" value={answer.filters} />
               <Field label="Grain" value={answer.grain} />
               <Field label="Time range" value={answer.timeRange} />
@@ -194,7 +194,7 @@ export default function AskOne() {
           {!(answer.metric && answer.metric.verified) && (
             <Callout tone="warn" title="Not for a review pack">
               {answer.note ??
-                "This answer did not compile to a verified metric definition. It is computed from live data and it is reproducible, but it has no owner and no freshness contract — do not put it in a board or review pack until it is registered in Governance."}
+                "This answer did not compile to a verified metric definition. It is computed from live data and it is reproducible, but it has no owner and no freshness contract, do not put it in a board or review pack until it is registered in Governance."}
             </Callout>
           )}
 
@@ -218,7 +218,7 @@ export default function AskOne() {
                     type: "audit",
                     entry: { at: NOW, actor: app.actorName, action: `Requested a new governed metric: ${answer.missing!.metric}`, object: asked ?? "", system: "Arvind One" },
                   });
-                  app.toastNow(`Metric request logged for ${answer.missing!.metric} — routed to the owning team for a definition and a freshness contract`, "info");
+                  app.toastNow(`Metric request logged for ${answer.missing!.metric}, routed to the owning team for a definition and a freshness contract`, "info");
                 }}
               >
                 Request this metric
@@ -245,7 +245,7 @@ export default function AskOne() {
 
       <Callout tone="brand" title="Why this is not a chatbot bolted onto a database">
         A chatbot over raw tables invents a definition every time it is asked, so two people asking the same question in the same
-        hour get two different numbers — which is exactly the problem this product exists to fix. Here the question compiles to a
+        hour get two different numbers, which is exactly the problem this product exists to fix. Here the question compiles to a
         metric in the registry: one definition, one formula, an owner who is accountable for it, a version number that changes
         under review, and a published freshness contract. If the question cannot be compiled, the honest answer is &quot;not yet —
         here is the metric someone has to own first&quot;. Refusing to answer is a feature; a confident wrong number is what costs
@@ -362,7 +362,7 @@ function resolve(q: string, app: ReturnType<typeof useApp>): Answer {
         <div className="space-y-3">
           <p className="text-sm text-ink leading-relaxed">
             <span className="font-semibold">{top.length} stores account for {pct(topShare)} of the margin bleed</span> on{" "}
-            {target.name} — {top.map((x) => x.v.store.name).join(", ")}. The dominant cause is unmanaged floor
+            {target.name}. {top.map((x) => x.v.store.name).join(", ")}. The dominant cause is unmanaged floor
             discounting: {pct(top[0].discountShare)} of units at {top[0].v.store.name} billed below MRP at an average
             depth of {pct(top[0].avgDepth)}, against a chain median near 11%. Residual stock past its window adds the
             rest. A structured markdown at these three protects more margin than it costs.
@@ -400,7 +400,7 @@ function resolve(q: string, app: ReturnType<typeof useApp>): Answer {
                             system: "Ask One",
                           },
                         });
-                        app.toastNow(`Markdown review queued for ${x.v.store.name} — routed to the Markdown Agent with this evidence attached`, "good");
+                        app.toastNow(`Markdown review queued for ${x.v.store.name}, routed to the Markdown Agent with this evidence attached`, "good");
                       }}
                     >
                       Trigger markdown
@@ -427,7 +427,7 @@ function resolve(q: string, app: ReturnType<typeof useApp>): Answer {
       grain: "brand",
       timeRange: "Season to date, projected to season end",
       ageMinutes: 640,
-      note: "Markdown exposure is in the registry but has not passed the adoption gate — it is version v0.9 and the expected-depth input is a planning assumption, not a rate signed off by Finance. Use it to rank brands, not to book a provision.",
+      note: "Markdown exposure is in the registry but has not passed the adoption gate, it is version v0.9 and the expected-depth input is a planning assumption, not a rate signed off by Finance. Use it to rank brands, not to book a provision.",
       body: (
         <Table>
           <thead><tr><Th>Brand</Th><Th align="right">Sellable units</Th><Th align="right">Full-price sell-through</Th><Th align="right">Markdown exposure</Th></tr></thead>
@@ -511,7 +511,7 @@ function resolve(q: string, app: ReturnType<typeof useApp>): Answer {
       grain: "order",
       timeRange: "Order lifetime",
       ageMinutes: 2,
-      note: "This is a record lookup against the omni root-cause ledger, not a metric. It is fully auditable and safe to act on, but it is not a governed number — do not aggregate it into a review pack until a cancellation-rate metric is registered.",
+      note: "This is a record lookup against the omni root-cause ledger, not a metric. It is fully auditable and safe to act on, but it is not a governed number, do not aggregate it into a review pack until a cancellation-rate metric is registered.",
       missing: {
         metric: "omni_cancellation_rate",
         needs: [
@@ -551,7 +551,7 @@ function resolve(q: string, app: ReturnType<typeof useApp>): Answer {
       grain: "associate × month to date",
       timeRange: "Month to date",
       ageMinutes: 6,
-      note: "Units per transaction is computed here from bills and quantity on the POS feed, but UPT is not yet a registered metric — there is no agreed treatment of returns, exchanges or split bills, so two stores could compute it differently.",
+      note: "Units per transaction is computed here from bills and quantity on the POS feed, but UPT is not yet a registered metric, there is no agreed treatment of returns, exchanges or split bills, so two stores could compute it differently.",
       missing: {
         metric: "units_per_transaction",
         needs: [
@@ -603,7 +603,7 @@ function resolve(q: string, app: ReturnType<typeof useApp>): Answer {
       grain: "brand × month",
       timeRange: "1–13 Aug 2026 vs 1–13 Aug 2025",
       ageMinutes: 18,
-      note: "Like-for-like sales versus last year is not a registered metric. This is computed from the POS feed and the same-day LY index, but there is no agreed rule for stores that opened, closed or were refitted mid-period — so the comparison is directional only.",
+      note: "Like-for-like sales versus last year is not a registered metric. This is computed from the POS feed and the same-day LY index, but there is no agreed rule for stores that opened, closed or were refitted mid-period, so the comparison is directional only.",
       missing: {
         metric: "lfl_net_sales",
         needs: [

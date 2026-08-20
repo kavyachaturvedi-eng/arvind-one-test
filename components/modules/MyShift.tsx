@@ -42,7 +42,7 @@ export default function MyShift() {
       entry: {
         at: NOW,
         actor: app.actorName,
-        action: `Day report sent — ${myBills} bills, ${inr(mySales, { compact: true })}, ${myItems} items`,
+        action: `Day report sent. ${myBills} bills, ${inr(mySales, { compact: true })}, ${myItems} items`,
         object: "day-report",
         system: "Arvind One",
       },
@@ -58,12 +58,12 @@ export default function MyShift() {
       entry: {
         at: NOW,
         actor: app.actorName,
-        action: `Shift ended — till handed to ${handTo}, ${inr(cashInDrawer)} counted and confirmed`,
+        action: `Shift ended, till handed to ${handTo}, ${inr(cashInDrawer)} counted and confirmed`,
         object: "shift",
         system: "Arvind One",
       },
     });
-    app.toastNow(`Shift ended — till handed to ${handTo}. See you tomorrow.`, "good");
+    app.toastNow(`Shift ended, till handed to ${handTo}. See you tomorrow.`, "good");
   }
 
   function applyLeave() {
@@ -72,7 +72,7 @@ export default function MyShift() {
       type: "leave:apply",
       leave: { id, who: app.actorName, date: leaveDate, reason: leaveReason, status: "pending" },
     });
-    app.toastNow(`Leave asked for ${leaveDate} — your manager will confirm`, "good");
+    app.toastNow(`Leave asked for ${leaveDate}, your manager will confirm`, "good");
   }
 
   return (
@@ -101,7 +101,7 @@ export default function MyShift() {
           {shiftEnded ? (
             <div className="flex items-center gap-2.5 text-sm text-ink py-2">
               <StatusDot tone="good" />
-              Done — till handed to {handTo}, cash confirmed, report {reportSent ? "sent" : "pending"}.
+              Done, till handed to {handTo}, cash confirmed, report {reportSent ? "sent" : "pending"}.
             </div>
           ) : (
             <div className="space-y-3">
@@ -112,7 +112,7 @@ export default function MyShift() {
 
               <label className="flex items-center gap-2.5 border border-line p-3 cursor-pointer">
                 <input type="checkbox" checked={cashCounted} onChange={(e) => setCashCounted(e.target.checked)} />
-                <span className="text-sm text-ink">2 · Cash counted — {inr(cashInDrawer)} in the drawer</span>
+                <span className="text-sm text-ink">2 · Cash counted. {inr(cashInDrawer)} in the drawer</span>
               </label>
 
               <div className="flex items-center gap-2.5">

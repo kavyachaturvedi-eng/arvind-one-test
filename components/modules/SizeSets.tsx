@@ -125,7 +125,7 @@ export default function SizeSets() {
     const missing = sig.health.missingCore[0];
     app.go("savesale");
     app.toastNow(
-      `Save the Sale opened with ${sig.style.name}${missing ? ` · size ${missing}` : ""} pre-loaded — ${sig.donorUnits} donor units inside the transfer radius.`,
+      `Save the Sale opened with ${sig.style.name}${missing ? ` · size ${missing}` : ""} pre-loaded. ${sig.donorUnits} donor units inside the transfer radius.`,
       "info"
     );
     setOpenId(null);
@@ -137,7 +137,7 @@ export default function SizeSets() {
       task: {
         id: `T-VM-${seq.current++}`,
         storeId: app.storeId,
-        title: `Stop featuring ${sig.style.name} — re-space the fixture`,
+        title: `Stop featuring ${sig.style.name}, re-space the fixture`,
         detail: `Core sizes ${sig.health.missingCore.join(", ") || "—"} unavailable with ${sig.dcUnits} at the warehouse and ${sig.donorUnits} donor units. Move to the wall, give the faceout to a healthy set, submit a photo.`,
         origin: "vm",
         assignedTo: app.actorName,
@@ -150,7 +150,7 @@ export default function SizeSets() {
         slaHours: 6,
       },
     });
-    app.toastNow(`VM task created — ${sig.style.name} comes off the faceout and the fixture is re-spaced today.`, "warn");
+    app.toastNow(`VM task created. ${sig.style.name} comes off the faceout and the fixture is re-spaced today.`, "warn");
     setOpenId(null);
   }
 
@@ -225,7 +225,7 @@ export default function SizeSets() {
             <thead>
               <tr>
                 <Th>Style</Th>
-                <Th>Size grid — sellable units (★ core)</Th>
+                <Th>Size grid, sellable units (★ core)</Th>
                 <Th align="right">True ROS</Th>
                 <Th align="right">Cover</Th>
                 <Th align="right">Window left</Th>
@@ -311,8 +311,8 @@ function RosExplainer({ sig, storeId }: { sig: StyleSignal; storeId: string }) {
       />
       <div className="grid gap-3 lg:grid-cols-[1.15fr_1fr] items-start">
         <BeforeAfter
-          beforeLabel="Naive ROS — units ÷ 28 days"
-          afterLabel="True ROS — units ÷ days genuinely in stock"
+          beforeLabel="Naive ROS, units ÷ 28 days"
+          afterLabel="True ROS, units ÷ days genuinely in stock"
           before={`${sig.naiveRos.toFixed(2)} units/day`}
           after={`${sig.ros.toFixed(2)} units/day`}
         />
@@ -410,7 +410,7 @@ function DecisionModal({
         {nosNearEnd && (
           <Callout tone="warn" title="NOS core style near the end of its window">
             {sig.style.name} is a never-out-of-stock carry-forward line with {sig.daysLeftInWindow} days left in the
-            window. The pull-back rule is suppressed for NOS styles — this stock carries into the next season at full
+            window. The pull-back rule is suppressed for NOS styles, this stock carries into the next season at full
             price.
           </Callout>
         )}
@@ -418,7 +418,7 @@ function DecisionModal({
         {belowRegion && (
           <Callout tone="warn" title="This is a display problem, not a stock problem">
             This store sells {sig.style.name} at {sig.ros.toFixed(2)} units/day against a regional average of{" "}
-            {sig.regionalRos.toFixed(2)} — rank #{sig.regionalRank} among same-brand peers. More stock will not fix a
+            {sig.regionalRos.toFixed(2)}, rank #{sig.regionalRank} among same-brand peers. More stock will not fix a
             style that is not being seen. Raise the VM task below: move it to a faceout, re-space the fixture and check
             the size run on the floor before pulling more units into the store.
           </Callout>
@@ -429,16 +429,16 @@ function DecisionModal({
           <ul className="text-xs text-ink2 space-y-1 leading-relaxed">
             <li>
               {sig.dcUnits > 0
-                ? `Warehouse replenishment enabled — ${sig.dcUnits} units held back at the RPC for this size.`
+                ? `Warehouse replenishment enabled. ${sig.dcUnits} units held back at the RPC for this size.`
                 : "Warehouse replenishment disabled: the RPC shows zero units for the missing core size."}
             </li>
             <li>
               {sig.donorUnits > 0
-                ? `Donor transfer enabled — ${sig.donorUnits} units sit above a week's cover at peer stores inside the radius.`
+                ? `Donor transfer enabled. ${sig.donorUnits} units sit above a week's cover at peer stores inside the radius.`
                 : "Donor transfer disabled: no peer store holds units above its own week of cover."}
             </li>
             <li>
-              Value at risk {inr(sig.valueAtRisk)} — {Math.min(7, sig.daysLeftInWindow)} days of True ROS demand at full
+              Value at risk {inr(sig.valueAtRisk)}. {Math.min(7, sig.daysLeftInWindow)} days of True ROS demand at full
               price that this set cannot currently serve.
             </li>
           </ul>

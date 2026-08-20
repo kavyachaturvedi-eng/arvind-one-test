@@ -70,7 +70,7 @@ interface Member {
   points: number;
 }
 
-/** Deterministic member lookup — most numbers are members, some are new. */
+/** Deterministic member lookup, most numbers are members, some are new. */
 function lookupMember(phone: string): Member | null {
   const h = hash("mem" + phone);
   if (h % 4 === 0) return null; // new customer
@@ -210,7 +210,7 @@ export default function Pos() {
     setLastBill(bill);
     app.dispatch({
       type: "audit",
-      entry: { at: NOW, actor: app.actorName, action: `Bill ${bill.id} — ${itemCount} item${itemCount > 1 ? "s" : ""}, ${inr(subtotal)} by ${payMode}`, object: bill.id, system: "POS" },
+      entry: { at: NOW, actor: app.actorName, action: `Bill ${bill.id}. ${itemCount} item${itemCount > 1 ? "s" : ""}, ${inr(subtotal)} by ${payMode}`, object: bill.id, system: "POS" },
     });
     setStage("done");
   }
@@ -359,7 +359,7 @@ export default function Pos() {
                   <p className="text-xs text-muted mb-4">Points and offers attach to the bill. Skip for a walk-in.</p>
 
                   <div className="border border-line bg-raised px-4 py-3 text-center text-2xl num tracking-widest min-h-[56px]">
-                    {phone || <span className="text-muted text-base">— — — — — — — — — —</span>}
+                    {phone || <span className="text-muted text-base">—. —. —. —. — —</span>}
                   </div>
 
                   {phone.length === 10 && (
@@ -370,7 +370,7 @@ export default function Pos() {
                           <span className="font-medium">{member.name}</span> · {member.tier} · {member.points.toLocaleString("en-IN")} pts
                         </span>
                       ) : (
-                        <span className="text-xs text-ink">New customer — will be enrolled on billing</span>
+                        <span className="text-xs text-ink">New customer, will be enrolled on billing</span>
                       )}
                     </div>
                   )}
@@ -466,7 +466,7 @@ export default function Pos() {
                         </div>
                         {Object.values(pickingUnits).every((u) => u <= 0) && (
                           <div className="text-xs mt-2" style={{ color: "var(--status-critical)" }}>
-                            Nothing sellable here — Save the Sale can bring it from a nearby store.
+                            Nothing sellable here. Save the Sale can bring it from a nearby store.
                           </div>
                         )}
                       </>
@@ -581,7 +581,7 @@ export default function Pos() {
                       disabled={!payMode || (payMode === "Cash" && cash < subtotal)}
                       onClick={confirmPayment}
                     >
-                      {payMode ? `Payment received — ${payMode}` : "Pick a tender"}
+                      {payMode ? `Payment received. ${payMode}` : "Pick a tender"}
                     </button>
                     <button className="btn !py-4" onClick={() => setStage("items")}>Back</button>
                   </div>

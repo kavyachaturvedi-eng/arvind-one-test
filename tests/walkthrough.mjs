@@ -17,8 +17,8 @@ const ROLES = [
   ["leadership", "CEO"],
 ];
 const MODULES_BY_ROLE = {
-  store: ["pos", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "truth", "reports", "agents", "ask"],
-  staff: ["pos", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift"],
+  store: ["pos", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "reports", "agents", "ask"],
+  staff: ["hub", "pos", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift"],
   planner: ["live", "performance", "tickets", "allocate", "merch", "moves", "catchment", "trainings", "truth", "reports", "governance", "agents", "ask"],
   leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "agents", "ask"],
 };
@@ -118,6 +118,7 @@ async function expandNav(page) {
       const tillOpen = (await page.locator("[data-exit-till]").count()) > 0;
 
       if (mod === "pos" && tillOpen) pass(`${role} → ${mod} (till open)`);
+      else if (mod === "hub" && h1 && bodyLen > 150) pass(`${role} → ${mod} (launcher)`);
       else if (!h1) fail(`${role} → ${mod}: no page heading rendered`);
       else if (bodyLen < 400) fail(`${role} → ${mod}: page looks empty (${bodyLen} chars)`);
       else pass(`${role} → ${mod} (${bodyLen} chars)`);
@@ -339,8 +340,16 @@ async function expandNav(page) {
   // ── 4d4. Points check + My Shift for staff ───────────────────────────────
   console.log(`\n[Flow] Staff service & shift`);
   await page.locator('[data-role="staff"]').first().click();
-  await page.waitForTimeout(260);
+  await page.waitForTimeout(300);
   await exitTillIfOpen(page);
+  // Staff lands on the launcher and the first person in opens the day.
+  if ((await page.locator("[data-day-open]").count()) > 0) {
+    await page.screenshot({ path: `${SHOTS}/staffhub.png` });
+    await page.locator("[data-day-open]").click();
+    await page.waitForTimeout(260);
+    if (/Day open/.test(await page.locator("main").innerText())) pass("staff launcher rendered; day opened in one tap");
+    else fail("day-open did not stick");
+  } else fail("day-open button missing on the staff launcher");
   await expandNav(page);
   await page.locator('nav [data-module="crm"]').first().click();
   await page.waitForTimeout(320);
@@ -398,7 +407,7 @@ async function expandNav(page) {
   else fail("festival evidence missing from move cards");
   await page.locator("[data-merch-approve]").first().click();
   await page.waitForTimeout(260);
-  if (/Approved — transfer raised/.test(await page.locator("main").innerText())) pass("move approved, transfer raised");
+  if (/Approved. Transfer raised/.test(await page.locator("main").innerText())) pass("move approved, transfer raised");
   else fail("approving a move did not confirm");
   await page.screenshot({ path: `${SHOTS}/merch.png`, fullPage: true });
 
@@ -417,7 +426,7 @@ async function expandNav(page) {
   if (before !== afterCell) pass(`shift cell cycles on tap (${before} → ${afterCell})`);
   else fail("shift cell did not change on tap");
   await page.locator("[data-staff-name]").fill("Priya Nair");
-  await page.locator("[data-staff-add]").click();
+  await page.locator("[data-staff-name]").press("Enter");
   await page.waitForTimeout(260);
   if (/Priya Nair/.test(await page.locator("main").innerText())) pass("new team member added to the grid");
   else fail("added staff member did not appear");
@@ -460,6 +469,11 @@ async function expandNav(page) {
 
   // ── 6. One Number — reconciliation across every carried style ──────────
   console.log(`\n[Flow] One Number`);
+  // Stock Position lives with Planning now; the store's view is Check stock.
+  await page.locator('[data-role="planner"]').first().click();
+  await page.waitForTimeout(300);
+  await exitTillIfOpen(page);
+  await expandNav(page);
   await page.locator('nav [data-module="truth"]').first().click();
   await page.waitForTimeout(320);
   const sel = page.locator("main select").first();
@@ -477,6 +491,9 @@ async function expandNav(page) {
 
   // ── 6b. Command palette — ⌘K jump-to-anything ───────────────────────────
   console.log(`\n[Flow] Command palette`);
+  await page.locator('[data-role="store"]').first().click();
+  await page.waitForTimeout(300);
+  await exitTillIfOpen(page);
   await page.locator("[data-palette]").first().click();
   await page.waitForTimeout(240);
   const palInput = page.locator("[data-palette-input]");
@@ -494,7 +511,7 @@ async function expandNav(page) {
     if (/replenish/i.test(h1p)) pass("palette Enter navigated to Replenishment");
     else fail(`palette Enter landed on "${h1p}" instead of Replenishment`);
     const crumbText = await page.locator("main").innerText();
-    if (/stock control/i.test(crumbText) && /operations/i.test(crumbText)) pass("breadcrumb shows section · group · screen");
+    if (/inventory/i.test(crumbText) && /operations/i.test(crumbText)) pass("breadcrumb shows section · group · screen");
     else fail("breadcrumb missing above the screen");
   }
 
@@ -524,7 +541,7 @@ async function expandNav(page) {
   for (const [roleId, role] of ROLES) {
     await page.locator(`[data-role="${roleId}"]`).first().click();
     await page.waitForTimeout(300);
-    const landing = roleId === "store" ? "home" : roleId === "staff" ? "pos" : roleId === "planner" ? "live" : "exec";
+    const landing = roleId === "store" ? "home" : roleId === "staff" ? "hub" : roleId === "planner" ? "live" : "exec";
     if ((await page.locator("[data-exit-till]").count()) > 0 && landing !== "pos") {
       await exitTillIfOpen(page);
     }

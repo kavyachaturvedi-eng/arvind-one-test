@@ -54,13 +54,13 @@ const CAUSE: Record<RootCause, string> = {
   customer_cancelled: "Customer cancelled",
 };
 
-/** Deterministic rider per channel — no clock, no randomness. */
+/** Deterministic rider per channel, no clock, no randomness. */
 const RIDER: Record<OmniOrder["channel"], string> = {
-  "Tommy.com": "Ekart — Rider 4471",
-  Myntra: "Delhivery — Rider 2210",
-  Amazon: "Amazon Logistics — Rider 8802",
-  Flipkart: "Ekart — Rider 3319",
-  AJIO: "Blue Dart — Rider 5541",
+  "Tommy.com": "Ekart. Rider 4471",
+  Myntra: "Delhivery. Rider 2210",
+  Amazon: "Amazon Logistics. Rider 8802",
+  Flipkart: "Ekart. Rider 3319",
+  AJIO: "Blue Dart. Rider 5541",
 };
 
 const QUEUE_STATUSES: OmniStatus[] = ["new", "locating", "packed", "handed_over", "return_pending"];
@@ -105,11 +105,11 @@ export default function Omni() {
     switch (action) {
       case "start":
         app.dispatch({ type: "omni:update", id: o.id, patch: { status: "locating" }, label: "Picking started", actor: app.actorName });
-        app.toastNow(`${o.id} — picking started, ${FIND_SLA_MINUTES} minutes on the clock`, "info");
+        app.toastNow(`${o.id}, picking started, ${FIND_SLA_MINUTES} minutes on the clock`, "info");
         break;
       case "packed":
         app.dispatch({ type: "omni:update", id: o.id, patch: { status: "packed" }, label: "Located and packed", actor: app.actorName });
-        app.toastNow(`${o.id} packed — found in ${o.findMinutes} min`, "good");
+        app.toastNow(`${o.id} packed, found in ${o.findMinutes} min`, "good");
         break;
       case "cantfind":
         setCantFind(o.id);
@@ -121,7 +121,7 @@ export default function Omni() {
         setPod(o.id);
         break;
       case "dispatched":
-        app.dispatch({ type: "omni:update", id: o.id, patch: { status: "delivered" }, label: "Dispatched — channel notified", actor: app.actorName });
+        app.dispatch({ type: "omni:update", id: o.id, patch: { status: "delivered" }, label: "Dispatched, channel notified", actor: app.actorName });
         app.toastNow(`${o.id} dispatched`, "good");
         break;
       case "scanback":
@@ -129,7 +129,7 @@ export default function Omni() {
           type: "omni:update",
           id: o.id,
           patch: { status: "reconciled" },
-          label: "Returned unit scanned back — stock corrected",
+          label: "Returned unit scanned back, stock corrected",
           actor: app.actorName,
         });
         app.toastNow(`${o.id} returned to stock`, "good");
@@ -142,7 +142,7 @@ export default function Omni() {
       type: "omni:update",
       id: o.id,
       patch: { status: "reassigned", reassignedTo: toStoreId },
-      label: `Sent to ${toName} — customer keeps the order`,
+      label: `Sent to ${toName}, customer keeps the order`,
       actor: app.actorName,
     });
     app.toastNow(`${o.id} sent to ${toName}. The customer keeps the order.`, "good");
@@ -154,10 +154,10 @@ export default function Omni() {
       type: "omni:update",
       id: o.id,
       patch: { status: "cancelled", rootCause: cause },
-      label: `Cancelled — ${CAUSE[cause]}`,
+      label: `Cancelled. ${CAUSE[cause]}`,
       actor: app.actorName,
     });
-    app.toastNow(`${o.id} cancelled — reason recorded: ${CAUSE[cause]}`, "warn");
+    app.toastNow(`${o.id} cancelled, reason recorded: ${CAUSE[cause]}`, "warn");
     setCantFind(null);
   }
 
@@ -166,14 +166,14 @@ export default function Omni() {
       type: "omni:update",
       id: o.id,
       patch: { status: "handed_over", podSignedBy: rider, podAt: NOW },
-      label: `Handed to rider — signature and parcel photo against ${rider}`,
+      label: `Handed to rider, signature and parcel photo against ${rider}`,
       actor: app.actorName,
     });
     app.toastNow(`${o.id} handed to ${rider}`, "good");
     setPod(null);
   }
 
-  /** Which actions a status allows — rendered as one dropdown. */
+  /** Which actions a status allows, rendered as one dropdown. */
   function optionsFor(o: OmniOrder): { value: string; label: string }[] {
     switch (o.status) {
       case "new":
@@ -181,7 +181,7 @@ export default function Omni() {
       case "locating":
         return [
           { value: "packed", label: "Mark packed" },
-          { value: "cantfind", label: "Can't find it — cancel with reason" },
+          { value: "cantfind", label: "Can't find it, cancel with reason" },
         ];
       case "packed":
         return [{ value: "handover", label: "Hand over to rider" }];
@@ -351,7 +351,7 @@ export default function Omni() {
         <Modal
           open
           onClose={() => setPod(null)}
-          title={`Hand over to rider — ${podOrder.id}`}
+          title={`Hand over to rider. ${podOrder.id}`}
           sub="Rider signs, you photograph the sealed parcel. Both are needed."
           footer={
             <>
@@ -378,7 +378,7 @@ export default function Omni() {
             </label>
             <label className="flex items-start gap-2.5 rounded-lg border border-line p-3 cursor-pointer">
               <input type="checkbox" checked={photoCaptured} onChange={(e) => setPhotoCaptured(e.target.checked)} className="mt-0.5" />
-              <span className="text-xs text-ink2 leading-relaxed"><strong className="text-ink">Parcel photo taken</strong> — sealed carton, label visible.</span>
+              <span className="text-xs text-ink2 leading-relaxed"><strong className="text-ink">Parcel photo taken</strong>, sealed carton, label visible.</span>
             </label>
           </div>
         </Modal>
@@ -423,7 +423,7 @@ function CantFindModal({
       open
       wide
       onClose={onClose}
-      title={`Can't find it — ${order.id}`}
+      title={`Can't find it. ${order.id}`}
       sub={`${style.name} · size ${order.size} · ${inr(order.value)} · searched ${order.findMinutes} min`}
       footer={
         <>
@@ -439,14 +439,14 @@ function CantFindModal({
     >
       <div className="space-y-3.5">
         {best ? (
-          <Callout tone="brand" title="Another store has it — the customer keeps the order">
+          <Callout tone="brand" title="Another store has it, the customer keeps the order">
             {best.store.name} holds {best.sellable} sellable units {best.distanceKm.toFixed(0)} km away. Cancelling stays
             disabled while a real alternative exists.
           </Callout>
         ) : (
           <>
             <Callout tone="critical" title="No other store has this unit">
-              Cancelling is the only option. Pick the reason — it is recorded on the order.
+              Cancelling is the only option. Pick the reason, it is recorded on the order.
             </Callout>
             <div>
               <div className="label mb-1.5">Reason for cancelling</div>

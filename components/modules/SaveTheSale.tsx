@@ -31,9 +31,9 @@ import {
 } from "@/components/ui";
 import type { ISTRequest, Size } from "@/lib/types";
 
-/** Store's own auto-approval ceiling. Deliberately small — this is a save-the-sale lane, not a rebalance. */
+/** Store's own auto-approval ceiling. Deliberately small, this is a save-the-sale lane, not a rebalance. */
 const AUTO_APPROVE_MAX_QTY = 3;
-/** Local hour at the demo clock — 11:42 IST, so the 11:00 cut-off has just passed. */
+/** Local hour at the demo clock. 11:42 IST, so the 11:00 cut-off has just passed. */
 const HOUR_OF_DAY = 11;
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
@@ -166,10 +166,10 @@ export default function SaveTheSale() {
     setConfirm(false);
     app.toastNow(
       req.status === "approved"
-        ? `${req.id} approved — pick task created at ${donor.store.name}`
+        ? `${req.id} approved, pick task created at ${donor.store.name}`
         : req.status === "pending_approval"
         ? `${req.id} sent for planner approval`
-        : `${req.id} blocked by policy — see the trail`,
+        : `${req.id} blocked by policy, see the trail`,
       req.status === "approved" ? "good" : req.status === "pending_approval" ? "info" : "warn"
     );
   }
@@ -180,26 +180,23 @@ export default function SaveTheSale() {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-semibold text-ink">Inter-store Transfer</h1>
-          <p className="text-sm text-ink2 mt-1 max-w-2xl">Bring a size in from another store. The best source is recommended for you.</p>
-        </div>
+        <h1 className="text-xl font-semibold text-ink">Inter-store Transfer</h1>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <Stat label="Raised today" value={String(openRequests)} sub={`${autoApproved} auto-approved inside policy`} />
-        <Stat label="Auto-approval ceiling" value={`${AUTO_APPROVE_MAX_QTY} units`} sub="Above this, planner approval is needed" />
-        <Stat label="Same-day lane" value="40 km" sub="Inside the radius, pickup is raised automatically" />
+        <Stat label="Raised today" value={String(openRequests)} sub={`${autoApproved} auto-approved`} />
+        <Stat label="Self-approve up to" value={`${AUTO_APPROVE_MAX_QTY} units`} />
+        <Stat label="Same-day lane" value="40 km" />
       </div>
 
       <div className="grid lg:grid-cols-5 gap-4">
         {/* ── Left: the flow ────────────────────────────────────────────── */}
         <Card className="lg:col-span-3">
-          <SectionTitle title="1 · Style" sub={`Styles carried at ${store.name}.`} />
+          <SectionTitle title="1 · Which item?" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, category or style code — try “polo”"
+            placeholder="Search by name, category or style code, try “polo”"
             className="w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm text-ink placeholder:text-muted"
           />
           <div className="mt-2.5 max-h-[168px] overflow-y-auto space-y-1 pr-1">
@@ -237,7 +234,7 @@ export default function SaveTheSale() {
           {style && (
             <>
               <div className="mt-5 pt-4 border-t border-line">
-                <SectionTitle title="2 · Size" sub="Sellable units on the floor right now. ★ marks a core size." />
+                <SectionTitle title="2 · Which size?" />
                 <SizeGrid
                   sizes={style.sizes}
                   units={units}
@@ -259,8 +256,7 @@ export default function SaveTheSale() {
               {size && (units[size] ?? 0) === 0 && (
                 <div className="mt-5 pt-4 border-t border-line">
                   <SectionTitle
-                    title="3 · Source store"
-                    sub="Ranked by proximity, surplus above a week's cover, and relative demand."
+                    title="3 · Get it from"
                     right={
                       <div className="flex items-center gap-2">
                         <span className="label">Qty</span>
@@ -333,7 +329,7 @@ export default function SaveTheSale() {
 
               {policy && donor && (
                 <div className="mt-5 pt-4 border-t border-line">
-                  <SectionTitle title="4 · Policy checks" sub="Every rule is shown, passed or failed." />
+                  <SectionTitle title="4 · Checks" />
                   <PolicyTrail policy={policy} />
 
                   <div className="grid sm:grid-cols-2 gap-3 mt-4">
@@ -351,7 +347,7 @@ export default function SaveTheSale() {
                       <input
                         value={customerPhone}
                         onChange={(e) => setCustomerPhone(e.target.value.replace(/[^\d]/g, "").slice(0, 10))}
-                        placeholder="10 digits — used for pickup updates"
+                        placeholder="10 digits, used for pickup updates"
                         className="w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm num"
                       />
                       {customerPhone.length > 0 && customerPhone.length < 10 && (
@@ -451,13 +447,13 @@ export default function SaveTheSale() {
                             entry: {
                               at: NOW,
                               actor: app.actorName,
-                              action: `WhatsApp sent to ${created.customerName || "the customer"} — ${styleById(created.styleId).name} (${created.size}) arriving by ${fmtTime(NOW + rider.arriveBy * 60_000)}`,
+                              action: `WhatsApp sent to ${created.customerName || "the customer"}. ${styleById(created.styleId).name} (${created.size}) arriving by ${fmtTime(NOW + rider.arriveBy * 60_000)}`,
                               object: created.id,
                               system: "Arvi",
                             },
                           });
                           app.toastNow(
-                            `WhatsApp sent${created.customerName ? ` to ${created.customerName}` : ""}: "Your size is on its way — arriving by ${fmtTime(NOW + rider.arriveBy * 60_000)}."`,
+                            `WhatsApp sent${created.customerName ? ` to ${created.customerName}` : ""}: "Your size is on its way, arriving by ${fmtTime(NOW + rider.arriveBy * 60_000)}."`,
                             "good"
                           );
                         }}
@@ -484,7 +480,7 @@ export default function SaveTheSale() {
                         id: created.id,
                         status: "approved",
                         actor: app.actorName,
-                        label: `Approved by ${app.actorName} — gate cleared`,
+                        label: `Approved by ${app.actorName}, gate cleared`,
                         by: app.actorName,
                       });
                       setCreated({ ...created, status: "approved" });
@@ -501,7 +497,7 @@ export default function SaveTheSale() {
                         id: created.id,
                         status: "rejected",
                         actor: app.actorName,
-                        label: "Rejected — donor needs the stock",
+                        label: "Rejected, donor needs the stock",
                         reason: "Donor needs the stock",
                       });
                       setCreated({ ...created, status: "rejected", rejectionReason: "Donor needs the stock" });

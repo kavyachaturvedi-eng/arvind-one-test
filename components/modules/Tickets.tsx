@@ -10,14 +10,14 @@ import { DAY, HOUR, NOW, rng, storeById } from "@/lib/seed";
 import { slaState, ticketSlaHours } from "@/lib/rules";
 import { useApp } from "@/lib/state";
 import {
-  BeforeAfter, Callout, Card, Chip, Empty, Modal, SectionTitle, SlaBar, Stat, StatusDot,
+  BeforeAfter, Callout, Card, Chip, Empty, Modal, SectionTitle, SlaBar, Stat, StatusDot, Tabs,
   Table, Td, Th, Timeline, fmtDateTime, inr, relTime,
 } from "@/components/ui";
 import type { Ticket, TicketKind } from "@/lib/types";
 
 const LADDER = ["Store Manager", "Area Manager", "Regional Manager", "Head Office"];
 const STORE_APPROVAL_LIMIT = 25_000;
-/** Within 25% of the SLA counts as an exception — that is the whole point of the view. */
+/** Within 25% of the SLA counts as an exception, that is the whole point of the view. */
 const EXCEPTION_BAND = 0.75;
 
 const KIND_LABEL: Record<TicketKind, string> = {
@@ -45,7 +45,7 @@ const STATUS_LABEL: Record<Ticket["status"], string> = {
 
 /** Vendor mapping by ticket kind. */
 const VENDOR_BY_KIND: Record<TicketKind, string> = {
-  maintenance: "Brightline Electricals — West",
+  maintenance: "Brightline Electricals. West",
   it: "Netcomm Managed Services",
   vm: "In-house VM pool",
   safety: "SafeGuard Fire Services",
@@ -93,11 +93,16 @@ export default function Tickets() {
     [app.tickets, app.storeId, scopedToOneStore]
   );
 
+  // The manager splits the board: what I raised vs what the floor raised.
+  const [who, setWho] = useState<"all" | "mine" | "staff">("all");
+
   const rows = useMemo(() => {
     const withSla = scoped.map((t) => ({ t, s: slaState(t.raisedAt, t.slaHours, NOW) }));
-    const filtered = exceptionsOnly ? withSla.filter((r) => isLive(r.t) && r.s.pctConsumed >= EXCEPTION_BAND) : withSla;
+    let filtered = exceptionsOnly ? withSla.filter((r) => isLive(r.t) && r.s.pctConsumed >= EXCEPTION_BAND) : withSla;
+    if (who === "mine") filtered = filtered.filter((r) => r.t.raisedBy === app.actorName);
+    if (who === "staff") filtered = filtered.filter((r) => r.t.raisedBy !== app.actorName);
     return filtered.sort((a, b) => Number(b.s.breached) - Number(a.s.breached) || b.s.pctConsumed - a.s.pctConsumed);
-  }, [scoped, exceptionsOnly]);
+  }, [scoped, exceptionsOnly, who, app.actorName]);
 
   const live = scoped.filter(isLive);
   const breached = live.filter((t) => slaState(t.raisedAt, t.slaHours, NOW).breached).length;
@@ -114,14 +119,14 @@ export default function Tickets() {
     app.dispatch({
       type: "ticket:update", id: t.id, actor: app.actorName,
       patch: { status: "in_progress" },
-      label: `Quote of ${inr(t.quoteValue ?? 0)} approved by ${app.actorName} — PO raised automatically, vendor scheduled`,
+      label: `Quote of ${inr(t.quoteValue ?? 0)} approved by ${app.actorName}. PO raised automatically, vendor scheduled`,
     });
-    app.toastNow(`${t.id} approved — ${inr(t.quoteValue ?? 0)} released to ${t.vendor ?? "the mapped vendor"}, PO raised.`, "good");
+    app.toastNow(`${t.id} approved. ${inr(t.quoteValue ?? 0)} released to ${t.vendor ?? "the mapped vendor"}, PO raised.`, "good");
   }
   function secondQuote(t: Ticket) {
     app.dispatch({
       type: "ticket:update", id: t.id, actor: app.actorName,
-      patch: {}, label: "Second quote requested from an alternate mapped vendor — 24h to respond",
+      patch: {}, label: "Second quote requested from an alternate mapped vendor. 24h to respond",
     });
     app.toastNow(`Second quote requested on ${t.id}. Both quotes will sit side by side on this ticket.`, "info");
   }
@@ -139,12 +144,12 @@ export default function Tickets() {
       type: "ticket:update", id: t.id, actor: app.actorName,
       patch: { escalationLevel: next }, label: `Escalated to ${LADDER[next]} by ${app.actorName}`,
     });
-    app.toastNow(`${t.id} escalated to ${LADDER[next]} — it is on their board now.`, "warn");
+    app.toastNow(`${t.id} escalated to ${LADDER[next]}, it is on their board now.`, "warn");
   }
 
   function submitTicket() {
     if (!asset) return;
-    if (title.trim() === "") { setErr("A one-line description is required — the vendor cannot be dispatched against a blank title."); return; }
+    if (title.trim() === "") { setErr("A one-line description is required, the vendor cannot be dispatched against a blank title."); return; }
     const sla = ticketSlaHours(kind);
     const estimate = estimateFor(asset.id, kind, app.tickets.length);
     const auto = estimate <= STORE_APPROVAL_LIMIT;
@@ -163,8 +168,8 @@ export default function Tickets() {
         {
           at: NOW + 60_000, actor: "Arvind One",
           label: auto
-            ? `Auto-dispatched to ${vendor} — rate-card estimate ${inr(estimate)} is below the ${inr(STORE_APPROVAL_LIMIT)} store threshold`
-            : `Rate-card estimate ${inr(estimate)} is above the ${inr(STORE_APPROVAL_LIMIT)} store threshold — routed to Area Manager`,
+            ? `Auto-dispatched to ${vendor}, rate-card estimate ${inr(estimate)} is below the ${inr(STORE_APPROVAL_LIMIT)} store threshold`
+            : `Rate-card estimate ${inr(estimate)} is above the ${inr(STORE_APPROVAL_LIMIT)} store threshold, routed to Area Manager`,
           system: "Arvind One",
         },
       ],
@@ -182,14 +187,20 @@ export default function Tickets() {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-semibold text-ink">Tickets</h1>
-          <p className="text-sm text-ink2 mt-1 max-w-2xl">
-            Maintenance, price-tag reprints, IT and VM requests on one SLA clock.
-          </p>
-        </div>
+        <h1 className="text-xl font-semibold text-ink">{scopedToOneStore ? "Problems & requests" : "Tickets"}</h1>
         <div className="flex items-center gap-2">
-          <button className="btn-primary" onClick={() => { setRaiseOpen(true); setErr(null); }}>Raise a ticket</button>
+          {app.role === "store" && (
+            <Tabs
+              value={who}
+              onChange={setWho}
+              options={[
+                { id: "all", label: "All" },
+                { id: "mine", label: "Raised by me" },
+                { id: "staff", label: "Raised by staff", count: scoped.filter((t) => t.raisedBy !== app.actorName && isLive(t)).length },
+              ]}
+            />
+          )}
+          <button className="btn-primary" onClick={() => { setRaiseOpen(true); setErr(null); }}>Report a problem</button>
         </div>
       </div>
 
@@ -203,12 +214,7 @@ export default function Tickets() {
 
       <Card>
         <SectionTitle
-          title={exceptionsOnly ? "Showing exceptions only" : "All tickets in scope"}
-          sub={
-            exceptionsOnly
-              ? "Breached, or within 25% of their SLA. This is the field-manager view: the board only shows what needs a decision, not everything that exists."
-              : "Every live and closed ticket in scope, breached first."
-          }
+          title={exceptionsOnly ? "Needs a decision" : who === "mine" ? "Raised by me" : who === "staff" ? "Raised by the floor" : "All tickets"}
           right={
             <div className="flex items-center gap-2">
               {exceptionsOnly && hiddenCount > 0 && <span className="text-2xs text-muted">{hiddenCount} healthy hidden</span>}
@@ -267,7 +273,7 @@ export default function Tickets() {
 
       <Modal
         open={raiseOpen} onClose={() => { setRaiseOpen(false); setAsset(null); }}
-        title={asset ? `Raise a ticket — ${asset.name}` : "Scan an asset"}
+        title={asset ? `Raise a ticket. ${asset.name}` : "Scan an asset"}
         sub={asset ? `${asset.id} · ${storeById(app.storeId).name}` : "In the store this is a QR sticker on the asset. Here, pick from the tagged assets at this store."}
         footer={
           asset ? (
@@ -296,7 +302,7 @@ export default function Tickets() {
             <Callout tone="brand" title="Pre-filled from the asset tag">
               {asset.name} ({asset.id}) at {storeById(app.storeId).name}. <strong className="text-ink">{assetHistory(asset.id)} tickets
               in the last 12 months on this asset.</strong> Raised by {app.actorName}. The vendor, the SLA and the approval
-              limit are all derived — none of it is typed.
+              limit are all derived, none of it is typed.
             </Callout>
             <label className="block">
               <div className="label mb-1">What is wrong</div>
@@ -310,7 +316,7 @@ export default function Tickets() {
               <select value={kind} onChange={(e) => setKind(e.target.value as TicketKind)}
                 className="w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm text-ink">
                 {(Object.keys(KIND_LABEL) as TicketKind[]).map((k) => (
-                  <option key={k} value={k}>{KIND_LABEL[k]} — {ticketSlaHours(k)}h SLA</option>
+                  <option key={k} value={k}>{KIND_LABEL[k]}. {ticketSlaHours(k)}h SLA</option>
                 ))}
               </select>
               <div className="text-2xs text-muted mt-1">
@@ -323,7 +329,7 @@ export default function Tickets() {
             <label className="flex items-start gap-2.5 rounded-lg border border-line p-3 cursor-pointer">
               <input type="checkbox" checked={photo} onChange={(e) => setPhoto(e.target.checked)} className="mt-0.5" />
               <span className="text-xs text-ink2 leading-relaxed">
-                <strong className="text-ink">Photo attached</strong> — the vendor quotes off the photo instead of a site
+                <strong className="text-ink">Photo attached</strong>, the vendor quotes off the photo instead of a site
                 visit, which is the step that costs a week.
               </span>
             </label>
@@ -404,9 +410,9 @@ function TicketModal({
     >
       <div className="space-y-3">
         {s.breached && (
-          <Callout tone="critical" title={`Breached — now with ${LADDER[Math.min(3, Math.max(t.escalationLevel, s.level))]}`}>
+          <Callout tone="critical" title={`Breached, now with ${LADDER[Math.min(3, Math.max(t.escalationLevel, s.level))]}`}>
             {s.remainingLabel} past a {t.slaHours}h service level. It moved up the ladder on its own at 100% and again at
-            140% of the SLA — no one had to notice and forward an email.
+            140% of the SLA, no one had to notice and forward an email.
           </Callout>
         )}
 
@@ -453,7 +459,7 @@ function TicketModal({
 
         {workable && !photoReady && (
           <Callout tone="warn" title="Photo required to close">
-            Close-out is photo-verified. Attach the completion photo first — that is what stops a ticket being marked done
+            Close-out is photo-verified. Attach the completion photo first, that is what stops a ticket being marked done
             from an inbox without the work being done.
           </Callout>
         )}

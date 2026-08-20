@@ -28,6 +28,10 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   // ── Operations — staff and manager ──
   {
+    key: "start", label: "Start", glyph: "◉", roles: ["staff"], section: "Operations",
+    children: [{ id: "hub", label: "Home" }],
+  },
+  {
     key: "sell", label: "Sell", glyph: "▣", roles: ["staff", "store"], section: "Operations",
     children: [
       { id: "pos", label: "Billing" },
@@ -35,10 +39,21 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    key: "inv", label: "Inventory", glyph: "▦", roles: ["staff", "store"], section: "Operations",
+    key: "inv", label: "Inventory", glyph: "▦", roles: ["staff"], section: "Operations",
     children: [
       { id: "lookup", label: "Check stock" },
       { id: "savesale", label: "Inter-store transfer" },
+    ],
+  },
+  {
+    // The manager's single stock home — lookup, transfers, moves and refills in one place.
+    key: "invm", label: "Inventory", glyph: "▦", roles: ["store"], section: "Operations",
+    children: [
+      { id: "lookup", label: "Check stock" },
+      { id: "savesale", label: "Inter-store transfer" },
+      { id: "merch", label: "Smart Moves" },
+      { id: "sizeset", label: "Size & Stock" },
+      { id: "replenish", label: "Replenishment" },
     ],
   },
   {
@@ -87,17 +102,8 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    key: "stock", label: "Stock Control", glyph: "▤", roles: ["store"], section: "Operations",
-    children: [
-      { id: "merch", label: "Smart Moves" },
-      { id: "sizeset", label: "Size & Stock" },
-      { id: "replenish", label: "Replenishment" },
-      { id: "truth", label: "Stock Position" },
-    ],
-  },
-  {
     key: "money", label: "Money", glyph: "₹", roles: ["store"], section: "Operations",
-    children: [{ id: "cash", label: "Cash & Close" }],
+    children: [{ id: "cash", label: "Cash" }],
   },
 
   // ── Planning ──

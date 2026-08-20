@@ -34,6 +34,7 @@ import Team from "@/components/modules/Team";
 import MerchMoves from "@/components/modules/MerchMoves";
 import StockLookup from "@/components/modules/StockLookup";
 import MyShift from "@/components/modules/MyShift";
+import StaffHub from "@/components/modules/StaffHub";
 
 function Router() {
   const { module } = useApp();
@@ -94,6 +95,8 @@ function Router() {
       return <StockLookup />;
     case "shift":
       return <MyShift />;
+    case "hub":
+      return <StaffHub />;
     default:
       return <Home />;
   }
