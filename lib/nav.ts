@@ -28,10 +28,6 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   // ── Operations — staff and manager ──
   {
-    key: "start", label: "Start", glyph: "◉", roles: ["staff"], section: "Operations",
-    children: [{ id: "hub", label: "Home" }],
-  },
-  {
     key: "sell", label: "Sell", glyph: "▣", roles: ["staff", "store"], section: "Operations",
     children: [
       { id: "pos", label: "Billing" },

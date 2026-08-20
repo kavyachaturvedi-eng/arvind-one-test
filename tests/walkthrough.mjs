@@ -18,7 +18,7 @@ const ROLES = [
 ];
 const MODULES_BY_ROLE = {
   store: ["pos", "bills", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "team", "home", "merch", "sizeset", "replenish", "cash", "reports", "agents", "ask"],
-  staff: ["hub", "pos", "bills", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift"],
+  staff: ["pos", "bills", "lookup", "savesale", "storeday", "omni", "grn", "outward", "crm", "tickets", "shift"],
   planner: ["live", "performance", "tickets", "allocate", "merch", "moves", "catchment", "trainings", "truth", "reports", "governance", "agents", "ask"],
   leadership: ["exec", "live", "performance", "allocate", "moves", "catchment", "truth", "governance", "agents", "ask"],
 };
@@ -118,7 +118,6 @@ async function expandNav(page) {
       const tillOpen = (await page.locator("[data-exit-till]").count()) > 0;
 
       if (mod === "pos" && tillOpen) pass(`${role} → ${mod} (till open)`);
-      else if (mod === "hub" && h1 && bodyLen > 150) pass(`${role} → ${mod} (launcher)`);
       else if (!h1) fail(`${role} → ${mod}: no page heading rendered`);
       else if (bodyLen < 400) fail(`${role} → ${mod}: page looks empty (${bodyLen} chars)`);
       else pass(`${role} → ${mod} (${bodyLen} chars)`);
@@ -337,19 +336,52 @@ async function expandNav(page) {
   else fail("past orders table missing");
   await page.screenshot({ path: `${SHOTS}/omni.png`, fullPage: true });
 
-  // ── 4d4. Points check + My Shift for staff ───────────────────────────────
-  console.log(`\n[Flow] Staff service & shift`);
+  // ── 4d4. The till: open the day, customer profile, held bills ────────────
+  console.log(`\n[Flow] Till: day open, profile, held bills`);
   await page.locator('[data-role="staff"]').first().click();
-  await page.waitForTimeout(300);
-  await exitTillIfOpen(page);
-  // Staff lands on the launcher and the first person in opens the day.
-  if ((await page.locator("[data-day-open]").count()) > 0) {
-    await page.screenshot({ path: `${SHOTS}/staffhub.png` });
+  await page.waitForTimeout(320);
+  // Staff land straight on billing, which is gated until the day is opened
+  // with a counted float.
+  const floatBox = page.locator("[data-float]");
+  if ((await floatBox.count()) === 0) fail("day-open gate missing on the billing screen");
+  else {
+    await floatBox.fill("10000");
+    await page.screenshot({ path: `${SHOTS}/day-open.png` });
     await page.locator("[data-day-open]").click();
-    await page.waitForTimeout(260);
-    if (/Day open/.test(await page.locator("main").innerText())) pass("staff launcher rendered; day opened in one tap");
-    else fail("day-open did not stick");
-  } else fail("day-open button missing on the staff launcher");
+    await page.waitForTimeout(300);
+    if ((await page.locator("[data-float]").count()) === 0) pass("day opened at the till with a counted float");
+    else fail("day-open did not take");
+  }
+
+  // A known number opens the customer's profile with their past orders.
+  for (const d of "9812345678") await page.locator("main button", { hasText: new RegExp(`^${d}$`) }).first().click();
+  await page.waitForTimeout(400);
+  const profOrder = page.locator("[data-profile-order]");
+  if ((await profOrder.count()) > 0) {
+    pass(`customer profile opened with ${await profOrder.count()} past orders`);
+    await page.screenshot({ path: `${SHOTS}/till-profile.png` });
+    await page.locator("[data-profile-return]").first().click();
+    await page.waitForTimeout(200);
+    await page.locator("[data-profile-reason]").first().click();
+    await page.waitForTimeout(300);
+    if (/Returned ·/.test(await page.locator("body").innerText())) pass("return settled from the profile with a reason");
+    else fail("return from the profile did not settle");
+    await page.locator("[data-start-bill]").click();
+    await page.waitForTimeout(300);
+    if ((await page.locator("[data-past-orders]").count()) > 0) pass("their past orders stay on the bill panel until items are added");
+    else fail("past-orders panel missing for a known customer");
+  } else fail("customer profile popup did not open on a known number");
+
+  // Held bills: hold the current empty-cart flow is not possible, so just
+  // confirm the drawer opens and reads honestly.
+  await page.locator("[data-held]").click();
+  await page.waitForTimeout(260);
+  if (/Held bills/.test(await page.locator("body").innerText())) pass("held-bills drawer opens from the till bar");
+  else fail("held-bills drawer did not open");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+
+  await exitTillIfOpen(page);
   await expandNav(page);
   await page.locator('nav [data-module="crm"]').first().click();
   await page.waitForTimeout(320);
@@ -565,7 +597,7 @@ async function expandNav(page) {
   for (const [roleId, role] of ROLES) {
     await page.locator(`[data-role="${roleId}"]`).first().click();
     await page.waitForTimeout(300);
-    const landing = roleId === "store" ? "home" : roleId === "staff" ? "hub" : roleId === "planner" ? "live" : "exec";
+    const landing = roleId === "store" ? "home" : roleId === "staff" ? "pos" : roleId === "planner" ? "live" : "exec";
     if ((await page.locator("[data-exit-till]").count()) > 0 && landing !== "pos") {
       await exitTillIfOpen(page);
     }

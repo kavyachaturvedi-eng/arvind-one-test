@@ -8,7 +8,8 @@ import React, { useMemo, useState } from "react";
 import { CATEGORIES, NOW, rng, storeById, styleById } from "@/lib/seed";
 import { sellable, stockForStyleAtStore, stylesAtStore, vitalsFor } from "@/lib/engine";
 import { useApp } from "@/lib/state";
-import { Card, Chip, ColumnChart, Empty, SectionTitle, Stat, StatusDot, Table, Td, Th, fmtTime, inr, pct } from "@/components/ui";
+import { Card, Chip, ColumnChart, Empty, Modal, SectionTitle, Stat, StatusDot, Table, Td, Th, fmtTime, inr, pct } from "@/components/ui";
+import { RETURN_REASONS, ordersForPhone } from "./BillHistory";
 import type { Category, Style } from "@/lib/types";
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
@@ -129,6 +130,13 @@ export default function Pos() {
   const [lastBill, setLastBill] = useState<Bill | null>(null);
   const [newBills, setNewBills] = useState<Bill[]>([]);
 
+  // Opening the day at the counter, held bills, and the customer's profile.
+  const [floatText, setFloatText] = useState("8000");
+  const [heldOpen, setHeldOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ id: string; kind: "returned" | "exchanged" } | null>(null);
+  const [settled, setSettled] = useState<Record<string, string>>({});
+
   const seeded = useMemo(() => buildBills(app.storeId, v.todaySales, v.bills), [app.storeId, v.todaySales, v.bills]);
   const bills = useMemo(() => [...newBills, ...seeded], [newBills, seeded]);
   const salesToday = v.todaySales + newBills.reduce((a, b) => a + b.value, 0);
@@ -172,9 +180,41 @@ export default function Pos() {
     if (d === "⌫") { setPhone((p) => p.slice(0, -1)); setMember(null); return; }
     setPhone((p) => {
       const next = (p + d).slice(0, 10);
-      setMember(next.length === 10 ? lookupMember(next) : null);
+      const m = next.length === 10 ? lookupMember(next) : null;
+      setMember(m);
+      // A known customer opens their profile straight away: past orders in
+      // reach, so a return or exchange never needs a second screen.
+      if (m) setProfileOpen(true);
       return next;
     });
+  }
+
+  function settle(orderId: string, kind: "returned" | "exchanged", reason: string) {
+    setSettled((s) => ({ ...s, [orderId]: `${kind === "returned" ? "Returned" : "Exchanged"} · ${reason}` }));
+    setPendingAction(null);
+    app.dispatch({
+      type: "audit",
+      entry: {
+        at: NOW,
+        actor: app.actorName,
+        action:
+          kind === "returned"
+            ? `${orderId} returned at the counter. Reason: ${reason}`
+            : `${orderId} exchanged at the counter. Reason: ${reason}`,
+        object: orderId,
+        system: "POS",
+      },
+    });
+    app.toastNow(
+      kind === "returned"
+        ? `${orderId} refunded to the original payment mode. Reason recorded.`
+        : `${orderId} exchange started. Bill the new item on this screen.`,
+      "good"
+    );
+    if (kind === "exchanged") {
+      setProfileOpen(false);
+      setStage("items");
+    }
   }
 
   function startItems(asWalkIn: boolean) {
@@ -271,16 +311,19 @@ export default function Pos() {
           <div className="text-2xs text-muted">{store.name} · {app.actorName}</div>
         </div>
         <div className="flex-1" />
-        {parked.map((p) => (
-          <button key={p.id} className="btn !py-1.5 !text-xs" onClick={() => recall(p.id)}>
-            ⏸ {p.id} · {p.lines.reduce((a, l) => a + l.qty, 0)}
-          </button>
-        ))}
+        <button
+          data-held
+          className={`btn !py-1.5 !text-xs ${parked.length ? "!border-[color:var(--brand)] !text-[color:var(--brand)]" : ""}`}
+          onClick={() => setHeldOpen(true)}
+        >
+          ⏸ Held bills{parked.length ? ` · ${parked.length}` : ""}
+        </button>
+        {app.dayOpen && <Chip tone="good">● Day open</Chip>}
         <span className="text-2xs text-muted num hidden sm:inline">{inr(salesToday, { compact: true })} · {billCount} bills</span>
         <button className={`btn !py-1.5 !text-xs ${view === "day" ? "!border-[color:var(--brand)] !text-[color:var(--brand)]" : ""}`} onClick={() => setView(view === "till" ? "day" : "till")}>
           {view === "till" ? "Today's sales" : "Back to billing"}
         </button>
-        <button data-exit-till className="btn !py-1.5 !text-xs" onClick={() => app.go(app.role === "staff" ? "storeday" : "home")}>
+        <button data-exit-till className="btn !py-1.5 !text-xs" onClick={() => app.go(app.role === "staff" ? "bills" : "home")}>
           Exit billing screen
         </button>
       </div>
@@ -289,6 +332,54 @@ export default function Pos() {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="max-w-[1200px] mx-auto">
             <DayView v={v} bills={bills} billCount={billCount} storeId={app.storeId} onReprint={(id) => app.toastNow(`${id} reprinted`, "info")} />
+          </div>
+        </div>
+      ) : !app.dayOpen ? (
+        /* ── Open the day before the first bill: count the cash in the till ── */
+        <div className="flex-1 grid place-items-center p-6">
+          <div className="w-full max-w-sm">
+            <div className="label mb-1.5">Before the first bill</div>
+            <h2 className="text-xl font-medium text-ink mb-4">Open the day</h2>
+
+            <div className="border border-line bg-raised p-4">
+              <div className="label mb-1.5">Cash in the till now</div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl text-muted">₹</span>
+                <input
+                  data-float
+                  value={floatText}
+                  onChange={(e) => setFloatText(e.target.value.replace(/[^\d]/g, "").slice(0, 6))}
+                  inputMode="numeric"
+                  className="flex-1 text-3xl font-semibold num bg-transparent outline-none text-ink border-b border-line"
+                />
+              </div>
+              <div className="flex gap-1.5 mt-3">
+                {[5000, 8000, 10000, 15000].map((amt) => (
+                  <button key={amt} className="btn !py-1.5 !text-xs flex-1" onClick={() => setFloatText(String(amt))}>
+                    {inr(amt, { compact: true })}
+                  </button>
+                ))}
+              </div>
+              <div className="text-2xs text-muted mt-3 leading-relaxed">
+                Count the drawer and enter what is actually in it. This is the figure the day close reconciles against.
+              </div>
+            </div>
+
+            <button
+              data-day-open
+              className="btn-primary w-full mt-4 !py-4 !text-base"
+              disabled={!floatText || Number(floatText) <= 0}
+              onClick={() => {
+                app.dispatch({ type: "day:open", by: app.actorName });
+                app.dispatch({
+                  type: "audit",
+                  entry: { at: NOW, actor: app.actorName, action: `Till opened with ${inr(Number(floatText))} counted in the drawer`, object: "day-open", system: "POS" },
+                });
+                app.toastNow(`Day open. Float ${inr(Number(floatText))} confirmed. Good selling.`, "good");
+              }}
+            >
+              ☀ Open the day and start billing
+            </button>
           </div>
         </div>
       ) : (
@@ -312,7 +403,35 @@ export default function Pos() {
             </div>
 
             <div className="flex-1 overflow-y-auto min-h-0">
-              {cart.length === 0 ? (
+              {cart.length === 0 && member ? (
+                /* A known customer: their recent orders sit here until the bill starts. */
+                <div data-past-orders>
+                  <div className="px-4 py-2.5 border-b border-line flex items-center justify-between bg-[color:var(--plane)]">
+                    <span className="label">Their recent orders</span>
+                    <button className="btn-ghost !px-1 !text-2xs" onClick={() => setProfileOpen(true)}>Open profile</button>
+                  </div>
+                  {ordersForPhone(member.phone).map((o) => (
+                    <div key={o.id} className="px-4 py-2.5 border-b border-[color:var(--grid)]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs num font-medium text-ink">{o.id}</span>
+                        <span className="text-2xs text-muted num">{o.dateLabel}</span>
+                      </div>
+                      <div className="text-xs text-ink2 mt-0.5">{o.items[0].qty} × {o.items[0].name} ({o.items[0].size})</div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-xs num font-semibold text-ink">{inr(o.total)}</span>
+                        {settled[o.id] ? (
+                          <span className="text-2xs" style={{ color: "var(--status-good)" }}>{settled[o.id]}</span>
+                        ) : (
+                          <span className="text-2xs num" style={{ color: "var(--status-good)" }}>+{o.pointsEarned} pts</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="px-4 py-3 text-2xs text-muted">
+                    Scan an item to start their new bill, or open the profile to return or exchange.
+                  </div>
+                </div>
+              ) : cart.length === 0 ? (
                 <div className="px-4 py-12 text-center text-xs text-muted">Bill is empty</div>
               ) : (
                 cart.map((l, i) => (
@@ -662,6 +781,152 @@ export default function Pos() {
             )}
           </div>
         </div>
+      )}
+
+      {/* ── Held bills ────────────────────────────────────────────────────── */}
+      <Modal
+        open={heldOpen}
+        onClose={() => setHeldOpen(false)}
+        title="Held bills"
+        sub={parked.length ? `${parked.length} on hold at this counter` : undefined}
+        footer={<button className="btn" onClick={() => setHeldOpen(false)}>Close</button>}
+      >
+        {parked.length === 0 ? (
+          <Empty title="Nothing on hold" body="Hold a bill when a customer steps away, then pick it up again here." />
+        ) : (
+          <div className="space-y-2">
+            {parked.map((p) => (
+              <div key={p.id} className="border border-line p-3 flex items-center gap-3 flex-wrap">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-ink num">{p.id}</div>
+                  <div className="text-2xs text-muted mt-0.5">
+                    {p.member ? `${p.member.name} · ${p.member.phone}` : "Walk-in customer"} · {p.lines.reduce((a, l) => a + l.qty, 0)} item
+                    {p.lines.reduce((a, l) => a + l.qty, 0) === 1 ? "" : "s"}
+                  </div>
+                  <div className="text-2xs text-ink2 mt-1">{p.lines.map((l) => `${l.qty} × ${l.name}`).join(", ")}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-semibold num text-ink">{inr(p.lines.reduce((a, l) => a + l.mrp * l.qty, 0))}</div>
+                  <button
+                    data-recall
+                    className="btn-primary !py-1.5 !text-xs mt-1.5"
+                    onClick={() => { recall(p.id); setHeldOpen(false); }}
+                  >
+                    Pick it up
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Customer profile: their orders, and what to do with them ──────── */}
+      {member && (
+        <Modal
+          open={profileOpen}
+          onClose={() => setProfileOpen(false)}
+          wide
+          title={member.name}
+          sub={`${member.phone} · ${member.tier} member`}
+          footer={
+            <>
+              <button className="btn" onClick={() => setProfileOpen(false)}>Close</button>
+              <button
+                data-start-bill
+                className="btn-primary"
+                onClick={() => { setProfileOpen(false); startItems(false); }}
+              >
+                Start a new bill
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="border border-line p-3">
+                <div className="text-2xl font-semibold num text-ink">{member.points.toLocaleString("en-IN")}</div>
+                <div className="text-2xs text-muted mt-0.5">points</div>
+              </div>
+              <div className="border border-line p-3">
+                <div className="text-2xl font-semibold num" style={{ color: "var(--status-good)" }}>{inr(Math.floor(member.points * 0.25))}</div>
+                <div className="text-2xs text-muted mt-0.5">worth on this bill</div>
+              </div>
+              <div className="border border-line p-3">
+                <div className="text-2xl font-semibold num text-ink">{ordersForPhone(member.phone).length}</div>
+                <div className="text-2xs text-muted mt-0.5">orders, last 30 days</div>
+              </div>
+            </div>
+
+            <div>
+              <div className="label mb-2">Past orders</div>
+              <div className="space-y-2">
+                {ordersForPhone(member.phone).map((o) => (
+                  <div key={o.id} className="border border-line p-3" data-profile-order>
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-ink num">{o.id} <span className="text-2xs text-muted font-normal">{o.dateLabel} · {o.tender}</span></div>
+                        <div className="text-xs text-ink2 mt-0.5">{o.items[0].qty} × {o.items[0].name} ({o.items[0].size})</div>
+                        <div className="text-2xs text-muted mt-0.5 num">
+                          <span style={{ color: "var(--status-good)" }}>+{o.pointsEarned} pts earned</span>
+                          {o.pointsUsed > 0 && <span> · {o.pointsUsed} pts used</span>}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-semibold num text-ink">{inr(o.total)}</div>
+                        {settled[o.id] ? (
+                          <span className="inline-flex items-center gap-1.5 text-2xs mt-1" style={{ color: "var(--status-good)" }}>
+                            <StatusDot tone="good" />{settled[o.id]}
+                          </span>
+                        ) : pendingAction?.id === o.id ? null : (
+                          <div className="flex gap-1.5 mt-1.5">
+                            <button
+                              data-profile-return
+                              className="btn !py-1 !text-2xs"
+                              onClick={() => setPendingAction({ id: o.id, kind: "returned" })}
+                            >
+                              Return
+                            </button>
+                            <button className="btn !py-1 !text-2xs" onClick={() => setPendingAction({ id: o.id, kind: "exchanged" })}>
+                              Exchange
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* One tap on a reason completes it. No second screen. */}
+                    {pendingAction?.id === o.id && (
+                      <div className="mt-3 pt-3 border-t border-line">
+                        <div className="label mb-1.5">
+                          {pendingAction.kind === "returned" ? "Refund reason" : "Exchange reason"}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {RETURN_REASONS.map((rsn) => (
+                            <button
+                              key={rsn}
+                              data-profile-reason
+                              className="btn !py-1.5 !text-xs"
+                              onClick={() => settle(o.id, pendingAction.kind, rsn)}
+                            >
+                              {rsn}
+                            </button>
+                          ))}
+                          <button className="btn-ghost !text-xs" onClick={() => setPendingAction(null)}>Cancel</button>
+                        </div>
+                        <div className="text-2xs text-muted mt-2">
+                          {pendingAction.kind === "returned"
+                            ? "Refund goes back to the original payment mode. Points on that bill reverse."
+                            : "The new item is billed on this screen. Any difference settles there."}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

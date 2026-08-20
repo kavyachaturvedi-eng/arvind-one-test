@@ -62,7 +62,6 @@ export type ModuleId =
   | "merch"
   | "lookup"
   | "shift"
-  | "hub"
   | "bills"
 ;
 
@@ -425,9 +424,9 @@ function reducer(state: AppState, action: Action): AppState {
 }
 
 function defaultModule(role: RoleId): ModuleId {
-  // Staff lands on a launcher and chooses billing or other work; the manager
-  // on insights; planning on the live control tower; the CEO on the summary.
-  return role === "staff" ? "hub" : role === "store" ? "home" : role === "planner" ? "live" : "exec";
+  // Staff go straight to the till, which opens the day; the manager to
+  // insights; planning to the live control tower; the CEO to the summary.
+  return role === "staff" ? "pos" : role === "store" ? "home" : role === "planner" ? "live" : "exec";
 }
 
 // ── Context ──────────────────────────────────────────────────────────────────
