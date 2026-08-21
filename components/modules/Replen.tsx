@@ -12,6 +12,7 @@ import { Card, Chip, SectionTitle, SortTh, Stat, StatusDot, Table, Tabs, Td, Th,
 import { applyMove, planningStores, replenRun, warehouseHeld } from "@/lib/engine";
 import { NOW, storeById, styleById } from "@/lib/seed";
 import { useApp } from "@/lib/state";
+import StoreLink from "@/components/StoreLink";
 import { inr, lastRunAt, nextRunAt, pct } from "@/lib/rules";
 import type { ReplenLine, StockMove } from "@/lib/types";
 
@@ -25,6 +26,11 @@ export default function Replen() {
 
   const open = run.lines.filter((l) => !app.released.includes(l.id) && !app.dropped.includes(l.id));
   const shown = filter === "open" ? open : filter === "shipped" ? run.lines.filter((l) => app.released.includes(l.id)) : run.lines.filter((l) => app.dropped.includes(l.id));
+
+  // Lines are picked from the list and shipped together — no blanket "ship all".
+  const [chosen, setChosen] = useState<Record<string, boolean>>({});
+  const picked = open.filter((l) => chosen[l.id]);
+  const allPicked = open.length > 0 && picked.length === open.length;
 
   const sorter = useSort<LineSort>("value");
   const sorted = sorter.sort(shown, (l, key) => {
@@ -80,22 +86,18 @@ export default function Replen() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button className="btn" data-go-log onClick={() => app.go("log")}>
-            Run log
-          </button>
-          {open.length > 0 && (
-            <button className="btn-primary" data-ship-all onClick={() => ship(open)}>
-              Ship all {open.length} {open.length === 1 ? "line" : "lines"}
+          {picked.length > 0 && (
+            <button className="btn-primary" data-ship-selected onClick={() => ship(picked)}>
+              Ship {picked.length} {picked.length === 1 ? "line" : "lines"}
             </button>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <Stat label="Stores in this run" value={`${run.triggered.length} of ${stores.length}`} tone={run.triggered.length > 0 ? "warn" : "good"} emphasis />
         <Stat label="Units proposed" value={open.reduce((a, l) => a + l.units, 0).toLocaleString("en-IN")} />
         <Stat label="Paused stores" value={String(app.pausedStores.length)} tone={app.pausedStores.length > 0 ? "warn" : undefined} />
-        <Stat label="Warehouse held" value={pct(held.share)} />
       </div>
 
       <Card>
@@ -119,6 +121,14 @@ export default function Replen() {
           <Table>
             <thead>
               <tr>
+                <Th>
+                  <input
+                    type="checkbox"
+                    checked={allPicked}
+                    data-ship-all-toggle
+                    onChange={(e) => setChosen(e.target.checked ? Object.fromEntries(open.map((l) => [l.id, true])) : {})}
+                  />
+                </Th>
                 <SortTh sortKey="store" sorter={sorter}>Store</SortTh>
                 <Th>SKU</Th>
                 <SortTh sortKey="style" sorter={sorter}>Style</SortTh>
@@ -137,7 +147,19 @@ export default function Replen() {
                 const isHeld = app.dropped.includes(line.id);
                 return (
                   <tr key={line.id} data-replen-line>
-                    <Td className="text-ink">{store.name}</Td>
+                    <Td>
+                      {!isShipped && !isHeld && (
+                        <input
+                          type="checkbox"
+                          checked={!!chosen[line.id]}
+                          data-line-pick
+                          onChange={(e) => setChosen({ ...chosen, [line.id]: e.target.checked })}
+                        />
+                      )}
+                    </Td>
+                    <Td>
+                      <StoreLink storeId={line.storeId} />
+                    </Td>
                     <Td className="num text-xs text-ink2">{style.id}</Td>
                     <Td className="text-ink">{style.name}</Td>
                     <Td className="num">{line.size ?? "—"}</Td>

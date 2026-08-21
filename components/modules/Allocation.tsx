@@ -8,12 +8,13 @@
 // over — the algorithm does not get the last word.
 
 import React, { useMemo, useState } from "react";
-import { Card, Chip, SectionTitle, SortTh, Stat, StatusDot, Table, Td, Th, fmtRunDate, useSort } from "@/components/ui";
+import { Card, Chip, SectionTitle, SortTh, Stat, StatusDot, Table, Td, Th, fmtRunDate, relTime, useSort } from "@/components/ui";
 import DropBar from "@/components/DropBar";
 import EstateFilterBar from "@/components/EstateFilterBar";
 import { PLANNING_BRAND, dropAllocation, dropPerformance, dropUnitsFor, filterStores } from "@/lib/engine";
 import { CURRENT_SEASON, DROPS, NOW, clusterById } from "@/lib/seed";
 import { useApp } from "@/lib/state";
+import StoreLink from "@/components/StoreLink";
 import { HOLDBACK_SHARE, pct } from "@/lib/rules";
 
 type Sort = "store" | "cluster" | "ach" | "fill" | "plan" | "rec" | "delta";
@@ -38,6 +39,20 @@ export default function Allocation() {
 
   const units = dropUnitsFor(dropId, PLANNING_BRAND);
   const changed = rows.filter((r) => r.delta !== 0);
+  // Only a change worth shipping counts. Below this, re-cutting moves stock
+  // around the estate for no gain, which is how a re-run habit starts.
+  const MATERIAL_UNITS = 15;
+  const MATERIAL_SHARE = 0.08;
+  const material = rows.filter((r) => Math.abs(r.delta) >= MATERIAL_UNITS && Math.abs(r.delta) / Math.max(1, r.planned) >= MATERIAL_SHARE);
+  const isMaterial = (r: (typeof rows)[number]) =>
+    Math.abs(r.delta) >= MATERIAL_UNITS && Math.abs(r.delta) / Math.max(1, r.planned) >= MATERIAL_SHARE;
+
+  const lastPush = app.pushes.find((x) => x.origin === "drop");
+  const lastRunLabel = applied.includes(dropId)
+    ? "just now"
+    : lastPush
+    ? relTime(lastPush.at, NOW)
+    : "not yet this drop";
   const selected = rows.filter((r) => taken[r.store.id]);
   const movedUnits = selected.reduce((a, r) => a + Math.abs(r.delta), 0);
   const pending = rows.filter((r) => taken[r.store.id] || override[r.store.id] !== undefined).length;
@@ -90,22 +105,16 @@ export default function Allocation() {
             {CURRENT_SEASON.name} · {drop.label} lands {fmtRunDate(drop.landsAt)}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {!ran ? (
-            <button className="btn" data-run-realloc onClick={() => setRan(true)}>
-              Run the re-allocation
+        {ran && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <button className="btn" data-take-all onClick={() => setTaken(Object.fromEntries(material.map((r) => [r.store.id, true])))}>
+              Take the {material.length} material
             </button>
-          ) : (
-            <>
-              <button className="btn" data-take-all onClick={() => setTaken(Object.fromEntries(changed.map((r) => [r.store.id, true])))}>
-                Take all {changed.length}
-              </button>
-              <button className={pending > 0 ? "btn-primary" : "btn"} data-apply-recut disabled={pending === 0} onClick={apply}>
-                Apply {pending > 0 ? `${pending} stores` : ""}
-              </button>
-            </>
-          )}
-        </div>
+            <button className={pending > 0 ? "btn-primary" : "btn"} data-apply-recut disabled={pending === 0} onClick={apply}>
+              Apply {pending > 0 ? `${pending} stores` : ""}
+            </button>
+          </div>
+        )}
       </div>
 
       <EstateFilterBar />
@@ -121,7 +130,22 @@ export default function Allocation() {
       <Card>
         <SectionTitle
           title={ran ? "Plan against today's signals" : "The plan as committed"}
-          right={ran ? <Chip tone="warn">{changed.length} would change</Chip> : <Chip>Not re-run</Chip>}
+          right={
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-2xs text-muted num">
+                Last re-cut {lastRunLabel}
+              </span>
+              {!ran &&
+                (material.length > 0 ? (
+                  <button className="btn !py-1 !text-2xs" data-run-realloc onClick={() => setRan(true)}>
+                    {material.length} stores have moved — see the re-cut
+                  </button>
+                ) : (
+                  <Chip tone="good">Nothing material has moved</Chip>
+                ))}
+              {ran && <Chip tone="warn">{material.length} material · {changed.length - material.length} minor</Chip>}
+            </div>
+          }
         />
         <Table>
           <thead>
@@ -133,6 +157,7 @@ export default function Allocation() {
               <SortTh sortKey="plan" sorter={sorter} align="right">Plan</SortTh>
               {ran && <SortTh sortKey="rec" sorter={sorter} align="right">Recommended</SortTh>}
               {ran && <SortTh sortKey="delta" sorter={sorter} align="right">Change</SortTh>}
+              {ran && <Th>Why</Th>}
               <Th align="right">Final</Th>
               {ran && <Th align="right">Take</Th>}
             </tr>
@@ -146,7 +171,7 @@ export default function Allocation() {
                   <Td>
                     <span className="inline-flex items-center gap-2">
                       <StatusDot tone={r.delta > 0 ? "good" : r.delta < 0 ? "warn" : "neutral"} />
-                      <span className="text-ink">{r.store.name}</span>
+                      <StoreLink storeId={r.store.id} />
                       <span className="text-2xs text-muted">{r.store.grade}</span>
                     </span>
                   </Td>
@@ -164,6 +189,11 @@ export default function Allocation() {
                         {r.delta > 0 ? "+" : ""}
                         {r.delta}
                       </span>
+                    </Td>
+                  )}
+                  {ran && (
+                    <Td>
+                      <span className="text-xs text-ink2">{isMaterial(r) ? r.reason : "Too small to be worth moving"}</span>
                     </Td>
                   )}
                   <Td align="right">
@@ -184,7 +214,7 @@ export default function Allocation() {
                         type="checkbox"
                         checked={!!taken[r.store.id]}
                         data-alloc-take
-                        disabled={r.delta === 0}
+                        disabled={!isMaterial(r)}
                         onChange={(e) => setTaken({ ...taken, [r.store.id]: e.target.checked })}
                       />
                     </Td>

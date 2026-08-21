@@ -8,7 +8,7 @@
 // send units, or change the norm.
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Card, Chip, Meter, Modal, SectionTitle, SortTh, Stat, StatusDot, Swatch, Table, Tabs, Td, Th, relTime, useSort } from "@/components/ui";
+import { Card, Chip, Meter, Modal, SectionTitle, SortTh, Stat, StatusDot, Swatch, Table, Tabs, Td, Th, fmtDateTime, relTime, useSort } from "@/components/ui";
 import {
   PERIOD_LABEL,
   dcAvailable,
@@ -23,11 +23,12 @@ import {
   unitsAt,
   vitalsFor,
 } from "@/lib/engine";
-import { NOW, clusterById, storeById } from "@/lib/seed";
+import { NOW, SEEDED_MOVES, clusterById, storeById, styleById } from "@/lib/seed";
 import { REQUEST_LABEL, useApp } from "@/lib/state";
 import { coreShareTarget, fillBand, inr, normRecommendation, pct } from "@/lib/rules";
 import type { StyleGrade } from "@/lib/rules";
 import type { Size, StockMove } from "@/lib/types";
+import SizeAllocator, { type SizeMap } from "@/components/SizeAllocator";
 
 const GRADE_TONE: Record<StyleGrade, "good" | "warn" | "critical"> = { stud: "good", bud: "warn", dud: "critical" };
 type Cut = "all" | "stud" | "bud" | "dud" | "broken";
@@ -69,6 +70,25 @@ export default function StoreView() {
   const coreTarget = coreShareTarget(store.grade);
 
   const asks = app.requests.filter((r) => r.storeId === storeId);
+  // Everything that has moved in or out of this door, newest first — the
+  // transfers, allocations and renewals a planner would otherwise have to
+  // reconstruct from the log.
+  const recent = useMemo(
+    () =>
+      [...app.moves, ...SEEDED_MOVES]
+        .filter((m2) => m2.toStoreId === storeId || m2.from === storeId)
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 8),
+    [app.moves, storeId],
+  );
+  // Everything that moved in or out of this door, newest first.
+  const activity = useMemo(
+    () =>
+      [...app.moves, ...SEEDED_MOVES]
+        .filter((m) => m.toStoreId === storeId || m.from === storeId)
+        .sort((a, b) => b.at - a.at),
+    [app.moves, storeId],
+  );
   const shown =
     cut === "all"
       ? graded
@@ -331,31 +351,130 @@ export default function StoreView() {
       </Card>
 
       <Card>
-        <SectionTitle title="Asks from this store" right={<Chip tone={asks.some((a) => a.status === "open") ? "warn" : "good"}>{asks.filter((a) => a.status === "open").length} open</Chip>} />
-        {asks.length === 0 ? (
-          <div className="text-sm text-ink2">Nothing raised.</div>
+        <SectionTitle
+          title="Recent stock activity"
+          right={
+            <button className="btn !py-1 !text-2xs" data-go-movelog onClick={() => app.go("move")}>
+              Full log
+            </button>
+          }
+        />
+        {activity.length === 0 ? (
+          <div className="text-sm text-ink2">Nothing in or out recently.</div>
         ) : (
           <Table>
             <thead>
-              <tr><Th>Ask</Th><Th align="right">Units</Th><Th>Raised</Th><Th>Status</Th></tr>
+              <tr>
+                <Th>When</Th>
+                <Th>What</Th>
+                <Th>SKU</Th>
+                <Th>Style</Th>
+                <Th>Size</Th>
+                <Th align="right">Units</Th>
+                <Th>Direction</Th>
+              </tr>
             </thead>
             <tbody>
-              {asks.map((r) => (
-                <tr key={r.id} data-store-ask={r.status}>
-                  <Td>{REQUEST_LABEL[r.kind]}</Td>
-                  <Td align="right" className="num">{r.units ?? "—"}</Td>
-                  <Td className="text-xs text-ink2">{r.raisedBy} · {relTime(r.raisedAt, NOW)}</Td>
-                  <Td>
-                    <Chip tone={r.status === "approved" ? "good" : r.status === "rejected" ? "neutral" : "warn"}>
-                      {r.status === "open" ? "Waiting" : r.status === "approved" ? "Approved" : "Rejected"}
-                    </Chip>
-                  </Td>
-                </tr>
-              ))}
+              {activity.slice(0, 10).map((m) => {
+                const inbound = m.toStoreId === storeId;
+                return (
+                  <tr key={m.id} data-store-activity={inbound ? "in" : "out"}>
+                    <Td className="num text-xs whitespace-nowrap">{fmtDateTime(m.at)}</Td>
+                    <Td className="text-xs text-ink2">{m.reason}</Td>
+                    <Td className="num text-xs text-ink2">{m.styleId}</Td>
+                    <Td className="text-ink">{styleById(m.styleId).name}</Td>
+                    <Td className="num">{m.size}</Td>
+                    <Td align="right" className="num">{m.units}</Td>
+                    <Td>
+                      <Chip tone={inbound ? "good" : "warn"}>{inbound ? "In" : "Out"}</Chip>
+                    </Td>
+                  </tr>
+                );
+              })}
             </tbody>
           </Table>
         )}
       </Card>
+
+      <div className="grid lg:grid-cols-2 gap-3 items-start">
+        <Card>
+          <SectionTitle
+            title="Asks from this store"
+            right={
+              <button className="btn !py-1 !text-2xs" data-go-asks onClick={() => app.go("asks")}>
+                Open the queue
+              </button>
+            }
+          />
+          {asks.length === 0 ? (
+            <div className="text-sm text-ink2">Nothing raised.</div>
+          ) : (
+            <Table>
+              <thead>
+                <tr><Th>Ask</Th><Th align="right">Units</Th><Th>Raised</Th><Th align="right">Status</Th></tr>
+              </thead>
+              <tbody>
+                {asks.map((r) => (
+                  <tr
+                    key={r.id}
+                    className="hover:bg-[color:var(--plane)] cursor-pointer"
+                    data-store-ask={r.status}
+                    onClick={() => app.go("asks")}
+                    title={`${r.id} — open in the queue`}
+                  >
+                    <Td>
+                      <span className="text-ink">{REQUEST_LABEL[r.kind]}</span>
+                      <span className="num text-2xs text-muted ml-1.5">{r.id}</span>
+                    </Td>
+                    <Td align="right" className="num">{r.units ?? "—"}</Td>
+                    <Td className="text-xs text-ink2">{r.raisedBy} · {relTime(r.raisedAt, NOW)}</Td>
+                    <Td align="right">
+                      <Chip tone={r.status === "approved" ? "good" : r.status === "rejected" ? "neutral" : "warn"}>
+                        {r.status === "open" ? "Waiting" : r.status === "approved" ? "Approved" : "Rejected"}
+                      </Chip>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Card>
+
+        <Card>
+          <SectionTitle title="Recently moved in and out" right={<Chip>{recent.length}</Chip>} />
+          {recent.length === 0 ? (
+            <div className="text-sm text-ink2">No movement on record.</div>
+          ) : (
+            <Table>
+              <thead>
+                <tr><Th>What</Th><Th>Style</Th><Th>Size</Th><Th align="right">Units</Th><Th>When</Th></tr>
+              </thead>
+              <tbody>
+                {recent.map((m2) => {
+                  const out = m2.from === storeId;
+                  return (
+                    <tr key={m2.id} data-store-move={out ? "out" : "in"}>
+                      <Td>
+                        <span className="inline-flex items-center gap-1.5">
+                          <StatusDot tone={out ? "warn" : "good"} />
+                          <span className="text-xs text-ink2">{kindOf(m2.reason)}</span>
+                        </span>
+                      </Td>
+                      <Td className="text-ink">{styleById(m2.styleId).name}</Td>
+                      <Td className="num">{m2.size}</Td>
+                      <Td align="right" className="num" style={{ color: out ? "var(--status-serious)" : "var(--status-good)" }}>
+                        {out ? "−" : "+"}
+                        {m2.units}
+                      </Td>
+                      <Td className="text-xs text-ink2">{relTime(m2.at, NOW)}</Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          )}
+        </Card>
+      </div>
 
       <SkuModal storeId={storeId} styleId={openStyle} onClose={() => setOpenStyle(null)} />
       <AssignModal open={assign} onClose={() => setAssign(false)} storeId={storeId} />
@@ -427,36 +546,38 @@ function SkuModal({ storeId, styleId, onClose }: { storeId: string; styleId: str
 function AssignModal({ open, onClose, storeId }: { open: boolean; onClose: () => void; storeId: string }) {
   const app = useApp();
   const candidates = useMemo(() => sizeSetExceptions(storeId, 8), [storeId]);
-  // Size is chosen explicitly, per line. Sending units without naming the size
-  // is how a broken set gets "replenished" with the size that was already there.
-  const [picked, setPicked] = useState<Record<string, { size: Size; units: number }>>({});
+  // One style at a time, but every size at once — sending a unit is a set or a
+  // handful of sizes, never a single variant.
+  const [openStyle, setOpenStyle] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Record<string, SizeMap>>({});
 
-  const total = Object.values(picked).reduce((a, p) => a + p.units, 0);
+  const total = Object.values(picked).reduce((a, m) => a + Object.values(m).reduce((b, n) => b + (n ?? 0), 0), 0);
 
-  function lineFor(styleId: string, fallback: Size) {
-    return picked[styleId] ?? { size: fallback, units: 0 };
+  function unitsFor(styleId: string) {
+    return Object.values(picked[styleId] ?? {}).reduce((a, n) => a + (n ?? 0), 0);
   }
 
   function confirm() {
     const moves: StockMove[] = [];
-    Object.entries(picked)
-      .filter(([, p]) => p.units > 0)
-      .forEach(([styleId, p], i) => {
-        const ok = applyMove({ from: "warehouse", toStoreId: storeId, styleId, size: p.size, units: p.units });
+    Object.entries(picked).forEach(([styleId, sizes]) => {
+      Object.entries(sizes).forEach(([size, units], i) => {
+        if (!units) return;
+        const ok = applyMove({ from: "warehouse", toStoreId: storeId, styleId, size: size as Size, units });
         if (ok) {
           moves.push({
-            id: `MV-SD-${storeId}-${i}`,
+            id: `MV-SD-${storeId}-${styleId}-${size}-${i}`,
             at: NOW,
             by: app.actorName,
             from: "warehouse",
             toStoreId: storeId,
             styleId,
-            size: p.size,
-            units: p.units,
+            size: size as Size,
+            units,
             reason: "Sent by planning from Store 360",
           });
         }
       });
+    });
     if (moves.length === 0) return;
     app.dispatch({ type: "cycle:apply", id: `SEND-${storeId}-${app.moves.length}`, moves, by: app.actorName });
     app.toastNow(`${moves.reduce((a, m) => a + m.units, 0)} units sent to ${storeById(storeId).name}`, "good");
@@ -487,67 +608,53 @@ function AssignModal({ open, onClose, storeId }: { open: boolean; onClose: () =>
             <Th>Style</Th>
             <Th>Colour</Th>
             <Th>Set</Th>
-            <Th align="right">Here now</Th>
-            <Th>Size</Th>
-            <Th align="right">Warehouse</Th>
-            <Th align="right">Send</Th>
+            <Th align="right">Sending</Th>
+            <Th align="right">Sizes</Th>
           </tr>
         </thead>
         <tbody>
           {candidates.map((sig) => {
-            const fallback = (sig.health.missingCore[0] ?? sig.style.coreSizes[0]) as Size;
-            const line = lineFor(sig.style.id, fallback);
-            const wh = dcAvailable(sig.style.id, line.size);
-            const here = unitsAt(storeId, sig.style.id, line.size);
+            const expanded = openStyle === sig.style.id;
+            const mine = unitsFor(sig.style.id);
             return (
-              <tr key={sig.style.id}>
-                <Td className="num text-xs text-ink2">{sig.style.id}</Td>
-                <Td className="text-ink">{sig.style.name}</Td>
-                <Td>
-                  <Swatch hex={sig.style.colourHex} label={sig.style.colour} />
-                </Td>
-                <Td>
-                  <span className="inline-flex items-center gap-1.5">
-                    <StatusDot tone={sig.health.status === "broken" ? "critical" : "warn"} />
-                    <span className="text-xs text-ink2">{sig.health.status === "broken" ? "Broken" : "At risk"}</span>
-                  </span>
-                </Td>
-                <Td align="right" className="num" style={here === 0 ? { color: "var(--status-critical)" } : undefined}>
-                  {here}
-                </Td>
-                <Td>
-                  <select
-                    value={line.size}
-                    data-assign-size
-                    onChange={(e) => setPicked({ ...picked, [sig.style.id]: { size: e.target.value as Size, units: 0 } })}
-                    className="border border-line bg-raised px-2 py-1 text-xs text-ink num"
-                  >
-                    {sig.style.sizes.map((sz) => (
-                      <option key={sz} value={sz}>
-                        {sz}
-                        {sig.style.coreSizes.includes(sz) ? " · pivotal" : ""} — {dcAvailable(sig.style.id, sz)} in warehouse
-                      </option>
-                    ))}
-                  </select>
-                </Td>
-                <Td align="right" className="num">{wh}</Td>
-                <Td align="right">
-                  <input
-                    type="number"
-                    min={0}
-                    max={wh}
-                    value={line.units}
-                    data-assign-units
-                    onChange={(e) =>
-                      setPicked({
-                        ...picked,
-                        [sig.style.id]: { size: line.size, units: Math.max(0, Math.min(wh, Number(e.target.value) || 0)) },
-                      })
-                    }
-                    className="w-16 border border-line bg-raised px-2 py-1 text-sm text-ink text-right num"
-                  />
-                </Td>
-              </tr>
+              <React.Fragment key={sig.style.id}>
+                <tr data-assign-row>
+                  <Td className="num text-xs text-ink2">{sig.style.id}</Td>
+                  <Td className="text-ink">{sig.style.name}</Td>
+                  <Td>
+                    <Swatch hex={sig.style.colourHex} label={sig.style.colour} />
+                  </Td>
+                  <Td>
+                    <span className="inline-flex items-center gap-1.5">
+                      <StatusDot tone={sig.health.status === "broken" ? "critical" : "warn"} />
+                      <span className="text-xs text-ink2">
+                        {sig.health.status === "broken" ? "Broken" : "At risk"}
+                        {sig.health.missingCore.length > 0 ? ` · ${sig.health.missingCore.join(", ")} gone` : ""}
+                      </span>
+                    </span>
+                  </Td>
+                  <Td align="right" className="num" style={mine > 0 ? { color: "var(--brand)" } : undefined}>
+                    {mine || "—"}
+                  </Td>
+                  <Td align="right">
+                    <button className="btn !py-1 !text-2xs" data-assign-sizes onClick={() => setOpenStyle(expanded ? null : sig.style.id)}>
+                      {expanded ? "Hide" : "Sizes"}
+                    </button>
+                  </Td>
+                </tr>
+                {expanded && (
+                  <tr>
+                    <Td colSpan={6}>
+                      <SizeAllocator
+                        styleId={sig.style.id}
+                        toStoreId={storeId}
+                        value={picked[sig.style.id] ?? {}}
+                        onChange={(next) => setPicked({ ...picked, [sig.style.id]: next })}
+                      />
+                    </Td>
+                  </tr>
+                )}
+              </React.Fragment>
             );
           })}
         </tbody>
@@ -618,4 +725,14 @@ function NormModal({ open, onClose, storeId }: { open: boolean; onClose: () => v
       </div>
     </Modal>
   );
+}
+
+/** What kind of movement a log reason describes, in two or three words. */
+function kindOf(reason: string): string {
+  if (reason.startsWith("Replenishment")) return "Replenishment";
+  if (reason.startsWith("Renewal")) return "Renewal";
+  if (reason.startsWith("Allocation")) return "Allocation";
+  if (reason.startsWith("Pull-back")) return "Pull-back";
+  if (reason.includes("Store 360")) return "Sent by planning";
+  return "Moved by planning";
 }

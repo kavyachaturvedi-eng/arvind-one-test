@@ -10,6 +10,7 @@ import {
   BRANDS,
   CATEGORIES,
   CLUSTERS,
+  CURRENT_SEASON,
   DROPS,
   NOW,
   STOCK,
@@ -1337,13 +1338,102 @@ export function planningStores(): Store[] {
   return STORES.filter((s) => s.brand === PLANNING_BRAND);
 }
 
-export type Period = "today" | "week" | "mtd";
+export type Period = "today" | "week" | "month" | "quarter" | "drop" | "season" | "year" | "three_years";
 
 export const PERIOD_LABEL: Record<Period, string> = {
   today: "Today",
-  week: "This week",
-  mtd: "Month to date",
+  week: "Week",
+  month: "Month",
+  quarter: "3 months",
+  drop: "This drop",
+  season: "Season",
+  year: "Year",
+  three_years: "3 years",
 };
+
+export const PERIODS: Period[] = ["today", "week", "month", "quarter", "drop", "season", "year", "three_years"];
+
+// Window boundaries on the frozen clock, as arithmetic rather than clock reads.
+const MONTH_START = Date.UTC(2026, 7, 1, 4, 0, 0);
+const YEAR_START = Date.UTC(2026, 0, 1, 4, 0, 0);
+const ONE_DAY_MS = 86_400_000;
+
+/** Trading days the window covers. A drop that has not landed covers none. */
+export function periodDays(period: Period, dropId?: string): number {
+  switch (period) {
+    case "today":
+      return 1;
+    case "week":
+      return 7;
+    case "month":
+      return Math.max(1, Math.round((NOW - MONTH_START) / ONE_DAY_MS));
+    case "quarter":
+      return 90;
+    case "drop": {
+      const d = DROPS.find((x) => x.id === dropId);
+      if (!d) return 0;
+      return Math.max(0, Math.round((NOW - d.landsAt) / ONE_DAY_MS));
+    }
+    case "season":
+      return Math.max(0, Math.round((NOW - CURRENT_SEASON.startsAt) / ONE_DAY_MS));
+    case "year":
+      return Math.max(1, Math.round((NOW - YEAR_START) / ONE_DAY_MS));
+    case "three_years":
+      return 1095;
+  }
+}
+
+export interface PeriodFigures {
+  days: number;
+  sales: number;
+  bills: number;
+  qty: number;
+  footfall: number;
+  target: number;
+  lySales: number;
+  growth: number;
+}
+
+/**
+ * One store's trading over a window, and the same window last year.
+ *
+ * Today is the store's actual figure; longer windows are its daily average
+ * multiplied out, with a seeded drift so a year does not read as 365 identical
+ * days. Last year carries a per-period drift too, so growth varies by window
+ * the way a real comparison does — deterministic, so it never moves on reload.
+ */
+export function periodFigures(storeId: string, period: Period, dropId?: string): PeriodFigures {
+  const v = vitalsFor(storeId);
+  const days = periodDays(period, dropId);
+  if (days === 0) {
+    return { days: 0, sales: 0, bills: 0, qty: 0, footfall: 0, target: 0, lySales: 0, growth: 0 };
+  }
+
+  const monthDays = periodDays("month");
+  const dailySales = v.mtdSales / Math.max(1, monthDays);
+  const dailyBills = v.bills;
+  const dailyFootfall = v.footfall;
+
+  const r = rng(hash(`${storeId}-${period}`));
+  const drift = 0.94 + r() * 0.12;
+
+  const sales = period === "today" ? v.todaySales : Math.round(dailySales * days * drift);
+  const scale = period === "today" ? 1 : (dailySales * days * drift) / Math.max(1, v.todaySales);
+  const bills = Math.round(dailyBills * (period === "today" ? 1 : scale));
+  const qty = Math.round(bills * v.upt);
+  const footfall = Math.round(dailyFootfall * (period === "today" ? 1 : scale));
+
+  // Target scales with the window so achievement means the same thing in each.
+  const dailyTarget = v.mtdTargetToDate / Math.max(1, monthDays);
+  const target = Math.round(dailyTarget * days);
+
+  // Last year: the store's own same-day ratio, nudged per window.
+  const baseRatio = v.todaySales > 0 ? v.lySameDay / v.todaySales : 1;
+  const lyDrift = 0.9 + rng(hash(`ly-${storeId}-${period}`))() * 0.2;
+  const lySales = Math.round(sales * Math.min(1.4, Math.max(0.6, baseRatio * lyDrift)));
+
+  return { days, sales, bills, qty, footfall, target, lySales, growth: growth(sales, lySales) };
+}
 
 export interface EstateFilters {
   region: string;   // "all" | Region
@@ -1373,15 +1463,6 @@ export function filtersActive(f: EstateFilters): number {
  * seven-day series whose last point is today, so "this week" and "today" can
  * never contradict each other.
  */
-function periodMultiple(storeId: string, period: Period): number {
-  const v = vitalsFor(storeId);
-  if (period === "today") return 1;
-  if (period === "mtd") return v.todaySales > 0 ? v.mtdSales / v.todaySales : 1;
-  const series = trend(`wk-${storeId}`, 7, Math.max(1, v.todaySales), 0.03);
-  const week = series.slice(0, 6).reduce((a, n) => a + n, 0) + v.todaySales;
-  return v.todaySales > 0 ? week / v.todaySales : 1;
-}
-
 /**
  * A stud with a broken size set — a style that is selling and cannot be bought
  * in the sizes people want. The most expensive failure in the estate, and the
@@ -1400,6 +1481,11 @@ export function brokenStuds(stores: Store[]): Array<{ store: Store; graded: Grad
 export interface EstateSummary {
   storeCount: number;
   period: Period;
+  /** Trading days the window covers. Zero when a drop has not landed. */
+  days: number;
+  /** The same window last year, and the movement between them. */
+  lySales: number;
+  growth: number;
 
   // Trading — AFL's own daily KPI set, for the chosen period
   sales: number;
@@ -1438,17 +1524,18 @@ export interface EstateSummary {
   brokenStudValue: number;
 }
 
-export function estateSummary(stores: Store[], period: Period): EstateSummary {
+export function estateSummary(stores: Store[], period: Period, dropId?: string): EstateSummary {
   const vitals = stores.map((s) => vitalsFor(s.id));
   const studs = brokenStuds(stores);
-  const mult = new Map(stores.map((s) => [s.id, periodMultiple(s.id, period)]));
+  const figs = stores.map((s) => periodFigures(s.id, period, dropId));
 
-  const sales = vitals.reduce((a, v) => a + v.todaySales * (mult.get(v.store.id) ?? 1), 0);
-  const bills = vitals.reduce((a, v) => a + v.bills * (mult.get(v.store.id) ?? 1), 0);
-  const qty = vitals.reduce((a, v) => a + v.bills * v.upt * (mult.get(v.store.id) ?? 1), 0);
-  const footfall = vitals.reduce((a, v) => a + v.footfall * (mult.get(v.store.id) ?? 1), 0);
-  // Target scales the same way, so achievement means the same thing in every period.
-  const target = vitals.reduce((a, v) => a + v.mtdTargetToDate * (period === "mtd" ? 1 : (mult.get(v.store.id) ?? 1) / Math.max(0.001, periodMultiple(v.store.id, "mtd"))), 0);
+  const sales = figs.reduce((a, f) => a + f.sales, 0);
+  const bills = figs.reduce((a, f) => a + f.bills, 0);
+  const qty = figs.reduce((a, f) => a + f.qty, 0);
+  const footfall = figs.reduce((a, f) => a + f.footfall, 0);
+  const target = figs.reduce((a, f) => a + f.target, 0);
+  const lySales = figs.reduce((a, f) => a + f.lySales, 0);
+  const days = figs[0]?.days ?? 0;
 
   const sellableUnits = vitals.reduce((a, v) => a + v.sellableUnits, 0);
   const norm = stores.reduce((a, s) => a + s.norm, 0);
@@ -1466,6 +1553,9 @@ export function estateSummary(stores: Store[], period: Period): EstateSummary {
   return {
     storeCount: stores.length,
     period,
+    days,
+    lySales,
+    growth: growth(sales, lySales),
     sales,
     bills,
     qty,
@@ -1500,6 +1590,8 @@ export interface StoreRow {
   store: Store;
   cluster: Cluster;
   sales: number;
+  lySales: number;
+  growth: number;
   achievement: number;
   fillRate: number;
   band: FillBand;
@@ -1511,19 +1603,25 @@ export interface StoreRow {
   openAsks: number;
 }
 
-export function storeRows(stores: Store[], period: Period, requests: { storeId: string; status: string }[] = []): StoreRow[] {
+export function storeRows(
+  stores: Store[],
+  period: Period,
+  requests: { storeId: string; status: string }[] = [],
+  dropId?: string,
+): StoreRow[] {
   return stores
     .map((store) => {
       const v = vitalsFor(store.id);
-      const m = periodMultiple(store.id, period);
+      const f = periodFigures(store.id, period, dropId);
       const mix = mixForStore(store.id);
       const total = mix.core + mix.fashion;
-      const mtdMult = periodMultiple(store.id, "mtd");
       return {
         store,
         cluster: clusterById(store.clusterId),
-        sales: v.todaySales * m,
-        achievement: v.mtdTargetToDate > 0 ? (v.todaySales * m) / (v.mtdTargetToDate * (period === "mtd" ? 1 : m / Math.max(0.001, mtdMult))) : 0,
+        sales: f.sales,
+        lySales: f.lySales,
+        growth: f.growth,
+        achievement: f.target > 0 ? f.sales / f.target : 0,
         fillRate: v.fillRate,
         band: fillBand(v.fillRate),
         sellThrough: v.sellThrough,

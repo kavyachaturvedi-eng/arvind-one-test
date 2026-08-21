@@ -24,7 +24,6 @@ import {
 import { NOW as _NOW, STYLES } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import EstateFilterBar from "@/components/EstateFilterBar";
-import DropBar from "@/components/DropBar";
 import { HOLDBACK_GOAL, inr, pct } from "@/lib/rules";
 
 type Cut = "category" | "cluster" | "type";
@@ -94,8 +93,6 @@ export default function Inventory() {
       </div>
 
       <EstateFilterBar />
-
-      <DropBar />
 
       <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
         <Stat

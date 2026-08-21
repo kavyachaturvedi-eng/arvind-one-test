@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { ROLES, STORES, storeById } from "@/lib/seed";
+import BrandMark from "@/components/BrandMark";
 import { AGENTS, agentApprovals } from "@/lib/agents";
 import { sizeSetExceptions } from "@/lib/engine";
 import { NAV_GROUPS, SECTION_ORDER, type NavChild } from "@/lib/nav";
@@ -119,9 +120,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </button>
 
           <div className="flex items-center gap-2.5 shrink-0">
-            <div className="w-9 h-9 grid place-items-center text-white font-medium" style={{ background: "var(--text-primary)" }}>
-              1
-            </div>
+            <BrandMark size={36} />
             <div className="leading-tight hidden sm:block">
               <div className="text-[15px] font-medium text-ink tracking-tight">Arvind <span className="serif-accent">One</span></div>
               <div className="label">Retail operations</div>

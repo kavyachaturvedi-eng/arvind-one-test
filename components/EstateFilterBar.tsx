@@ -9,8 +9,13 @@
 import React from "react";
 import { Card, Chip } from "@/components/ui";
 import { NO_FILTERS, filtersActive, planningStores } from "@/lib/engine";
-import { CLUSTERS } from "@/lib/seed";
+import { CLUSTERS, DROPS, NOW } from "@/lib/seed";
 import { useApp } from "@/lib/state";
+
+function landedLabel(landsAt: number): string {
+  const days = Math.round((landsAt - NOW) / 86_400_000);
+  return days > 0 ? `in ${days}d` : `${Math.abs(days)}d ago`;
+}
 
 export default function EstateFilterBar() {
   const app = useApp();
@@ -23,6 +28,21 @@ export default function EstateFilterBar() {
   return (
     <Card pad={false}>
       <div className="p-3 flex items-end gap-3 flex-wrap">
+        <div>
+          <div className="label mb-1">Drop</div>
+          <select
+            value={app.estate.dropId}
+            data-filter="drop"
+            onChange={(e) => app.setDrop(e.target.value)}
+            className="border border-line bg-raised px-2 py-1.5 text-xs text-ink"
+          >
+            {DROPS.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.label} · {landedLabel(d.landsAt)}
+              </option>
+            ))}
+          </select>
+        </div>
         <Filter label="Region" name="region" value={filters.region} onChange={(v) => app.setFilter({ region: v })} options={regions.map((r) => [r, r])} />
         <Filter label="Cluster" name="cluster" value={filters.cluster} onChange={(v) => app.setFilter({ cluster: v })} options={clusters.map((c) => [c.id, c.name])} />
         <Filter label="Grade" name="grade" value={filters.grade} onChange={(v) => app.setFilter({ grade: v })} options={[["A", "A"], ["B", "B"], ["C", "C"]]} />

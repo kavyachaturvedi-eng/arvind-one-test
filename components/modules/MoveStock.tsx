@@ -12,10 +12,12 @@ import { Callout, Card, Chip, SectionTitle, SortTh, Stat, Swatch, Table, Tabs, T
 import { PLANNING_BRAND, applyMove, planningStores, unitsAt, validateMove, warehouseBySize, warehouseTotal } from "@/lib/engine";
 import { NOW, STYLES, storeById, styleById } from "@/lib/seed";
 import { useApp } from "@/lib/state";
+import StoreLink from "@/components/StoreLink";
 import { inr } from "@/lib/rules";
 import { CycleBuilder, CycleCard } from "@/components/modules/Renewal";
 import PullbackBuilder from "@/components/modules/PullbackBuilder";
 import type { Size, StockMove } from "@/lib/types";
+import SizeAllocator, { type SizeMap } from "@/components/SizeAllocator";
 import { SEEDED_MOVES } from "@/lib/seed";
 
 type MoveSort = "at" | "from" | "to" | "style" | "units";
@@ -28,41 +30,46 @@ export default function MoveStock() {
   const [from, setFrom] = useState<string>("warehouse");
   const [toStoreId, setToStoreId] = useState(stores[0]?.id ?? "");
   const [styleId, setStyleId] = useState(styles[0]?.id ?? "");
-  const [size, setSize] = useState<Size | "">("");
-  const [units, setUnits] = useState(0);
+  // Sizes are allocated together, not one variant at a time.
+  const [sizes, setSizes] = useState<SizeMap>({});
   const [spread, setSpread] = useState(false);
   const [pull, setPull] = useState(false);
 
   const style = styleById(styleId);
   const bySize = useMemo(() => warehouseBySize(styleId), [styleId]);
   // Same reason as the cycle builder: default to a size that has stock behind it.
-  const deepest = useMemo(() => {
-    if (from === "warehouse") return [...bySize].sort((a, b) => b.units - a.units)[0]?.size ?? style.coreSizes[0];
-    return [...style.sizes].sort((a, b) => unitsAt(from, styleId, b) - unitsAt(from, styleId, a))[0] ?? style.coreSizes[0];
-  }, [bySize, from, styleId, style.sizes, style.coreSizes]);
-  const chosenSize = (size || deepest) as Size;
 
-  const available = from === "warehouse" ? (bySize.find((b) => b.size === chosenSize)?.units ?? 0) : unitsAt(from, styleId, chosenSize);
-  const request = { from, toStoreId, styleId, size: chosenSize, units };
-  const errors = units > 0 ? validateMove(request) : [];
+  const total = Object.values(sizes).reduce((a, n) => a + (n ?? 0), 0);
+  const errors = useMemo(
+    () =>
+      Object.entries(sizes)
+        .filter(([, n]) => (n ?? 0) > 0)
+        .flatMap(([sz, n]) => validateMove({ from, toStoreId, styleId, size: sz as Size, units: n as number })),
+    [sizes, from, toStoreId, styleId],
+  );
 
   function move() {
-    if (errors.length > 0 || units <= 0) return;
-    if (!applyMove(request)) return;
-    const record: StockMove = {
-      id: `MV-${app.moves.length + 1}`,
-      at: NOW,
-      by: app.actorName,
-      from,
-      toStoreId,
-      styleId,
-      size: chosenSize,
-      units,
-      reason: "Moved by planning",
-    };
-    app.dispatch({ type: "cycle:apply", id: `MANUAL-${app.moves.length + 1}`, moves: [record], by: app.actorName });
-    app.toastNow(`${units} × ${style.name} (${chosenSize}) → ${storeById(toStoreId).name}`, "good");
-    setUnits(0);
+    if (errors.length > 0 || total <= 0) return;
+    const moves: StockMove[] = [];
+    Object.entries(sizes).forEach(([sz, n], i) => {
+      if (!n || n <= 0) return;
+      if (!applyMove({ from, toStoreId, styleId, size: sz as Size, units: n })) return;
+      moves.push({
+        id: `MV-${app.moves.length + 1}-${i}`,
+        at: NOW,
+        by: app.actorName,
+        from,
+        toStoreId,
+        styleId,
+        size: sz as Size,
+        units: n,
+        reason: "Moved by planning",
+      });
+    });
+    if (moves.length === 0) return;
+    app.dispatch({ type: "cycle:apply", id: `MANUAL-${app.moves.length + 1}`, moves, by: app.actorName });
+    app.toastNow(`${moves.reduce((a, m) => a + m.units, 0)} × ${style.name} → ${storeById(toStoreId).name}`, "good");
+    setSizes({});
   }
 
   // Allocation and pull-back cycles are raised here, so they are decided here.
@@ -123,8 +130,7 @@ export default function MoveStock() {
               data-move-style
               onChange={(e) => {
                 setStyleId(e.target.value);
-                setSize("");
-                setUnits(0);
+                setSizes({});
               }}
               className={inputCls}
             >
@@ -135,32 +141,15 @@ export default function MoveStock() {
               ))}
             </select>
           </Field>
-          <Field label="Size">
-            <select value={chosenSize} data-move-size onChange={(e) => setSize(e.target.value as Size)} className={inputCls}>
-              {style.sizes.map((sz) => (
-                <option key={sz} value={sz}>
-                  {sz}
-                  {from === "warehouse" ? ` — ${bySize.find((b) => b.size === sz)?.units ?? 0} in warehouse` : ` — ${unitsAt(from, styleId, sz)} on floor`}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Units">
-            <input
-              type="number"
-              min={0}
-              max={available}
-              value={units}
-              data-move-units
-              onChange={(e) => setUnits(Math.max(0, Number(e.target.value) || 0))}
-              className={`${inputCls} num`}
-            />
-          </Field>
           <div className="flex items-end">
-            <button className="btn-primary w-full" data-move-confirm disabled={units <= 0 || errors.length > 0} onClick={move}>
-              Move {units > 0 ? `${units} units` : ""}
+            <button className="btn-primary w-full" data-move-confirm disabled={total <= 0 || errors.length > 0} onClick={move}>
+              Move {total > 0 ? `${total} units` : ""}
             </button>
           </div>
+        </div>
+
+        <div className="mt-4">
+          <SizeAllocator styleId={styleId} toStoreId={toStoreId} from={from} value={sizes} onChange={setSizes} />
         </div>
 
         <div className="mt-3 flex items-center gap-3 flex-wrap text-xs">
@@ -217,8 +206,8 @@ export default function MoveStock() {
               {sortedMoves.map((m) => (
                 <tr key={m.id} data-move-row>
                   <Td className="num text-xs whitespace-nowrap">{fmtDateTime(m.at)}</Td>
-                  <Td className="text-ink2">{m.from === "warehouse" ? "Warehouse" : storeById(m.from).name}</Td>
-                  <Td className="text-ink">{m.toStoreId === "warehouse" ? "Warehouse" : storeById(m.toStoreId).name}</Td>
+                  <Td>{m.from === "warehouse" ? <span className="text-ink2">Warehouse</span> : <StoreLink storeId={m.from} muted />}</Td>
+                  <Td>{m.toStoreId === "warehouse" ? <span className="text-ink2">Warehouse</span> : <StoreLink storeId={m.toStoreId} />}</Td>
                   <Td className="num text-xs text-ink2">{m.styleId}</Td>
                   <Td>{styleById(m.styleId).name}</Td>
                   <Td className="num">{m.size}</Td>

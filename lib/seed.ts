@@ -973,7 +973,9 @@ export const SEASONS: Season[] = [
   {
     id: "AW26",
     name: "Autumn/Winter 26",
-    startsAt: Date.UTC(2026, 7, 15, 4, 0, 0),
+    // The launch drop has landed and is trading, so the estate is three weeks
+    // into the season on the demo clock — which is why "this drop" has figures.
+    startsAt: Date.UTC(2026, 6, 20, 4, 0, 0),
     fullPriceEndsAt: Date.UTC(2027, 0, 10, 4, 0, 0),
     endsAt: Date.UTC(2027, 1, 28, 4, 0, 0),
   },
@@ -983,7 +985,7 @@ export const CURRENT_SEASON = SEASONS[1];
 export const seasonById = (id: string) => SEASONS.find((s) => s.id === id)!;
 
 export const DROPS: Drop[] = [
-  { id: "AW26-D1", seasonId: "AW26", index: 1, label: "Launch", landsAt: Date.UTC(2026, 7, 15, 4, 0, 0), pctOfBuy: 0.45 },
+  { id: "AW26-D1", seasonId: "AW26", index: 1, label: "Launch", landsAt: Date.UTC(2026, 6, 24, 4, 0, 0), pctOfBuy: 0.45 },
   { id: "AW26-D2", seasonId: "AW26", index: 2, label: "Festive", landsAt: Date.UTC(2026, 8, 3, 4, 0, 0), pctOfBuy: 0.2 },
   { id: "AW26-D3", seasonId: "AW26", index: 3, label: "Winter", landsAt: Date.UTC(2026, 9, 8, 4, 0, 0), pctOfBuy: 0.1 },
 ];
@@ -1098,6 +1100,37 @@ export function createStore(input: NewStoreInput): Store {
   const cluster = CLUSTERS.find((c) => c.id === input.clusterId);
   if (cluster && !cluster.cities.includes(input.city)) cluster.cities.push(input.city);
 
+  // A store is not staffed by magic: it gets a manager and a floor, reporting
+  // into the cluster it was opened in, or People would have a hole in it.
+  PEOPLE.push({
+    id: `SM-${store.id}`,
+    name: input.managerName,
+    role: "Store manager",
+    phone: demoPhone(7200 + index),
+    scope: store.id,
+    reportsTo: `CM-${store.clusterId}`,
+  });
+  for (let k = 0; k < 2; k++) {
+    PEOPLE.push({
+      id: `SS-${store.id}-${k}`,
+      name: `${FLOOR_FIRST[(index * 3 + k) % FLOOR_FIRST.length]} ${FLOOR_LAST[(index * 7 + k) % FLOOR_LAST.length]}`,
+      role: "Store staff",
+      phone: demoPhone(7400 + index * 5 + k),
+      scope: store.id,
+      reportsTo: `SM-${store.id}`,
+    });
+  }
+
+  // A new door joins the hierarchy too, so planning can call someone about it.
+  //
+  // Guarded, because PEOPLE is a lazily-initialised module constant: touching it
+  // here runs its initialiser over the STORES array we have just appended to,
+  // which already builds this store's chain. Without the guard the door gets two
+  // managers and four staff.
+  if (!PEOPLE.some((pp) => pp.id === `SM-${store.id}`)) {
+    PEOPLE.push(...peopleForNewStore(store, index));
+  }
+
   storeAddedListener?.(store, rows);
   return store;
 }
@@ -1169,3 +1202,94 @@ export const SEEDED_HQ_TASKS: HqAssignment[] = (() => {
     raisedAt: NOW + dueOffset - sla * HOUR,
   }));
 })();
+
+// ── The people, against the stores ───────────────────────────────────────────
+//
+// Region head → cluster manager → store manager → floor. Planning and Admin
+// need to know who to call about a store, which means the hierarchy has to be
+// in the system rather than in somebody's phone.
+
+export interface Person {
+  id: string;
+  name: string;
+  role: "Region head" | "Cluster manager" | "Store manager" | "Store staff";
+  phone: string;
+  /** Region for a region head, cluster id for a cluster manager, else store id. */
+  scope: string;
+  reportsTo?: string;
+}
+
+const REGION_HEADS: Array<[Region, string]> = [
+  ["North", "Rajeev Malhotra"],
+  ["South", "Deepa Krishnan"],
+  ["East", "Abhijit Sen"],
+  ["West", "Nandini Rao"],
+];
+
+const FLOOR_FIRST = ["Aditya", "Sana", "Devansh", "Kiran", "Ishita", "Rohan", "Tara", "Yash", "Nikita", "Arjun"];
+const FLOOR_LAST = ["Rane", "Qureshi", "Patil", "Joshi", "Malhotra", "Bhat", "Menon", "Kapoor", "Sharma", "Iyer"];
+
+/** A 10-digit mobile that is obviously synthetic — 99xxx, never a real range. */
+function demoPhone(seed: number): string {
+  const r = rng(seed);
+  return `99${String(10_000_000 + Math.floor(r() * 89_000_000)).slice(0, 8)}`;
+}
+
+/**
+ * The people attached to one store: its manager, and two named floor staff.
+ * Extracted so a store opened at runtime gets a chain too — a door with stock
+ * and nobody to call is not a store anyone can chase.
+ */
+export function peopleForNewStore(store: Store, si: number): Person[] {
+  const out: Person[] = [
+    {
+      id: `SM-${store.id}`,
+      name: store.managerName,
+      role: "Store manager",
+      phone: demoPhone(7200 + si),
+      scope: store.id,
+      reportsTo: `CM-${store.clusterId}`,
+    },
+  ];
+  const r = rng(7300 + si);
+  for (let k = 0; k < 2; k++) {
+    const first = FLOOR_FIRST[(si * 3 + k) % FLOOR_FIRST.length];
+    const last = FLOOR_LAST[(si * 7 + k) % FLOOR_LAST.length];
+    out.push({
+      id: `SS-${store.id}-${k}`,
+      name: `${first} ${last}`,
+      role: "Store staff",
+      phone: demoPhone(7400 + si * 5 + k),
+      scope: store.id,
+      reportsTo: `SM-${store.id}`,
+    });
+    r();
+  }
+  return out;
+}
+
+export const PEOPLE: Person[] = (() => {
+  const out: Person[] = [];
+
+  REGION_HEADS.forEach(([region, name], i) => {
+    out.push({ id: `RH-${region}`, name, role: "Region head", phone: demoPhone(7000 + i), scope: region });
+  });
+
+  CLUSTERS.forEach((c, i) => {
+    out.push({
+      id: `CM-${c.id}`,
+      name: c.managerName,
+      role: "Cluster manager",
+      phone: demoPhone(7100 + i),
+      scope: c.id,
+      reportsTo: `RH-${c.region}`,
+    });
+  });
+
+  STORES.forEach((store, si) => out.push(...peopleForNewStore(store, si)));
+
+  return out;
+})();
+
+export const peopleForStore = (storeId: string) => PEOPLE.filter((p) => p.scope === storeId);
+export const personById = (id: string) => PEOPLE.find((p) => p.id === id);

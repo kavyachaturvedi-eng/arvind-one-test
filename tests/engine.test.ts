@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CLUSTERS, CURRENT_SEASON, METRICS, NOW, OTB, ROLES, STOCK, STORES, STYLES, createStore, dropsForSeason, rng } from "../lib/seed";
+import type { Period } from "../lib/engine";
+import { CLUSTERS, CURRENT_SEASON, PEOPLE, METRICS, NOW, OTB, ROLES, STOCK, STORES, STYLES, createStore, dropsForSeason, rng } from "../lib/seed";
 import { dayOfWeekIST, fillBand, lastRunAt, maxSets, mixVerdict, otbRemaining, qualifiesForRun, sizeCurve } from "../lib/rules";
 import {
   allVitals,
@@ -44,7 +45,10 @@ import {
   validatePullback,
   validateMove,
   NO_FILTERS,
+  PERIODS,
+  PERIOD_LABEL,
   PLANNING_BRAND,
+  periodDays,
   estateSummary,
   filterStores,
   filtersActive,
@@ -997,19 +1001,21 @@ describe("periods", () => {
     const stores = planningStores();
     const today = estateSummary(stores, "today");
     const week = estateSummary(stores, "week");
-    const mtd = estateSummary(stores, "mtd");
+    const month = estateSummary(stores, "month");
     expect(week.sales).toBeGreaterThan(today.sales);
-    expect(mtd.sales).toBeGreaterThan(week.sales);
+    expect(month.sales).toBeGreaterThan(week.sales);
   });
 
-  it("keeps a single store's per-bill ratios identical across periods", () => {
+  it("keeps a single store's per-bill ratios stable across periods", () => {
     const store = planningStores()[0];
     const today = estateSummary([store], "today");
     const week = estateSummary([store], "week");
-    // Sales and bills scale by the same multiple, so the rate cannot move.
-    expect(week.atv).toBeCloseTo(today.atv, 6);
-    expect(week.upt).toBeCloseTo(today.upt, 6);
-    expect(week.asp).toBeCloseTo(today.asp, 6);
+    // Sales and bills scale together, so the rate holds — but both are rounded
+    // to whole units, so it lands within a fraction of a percent, not exactly.
+    const near = (a: number, b: number) => Math.abs(a - b) / b;
+    expect(near(week.atv, today.atv)).toBeLessThan(0.01);
+    expect(near(week.upt, today.upt)).toBeLessThan(0.01);
+    expect(near(week.asp, today.asp)).toBeLessThan(0.01);
   });
 
   it("lets the estate's blended ATV drift only slightly, from the store mix", () => {
@@ -1025,10 +1031,10 @@ describe("periods", () => {
   it("leaves stock figures alone — inventory is a position, not a flow", () => {
     const stores = planningStores();
     const today = estateSummary(stores, "today");
-    const mtd = estateSummary(stores, "mtd");
-    expect(mtd.sellableUnits).toBe(today.sellableUnits);
-    expect(mtd.fillRate).toBeCloseTo(today.fillRate, 6);
-    expect(mtd.valueAtRisk).toBe(today.valueAtRisk);
+    const month = estateSummary(stores, "month");
+    expect(month.sellableUnits).toBe(today.sellableUnits);
+    expect(month.fillRate).toBeCloseTo(today.fillRate, 6);
+    expect(month.valueAtRisk).toBe(today.valueAtRisk);
   });
 
   it("is deterministic — the same period twice gives the same number", () => {
@@ -1480,5 +1486,133 @@ describe("warehouse depth supports both stories", () => {
       return maxSets(curve, avail) > 0;
     });
     expect(withSets.length).toBeGreaterThan(3);
+  });
+});
+
+describe("the full period range", () => {
+  it("offers every window a planner asked for", () => {
+    expect(PERIODS).toEqual(["today", "week", "month", "quarter", "drop", "season", "year", "three_years"]);
+    PERIODS.forEach((p) => expect(PERIOD_LABEL[p].length).toBeGreaterThan(0));
+  });
+
+  it("grows monotonically with the window", () => {
+    const stores = planningStores();
+    const order: Period[] = ["today", "week", "month", "quarter", "year", "three_years"];
+    const sales = order.map((p) => estateSummary(stores, p).sales);
+    for (let i = 1; i < sales.length; i++) expect(sales[i]).toBeGreaterThan(sales[i - 1]);
+  });
+
+  it("counts the right number of days for each window on the frozen clock", () => {
+    expect(periodDays("today")).toBe(1);
+    expect(periodDays("week")).toBe(7);
+    // 13 Aug, so month-to-date is 12 days and the year is well past halfway.
+    expect(periodDays("month")).toBe(12);
+    expect(periodDays("year")).toBeGreaterThan(200);
+    expect(periodDays("three_years")).toBe(1095);
+    expect(periodDays("season")).toBeGreaterThan(0);
+  });
+
+  it("gives the landed drop days and an unlanded one none", () => {
+    expect(periodDays("drop", "AW26-D1")).toBeGreaterThan(0);
+    expect(periodDays("drop", "AW26-D2")).toBe(0);
+    expect(periodDays("drop", "AW26-D3")).toBe(0);
+    expect(periodDays("drop", "NOPE")).toBe(0);
+  });
+
+  it("returns zeros rather than nonsense for a drop that has not landed", () => {
+    const s = estateSummary(planningStores(), "drop", "AW26-D2");
+    expect(s.days).toBe(0);
+    expect(s.sales).toBe(0);
+    expect(s.lySales).toBe(0);
+    expect(s.growth).toBe(0);
+    expect(Number.isFinite(s.atv)).toBe(true);
+    // Stock is a position, not a flow — it is still there.
+    expect(s.sellableUnits).toBeGreaterThan(0);
+  });
+
+  it("compares every window against last year", () => {
+    const stores = planningStores();
+    (["today", "week", "month", "quarter", "season", "year"] as Period[]).forEach((p) => {
+      const s = estateSummary(stores, p, "AW26-D1");
+      expect(s.lySales).toBeGreaterThan(0);
+      expect(Number.isFinite(s.growth)).toBe(true);
+      // Growth is derived from the two figures on screen, not invented.
+      expect(s.growth).toBeCloseTo((s.sales - s.lySales) / s.lySales, 6);
+    });
+  });
+
+  it("varies growth by window rather than repeating one number", () => {
+    const stores = planningStores();
+    const growths = (["week", "month", "quarter", "year"] as Period[]).map((p) => estateSummary(stores, p).growth.toFixed(4));
+    expect(new Set(growths).size).toBeGreaterThan(1);
+  });
+
+  it("is deterministic for every window", () => {
+    const stores = planningStores();
+    PERIODS.forEach((p) => {
+      expect(estateSummary(stores, p, "AW26-D1").sales).toBe(estateSummary(stores, p, "AW26-D1").sales);
+    });
+  });
+
+  it("keeps store rows adding up to the estate in every window", () => {
+    const stores = planningStores();
+    (["today", "week", "month", "year"] as Period[]).forEach((p) => {
+      const rows = storeRows(stores, p, [], "AW26-D1");
+      const s = estateSummary(stores, p, "AW26-D1");
+      expect(rows.reduce((a, r) => a + r.sales, 0)).toBe(s.sales);
+      expect(rows.reduce((a, r) => a + r.lySales, 0)).toBe(s.lySales);
+    });
+  });
+});
+
+describe("the people hierarchy", () => {
+  it("gives every store a manager and floor staff", () => {
+    STORES.forEach((s) => {
+      const mine = PEOPLE.filter((p) => p.scope === s.id);
+      expect(mine.some((p) => p.role === "Store manager")).toBe(true);
+      expect(mine.filter((p) => p.role === "Store staff").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("names the store's own manager, not a different one", () => {
+    STORES.forEach((s) => {
+      const sm = PEOPLE.find((p) => p.role === "Store manager" && p.scope === s.id)!;
+      expect(sm.name).toBe(s.managerName);
+    });
+  });
+
+  it("chains every person up to a region head", () => {
+    const byId = new Map(PEOPLE.map((p) => [p.id, p]));
+    PEOPLE.filter((p) => p.role !== "Region head").forEach((p) => {
+      let cur = p;
+      let hops = 0;
+      while (cur.reportsTo && hops < 6) {
+        const next = byId.get(cur.reportsTo);
+        expect(next).toBeDefined();
+        cur = next!;
+        hops++;
+      }
+      expect(cur.role).toBe("Region head");
+    });
+  });
+
+  it("points each cluster manager at the head of their own region", () => {
+    PEOPLE.filter((p) => p.role === "Cluster manager").forEach((p) => {
+      const cluster = CLUSTERS.find((c) => c.id === p.scope)!;
+      expect(p.reportsTo).toBe(`RH-${cluster.region}`);
+    });
+  });
+
+  it("gives everyone a distinct id and a reachable-looking number", () => {
+    expect(new Set(PEOPLE.map((p) => p.id)).size).toBe(PEOPLE.length);
+    PEOPLE.forEach((p) => {
+      expect(p.phone).toMatch(/^99\d{8}$/);
+      expect(p.name.trim().length).toBeGreaterThan(3);
+    });
+  });
+
+  it("covers a new store the moment it opens", () => {
+    const store = STORES[STORES.length - 1];
+    expect(PEOPLE.some((p) => p.scope === store.id && p.role === "Store manager")).toBe(true);
   });
 });

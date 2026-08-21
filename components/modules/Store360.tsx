@@ -12,8 +12,8 @@
 import React, { useMemo } from "react";
 import { Card, Chip, Meter, SectionTitle, SortTh, Stat, StatusDot, Table, Tabs, Td, Th, useSort } from "@/components/ui";
 import EstateFilterBar from "@/components/EstateFilterBar";
-import DropBar from "@/components/DropBar";
 import {
+  PERIODS,
   PERIOD_LABEL,
   PLANNING_BRAND,
   estateSummary,
@@ -24,17 +24,18 @@ import {
   type Period,
 } from "@/lib/engine";
 import { useApp } from "@/lib/state";
+import StoreLink from "@/components/StoreLink";
 import { inr, pct } from "@/lib/rules";
 
-type StoreSort = "name" | "cluster" | "grade" | "sales" | "ach" | "fill" | "st" | "core" | "broken" | "risk" | "ist" | "asks";
+type StoreSort = "name" | "cluster" | "grade" | "sales" | "growth" | "ach" | "fill" | "st" | "core" | "broken" | "risk" | "ist" | "asks";
 
 export default function Store360() {
   const app = useApp();
   const { filters, period } = app.estate;
 
   const stores = useMemo(() => filterStores(filters), [filters]);
-  const summary = useMemo(() => estateSummary(stores, period), [stores, period]);
-  const rows = useMemo(() => storeRows(stores, period, app.requests), [stores, period, app.requests]);
+  const summary = useMemo(() => estateSummary(stores, period, app.estate.dropId), [stores, period, app.estate.dropId]);
+  const rows = useMemo(() => storeRows(stores, period, app.requests, app.estate.dropId), [stores, period, app.requests, app.estate.dropId]);
 
 
   const sorter = useSort<StoreSort>("risk");
@@ -44,6 +45,7 @@ export default function Store360() {
       case "cluster": return r.cluster.name;
       case "grade": return r.store.grade;
       case "sales": return r.sales;
+      case "growth": return r.growth;
       case "ach": return r.achievement;
       case "fill": return r.fillRate;
       case "st": return r.sellThrough;
@@ -68,17 +70,11 @@ export default function Store360() {
         <Tabs
           value={period}
           onChange={(p: Period) => app.setPeriod(p)}
-          options={[
-            { id: "today", label: PERIOD_LABEL.today },
-            { id: "week", label: PERIOD_LABEL.week },
-            { id: "mtd", label: PERIOD_LABEL.mtd },
-          ]}
+          options={PERIODS.map((pd) => ({ id: pd, label: PERIOD_LABEL[pd] }))}
         />
       </div>
 
       <EstateFilterBar />
-
-      <DropBar />
 
       {stores.length === 0 ? (
         <Card>
@@ -95,9 +91,21 @@ export default function Store360() {
               emphasis
             />
             <Stat
-              label={`Sales · ${PERIOD_LABEL[period].toLowerCase()}`}
+              label={PERIOD_LABEL[period]}
               value={inr(summary.sales, { compact: true })}
-              sub={`${pct(summary.achievement)} of target`}
+              sub={
+                summary.days === 0 ? (
+                  "Not landed yet"
+                ) : (
+                  <span>
+                    {pct(summary.achievement)} of target ·{" "}
+                    <span style={{ color: summary.growth >= 0 ? "var(--status-good)" : "var(--status-critical)" }}>
+                      {summary.growth >= 0 ? "+" : ""}
+                      {pct(summary.growth)} vs LY
+                    </span>
+                  </span>
+                )
+              }
               tone={summary.achievement >= 1 ? "good" : summary.achievement >= 0.92 ? "warn" : "critical"}
             />
             <Stat
@@ -125,6 +133,7 @@ export default function Store360() {
               <Table>
                 <thead>
                   <tr>
+                    <Th>Period</Th>
                     <Th align="right">Sales</Th>
                     <Th align="right">Bills</Th>
                     <Th align="right">Qty</Th>
@@ -136,6 +145,7 @@ export default function Store360() {
                 </thead>
                 <tbody>
                   <tr>
+                    <Td className="text-ink2">This year</Td>
                     <Td align="right" className="num">{inr(summary.sales, { compact: true })}</Td>
                     <Td align="right" className="num">{Math.round(summary.bills).toLocaleString("en-IN")}</Td>
                     <Td align="right" className="num">{Math.round(summary.qty).toLocaleString("en-IN")}</Td>
@@ -143,6 +153,20 @@ export default function Store360() {
                     <Td align="right" className="num">{summary.upt.toFixed(2)}</Td>
                     <Td align="right" className="num">{inr(summary.asp)}</Td>
                     <Td align="right" className="num">{pct(summary.conversion)}</Td>
+                  </tr>
+                  <tr>
+                    <Td className="text-ink2">Last year</Td>
+                    <Td align="right" className="num text-ink2">{inr(summary.lySales, { compact: true })}</Td>
+                    <Td align="right" className="num text-ink2" colSpan={6} />
+                  </tr>
+                  <tr>
+                    <Td className="text-ink2">Growth</Td>
+                    <Td align="right" colSpan={7}>
+                      <span className="num" style={{ color: summary.growth >= 0 ? "var(--status-good)" : "var(--status-critical)" }}>
+                        {summary.growth >= 0 ? "+" : ""}
+                        {pct(summary.growth)}
+                      </span>
+                    </Td>
                   </tr>
                 </tbody>
               </Table>
@@ -184,8 +208,9 @@ export default function Store360() {
                 <tr>
                   <SortTh sortKey="name" sorter={sorter}>Store</SortTh>
                   <SortTh sortKey="cluster" sorter={sorter}>Cluster</SortTh>
-                  <SortTh sortKey="grade" sorter={sorter}>Grade</SortTh>
-                  <SortTh sortKey="sales" sorter={sorter} align="right">Sales · {PERIOD_LABEL[period].toLowerCase()}</SortTh>
+                  <SortTh sortKey="grade" sorter={sorter}>Store grade</SortTh>
+                  <SortTh sortKey="sales" sorter={sorter} align="right">Sales</SortTh>
+                  <SortTh sortKey="growth" sorter={sorter} align="right">vs LY</SortTh>
                   <SortTh sortKey="ach" sorter={sorter} align="right">vs target</SortTh>
                   <SortTh sortKey="fill" sorter={sorter} align="right">Fill rate</SortTh>
                   <SortTh sortKey="st" sorter={sorter} align="right">Sell-through</SortTh>
@@ -207,12 +232,18 @@ export default function Store360() {
                     <Td>
                       <div className="flex items-center gap-2">
                         <StatusDot tone={r.band === "healthy" ? "good" : r.band === "thin" ? "critical" : "warn"} />
-                        <span className="text-ink">{r.store.name}</span>
+                        <StoreLink storeId={r.store.id} />
                       </div>
                     </Td>
                     <Td className="text-ink2">{r.cluster.name}</Td>
                     <Td>{r.store.grade}</Td>
                     <Td align="right" className="num">{inr(r.sales, { compact: true })}</Td>
+                    <Td align="right" className="num">
+                      <span style={{ color: r.growth >= 0 ? "var(--status-good)" : "var(--status-critical)" }}>
+                        {r.growth >= 0 ? "+" : ""}
+                        {pct(r.growth)}
+                      </span>
+                    </Td>
                     <Td align="right" className="num">{pct(r.achievement)}</Td>
                     <Td align="right" className="num">{pct(r.fillRate)}</Td>
                     <Td align="right" className="num">{pct(r.sellThrough)}</Td>

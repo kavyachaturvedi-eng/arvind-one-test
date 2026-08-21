@@ -44,6 +44,7 @@ import HqTasks from "@/components/modules/HqTasks";
 import ActivityLog from "@/components/modules/ActivityLog";
 import Stores from "@/components/modules/Stores";
 import Rules from "@/components/modules/Rules";
+import People from "@/components/modules/People";
 import Replen from "@/components/modules/Replen";
 import Renewal from "@/components/modules/Renewal";
 import MoveStock from "@/components/modules/MoveStock";
@@ -80,6 +81,8 @@ function Router() {
       return <PlanningSettings />;
     case "rules":
       return <Rules />;
+    case "people":
+      return <People />;
     case "hqtask":
       return <HqTasks />;
     case "log":

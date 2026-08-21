@@ -12,43 +12,46 @@
 :root {
   color-scheme: light;
 
-  /* Ink & paper */
-  --surface-1: #FAFAF8;          /* paper-2 */
+  /* Ink & paper — ink carries a navy cast so the whole page reads Tommy */
+  --surface-1: #FAFAFB;          /* paper-2 */
   --surface-2: #FFFFFF;          /* paper   */
-  --plane: #F4F4F1;              /* paper-3 */
-  --text-primary: #0A0A0A;       /* ink     */
-  --text-secondary: #1A1A1A;     /* ink-2   */
-  --text-muted: #5C6066;         /* muted   */
-  --line: #E5E5E5;               /* rule    */
-  --grid: #F0F0F0;               /* rule-2  */
-  --baseline: #8A8F96;           /* muted-2 */
+  --plane: #F2F4F7;              /* paper-3 */
+  --text-primary: #0A1633;       /* ink     */
+  --text-secondary: #16233F;     /* ink-2   */
+  --text-muted: #5B6478;         /* muted   */
+  --line: #E2E5EB;               /* rule    */
+  --grid: #EDF0F4;               /* rule-2  */
+  --baseline: #8A93A6;           /* muted-2 */
 
-  /* The single accent */
-  --brand: #1E6FFF;
-  --brand-soft: #E8F0FF;
+  /* Tommy Hilfiger: navy leads, red is the flag accent */
+  --brand: #00174F;              /* Tommy navy */
+  --brand-soft: #E7EBF3;
+  --flag-red: #C8102E;           /* Tommy red  */
+  --flag-red-soft: #FBEAEC;
+  --flag-navy: #00174F;
 
-  /* Status — functional semantics, kept muted (a doctrine bend for an ops app) */
+  /* Status — functional semantics, with critical on the flag red */
   --status-good: #0A7C53;
   --status-warning: #9A6700;
   --status-serious: #B4552D;
-  --status-critical: #C0392B;
+  --status-critical: #C8102E;
   --success-text: #0A7C53;
 
   /* Soft status fills — derived from paper, never loud */
   --ok-soft: #EBF2EE;
   --warn-soft: #F5EEDD;
   --serious-soft: #F6EBE4;
-  --crit-soft: #F8EBE9;
+  --crit-soft: #FBEAEC;
 
-  /* Chart series — accent first, then editorial neutrals */
-  --series-1: #1E6FFF;
-  --series-2: #0A0A0A;
+  /* Chart series — navy, then red, then editorial neutrals */
+  --series-1: #00174F;
+  --series-2: #C8102E;
   --series-3: #0A7C53;
   --series-4: #9A6700;
-  --series-5: #5C6066;
-  --series-6: #B4552D;
-  --series-7: #8A8F96;
-  --series-8: #C0392B;
+  --series-5: #5B6478;
+  --series-6: #3E5C8A;
+  --series-7: #8A93A6;
+  --series-8: #B4552D;
 
   --f-display: "Inter Tight", -apple-system, BlinkMacSystemFont, sans-serif;
   --f-serif: "Source Serif 4", Georgia, serif;
@@ -123,8 +126,8 @@ h3 {
   }
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 text-sm font-medium
-           bg-[color:var(--text-primary)] text-white border border-transparent transition-colors
-           hover:bg-[color:var(--brand)] disabled:opacity-40 disabled:cursor-not-allowed;
+           bg-[color:var(--brand)] text-white border border-transparent transition-colors
+           hover:bg-[color:var(--flag-red)] disabled:opacity-40 disabled:cursor-not-allowed;
   }
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-2 px-2.5 py-1.5 text-sm

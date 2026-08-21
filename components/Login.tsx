@@ -5,6 +5,7 @@
 import React, { useState } from "react";
 import { ROLES, STORES } from "@/lib/seed";
 import { useApp } from "@/lib/state";
+import BrandMark from "@/components/BrandMark";
 import type { RoleId } from "@/lib/types";
 
 const ORDER: RoleId[] = ["staff", "store", "planner", "catplan", "leadership"];
@@ -47,7 +48,7 @@ export default function Login() {
       {/* Editorial brand panel */}
       <div className="hidden lg:flex flex-col justify-between p-14" style={{ background: "var(--text-primary)" }}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 grid place-items-center font-medium text-ink" style={{ background: "#fff" }}>1</div>
+          <BrandMark size={40} />
           <div className="label" style={{ color: "#8A8F96" }}>Arvind One · Retail operations</div>
         </div>
         <div>

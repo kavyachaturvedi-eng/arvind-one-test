@@ -90,6 +90,8 @@ export type ModuleId =
   | "asks"
   | "planset"
   | "rules"
+  | "people"
+  | "people"
   | "hqtask"
   | "renew"
   | "move"

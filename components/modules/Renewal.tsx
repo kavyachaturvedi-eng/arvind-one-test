@@ -14,6 +14,7 @@ import { NOW, STYLES, storeById, styleById } from "@/lib/seed";
 import { CYCLE_LABEL, useApp } from "@/lib/state";
 import { PLANNING_BRAND } from "@/lib/engine";
 import { inr, maxSets, pct, setsToUnits, sizeCurve, unitsPerSet, unitsToSets } from "@/lib/rules";
+import SizeAllocator, { type SizeMap } from "@/components/SizeAllocator";
 import type { Cycle, CycleLine, Size, StockMove } from "@/lib/types";
 
 export default function Renewal() {
@@ -275,7 +276,8 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
 
   // By store: one store, several SKUs.
   const [storeId, setStoreId] = useState(stores[0]?.id ?? "");
-  const [byStyle, setByStyle] = useState<Record<string, { size: Size; units: number }>>({});
+  const [byStyleSizes, setByStyleSizes] = useState<Record<string, SizeMap>>({});
+  const [openStyleRow, setOpenStyleRow] = useState<string | null>(null);
 
   const style = styleById(styleId);
   const bySize = useMemo(() => warehouseBySize(styleId), [styleId]);
@@ -300,7 +302,7 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
 
   const overSizes = bySize.filter((b) => (perSize[b.size] ?? 0) > b.units);
   const unitAllocated = Object.values(perSize).reduce((a, n) => a + (n ?? 0), 0);
-  const storeAllocated = Object.values(byStyle).reduce((a, p) => a + p.units, 0);
+  const storeAllocated = Object.values(byStyleSizes).reduce((a, m) => a + Object.values(m).reduce((b, n) => b + (n ?? 0), 0), 0);
   const allocated = mode === "unit" ? unitAllocated : storeAllocated;
   const over = mode === "unit" && overSizes.length > 0;
 
@@ -332,9 +334,11 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
               .filter(([, n]) => (n ?? 0) > 0)
               .map(([sz, n], i) => ({ id: `CL-${sid}-${sz}-${i}`, storeId: sid, styleId, size: sz as Size, units: n as number })),
           )
-        : Object.entries(byStyle)
-            .filter(([, p]) => p.units > 0)
-            .map(([sty, p], i) => ({ id: `CL-${i}`, storeId, styleId: sty, size: p.size, units: p.units }));
+        : Object.entries(byStyleSizes).flatMap(([sty, sizeMap]) =>
+            Object.entries(sizeMap)
+              .filter(([, n]) => (n ?? 0) > 0)
+              .map(([sz, n], i) => ({ id: `CL-${sty}-${sz}-${i}`, storeId, styleId: sty, size: sz as Size, units: n as number })),
+          );
 
     if (lines.length === 0 || over) return;
     const cycle: Cycle = {
@@ -350,7 +354,7 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
     app.dispatch({ type: "cycle:create", cycle });
     app.toastNow(`${CYCLE_LABEL[kind]} cycle created · ${allocated} units`, "good");
     setByStore({});
-    setByStyle({});
+    setByStyleSizes({});
     onClose();
   }
 
@@ -365,7 +369,7 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
           <span className="text-xs num" style={{ color: over ? "var(--status-critical)" : "var(--text-secondary)" }}>
             {mode === "unit"
               ? `${allocated} units across ${storesTouched} ${storesTouched === 1 ? "store" : "stores"} · ${total} in the warehouse`
-              : `${allocated} units across ${Object.values(byStyle).filter((p) => p.units > 0).length} styles`}
+              : `${allocated} units across ${Object.keys(byStyleSizes).filter((k) => Object.values(byStyleSizes[k]).some((n) => (n ?? 0) > 0)).length} styles`}
           </span>
           <button className="btn-primary" data-cycle-submit disabled={allocated === 0 || over} onClick={submit}>
             Send for approval
@@ -550,7 +554,7 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
                 data-cycle-store
                 onChange={(e) => {
                   setStoreId(e.target.value);
-                  setByStyle({});
+                  setByStyleSizes({});
                 }}
                 className={inputCls}
               >
@@ -562,78 +566,54 @@ export function CycleBuilder({ open, onClose, kind }: { open: boolean; onClose: 
               </select>
             </div>
 
-            <Table>
-              <thead>
-                <tr>
-                  <Th>SKU</Th>
-                  <Th>Style</Th>
-                  <Th>Colour</Th>
-                  <Th align="right">Has now</Th>
-                  <Th>Set</Th>
-                  <Th>Size</Th>
-                  <Th align="right">Warehouse</Th>
-                  <Th align="right">Allocate</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {styles.slice(0, 16).map((sty) => {
-                  const line = byStyle[sty.id] ?? { size: sty.coreSizes[0], units: 0 };
-                  const carried = gradedStyles(storeId, 80).find((g) => g.signal.style.id === sty.id);
-                  const wh = dcAvailable(sty.id, line.size);
-                  return (
-                    <tr key={sty.id}>
-                      <Td className="num text-xs text-ink2">{sty.id}</Td>
-                      <Td className="text-ink">{sty.name}</Td>
-                      <Td>
-                        <Swatch hex={sty.colourHex} label={sty.colour} />
-                      </Td>
-                      <Td align="right" className="num">{carried ? carried.signal.sellable : 0}</Td>
-                      <Td>
-                        {carried ? (
-                          <span className="inline-flex items-center gap-1.5">
-                            <StatusDot tone={carried.signal.health.status === "healthy" ? "good" : carried.signal.health.status === "broken" ? "critical" : "warn"} />
-                            <span className="text-xs text-ink2">
-                              {carried.signal.health.status === "healthy" ? "Healthy" : carried.signal.health.status === "broken" ? "Broken" : "At risk"}
-                            </span>
+            <div className="space-y-2">
+              {styles.slice(0, 16).map((sty) => {
+                const expanded = openStyleRow === sty.id;
+                const mine = Object.values(byStyleSizes[sty.id] ?? {}).reduce((a, n) => a + (n ?? 0), 0);
+                const carried = gradedStyles(storeId, 90).find((g) => g.signal.style.id === sty.id);
+                return (
+                  <div key={sty.id} className="border border-line" data-cycle-style-row>
+                    <button
+                      className="w-full text-left px-3 py-2.5 flex items-center gap-3 flex-wrap hover:bg-[color:var(--plane)]"
+                      data-cycle-expand
+                      onClick={() => setOpenStyleRow(expanded ? null : sty.id)}
+                    >
+                      <Swatch hex={sty.colourHex} />
+                      <span className="num text-xs text-ink2">{sty.id}</span>
+                      <span className="text-sm text-ink">{sty.name}</span>
+                      <span className="text-2xs text-muted">{sty.colour}</span>
+                      {carried ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <StatusDot
+                            tone={carried.signal.health.status === "healthy" ? "good" : carried.signal.health.status === "broken" ? "critical" : "warn"}
+                          />
+                          <span className="text-2xs text-ink2">
+                            {carried.signal.health.status === "healthy"
+                              ? `Healthy · ${carried.signal.sellable} here`
+                              : `${carried.signal.health.status === "broken" ? "Broken" : "At risk"}: ${carried.signal.health.missingCore.join(", ") || "—"} gone`}
                           </span>
-                        ) : (
-                          <span className="text-xs text-muted">Not carried</span>
-                        )}
-                      </Td>
-                      <Td>
-                        <select
-                          value={line.size}
-                          data-cycle-size
-                          onChange={(e) => setByStyle({ ...byStyle, [sty.id]: { size: e.target.value as Size, units: 0 } })}
-                          className="border border-line bg-raised px-2 py-1 text-xs text-ink num"
-                        >
-                          {sty.sizes.map((sz) => (
-                            <option key={sz} value={sz}>
-                              {sz}
-                              {sty.coreSizes.includes(sz) ? " · pivotal" : ""} — {dcAvailable(sty.id, sz)}
-                            </option>
-                          ))}
-                        </select>
-                      </Td>
-                      <Td align="right" className="num">{wh}</Td>
-                      <Td align="right">
-                        <input
-                          type="number"
-                          min={0}
-                          max={wh}
-                          value={line.units}
-                          data-cycle-qty
-                          onChange={(e) =>
-                            setByStyle({ ...byStyle, [sty.id]: { size: line.size, units: Math.max(0, Math.min(wh, Number(e.target.value) || 0)) } })
-                          }
-                          className="w-16 border border-line bg-raised px-2 py-1 text-sm text-ink text-right num"
+                        </span>
+                      ) : (
+                        <span className="text-2xs text-muted">Not carried</span>
+                      )}
+                      <span className="flex-1" />
+                      {mine > 0 && <Chip tone="brand">{mine} units</Chip>}
+                      <span className="text-2xs text-muted">{expanded ? "Hide" : "Sizes"}</span>
+                    </button>
+                    {expanded && (
+                      <div className="px-3 pb-3">
+                        <SizeAllocator
+                          styleId={sty.id}
+                          toStoreId={storeId}
+                          value={byStyleSizes[sty.id] ?? {}}
+                          onChange={(next) => setByStyleSizes({ ...byStyleSizes, [sty.id]: next })}
                         />
-                      </Td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </Table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </>
         )}
       </div>

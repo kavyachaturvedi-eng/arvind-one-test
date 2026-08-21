@@ -127,7 +127,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: "renew", label: "Renewal" },
       { id: "move", label: "Move stock" },
       { id: "alloc", label: "Allocation" },
-      { id: "moves", label: "Strategic IST" },
     ],
   },
   {
@@ -141,7 +140,10 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     key: "pdecide", label: "Decide", glyph: "⇉", roles: ["planner"], section: "Planning",
     children: [
+      // A strategic transfer is a store ask the engine raised, so it is decided
+      // alongside the ones a store raised itself.
       { id: "asks", label: "Store asks" },
+      { id: "moves", label: "Transfer queue" },
       { id: "hqtask", label: "Store tasks" },
       { id: "tickets", label: "Issues & SLA" },
     ],
@@ -150,6 +152,7 @@ export const NAV_GROUPS: NavGroup[] = [
     key: "pdata", label: "Data", glyph: "▤", roles: ["planner", "catplan"], section: "Planning",
     children: [
       { id: "reports", label: "Reports" },
+      { id: "people", label: "People" },
       { id: "log", label: "Activity log" },
       { id: "governance", label: "Metric Registry" },
       { id: "rules", label: "Rules" },
@@ -191,7 +194,10 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     key: "aest", label: "Estate", glyph: "▦", roles: ["leadership"], section: "Super Admin",
-    children: [{ id: "stores", label: "Stores" }],
+    children: [
+      { id: "stores", label: "Stores" },
+      { id: "people", label: "People" },
+    ],
   },
   {
     key: "aai", label: "AI", glyph: "✳", roles: ["leadership"], section: "Super Admin",
