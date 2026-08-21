@@ -5,7 +5,7 @@ import { ROLES, STORES, storeById } from "@/lib/seed";
 import BrandMark from "@/components/BrandMark";
 import { AGENTS, agentApprovals } from "@/lib/agents";
 import { sizeSetExceptions } from "@/lib/engine";
-import { NAV_GROUPS, SECTION_ORDER, type NavChild } from "@/lib/nav";
+import { NAV_GROUPS, SECTION_ORDER, type NavChild, isDemoRole } from "@/lib/nav";
 import { useApp, type ModuleId } from "@/lib/state";
 import CommandPalette from "./CommandPalette";
 import PublishTraining from "./PublishTraining";
@@ -338,9 +338,11 @@ function RoleSwitcher() {
         <button data-role="staff" onClick={() => app.setRole("staff")} title="Store Staff — floor and till operations" className={pill(app.role === "staff")}>
           Staff
         </button>
-        <button data-role="store" onClick={() => app.setRole("store")} title="Store Manager — insights and operations" className={pill(app.role === "store")}>
-          Manager
-        </button>
+        {isDemoRole("store") && (
+          <button data-role="store" onClick={() => app.setRole("store")} title="Store Manager — insights and operations" className={pill(app.role === "store")}>
+            Manager
+          </button>
+        )}
       </div>
 
       <span className="w-px h-5 bg-[color:var(--line)]" />
@@ -351,13 +353,17 @@ function RoleSwitcher() {
         <button data-role="planner" onClick={() => app.setRole("planner")} title="Retail Planning — the estate day to day" className={pill(app.role === "planner")}>
           Retail
         </button>
-        <button data-role="catplan" onClick={() => app.setRole("catplan")} title="Buying team — season, OTB, buy depth" className={pill(app.role === "catplan")}>
-          Buying
-        </button>
+        {isDemoRole("catplan") && (
+          <button data-role="catplan" onClick={() => app.setRole("catplan")} title="Buying team — season, OTB, buy depth" className={pill(app.role === "catplan")}>
+            Buying
+          </button>
+        )}
       </div>
-      <button data-role="leadership" onClick={() => app.setRole("leadership")} title="Leadership view" className={pill(app.role === "leadership")}>
-        Super Admin
-      </button>
+      {isDemoRole("leadership") && (
+        <button data-role="leadership" onClick={() => app.setRole("leadership")} title="Leadership view" className={pill(app.role === "leadership")}>
+          Super Admin
+        </button>
+      )}
     </div>
   );
 }

@@ -16,7 +16,12 @@ import {
   STOCK,
   STORES,
   STYLES,
+  PEOPLE,
+  STAFF,
+  VM_CHECKS,
+  categorySpace,
   clusterById,
+  vmStatus,
   onStoreAdded,
   rng,
   storeById,
@@ -35,7 +40,9 @@ import {
   inr,
   lastRunAt,
   markdownExposure,
+  mixGapVerdict,
   mixVerdict,
+  priceBandFor,
   qualifiesForRun,
   replenishmentDecision,
   DEFAULT_THRESHOLDS,
@@ -46,6 +53,12 @@ import {
   studBudDud,
   styleFinished,
   trueRos,
+  upt as uptOf,
+  uptUpside,
+  PRICE_BANDS,
+  UPT_TARGET,
+  SPACE_GAP_TRIGGER,
+  type MixGap,
   type FillBand,
   type MixVerdict,
   type ReplenishDecision,
@@ -55,6 +68,8 @@ import {
 import type {
   Brand,
   Category,
+  StaffKpi,
+  Season,
   Cluster,
   Drop,
   ProductType,
@@ -67,6 +82,7 @@ import type {
   Store,
   Style,
 } from "./types";
+import type { Person, SpaceLine, VmCheck } from "./seed";
 
 // ── Indexes (built once) ─────────────────────────────────────────────────────
 
@@ -2025,3 +2041,518 @@ export function markdownTrend(stores: Store[], period: Period, points = 14): num
   series[series.length - 1] = base;
   return series;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The intelligence layer
+//
+// Above this line, the read model answers "what is true". Below it, every
+// function answers "so what" — and each one is built to end in an action, not a
+// number. A store manager should be able to read one of these rows out loud and
+// know what to do this afternoon.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Mix: what the floor holds against what it sells ──────────────────────────
+
+export interface MixRow {
+  key: string;
+  label: string;
+  invUnits: number;
+  invShare: number;
+  soldUnits: number;
+  salesValue: number;
+  salesShare: number;
+  /** Inventory share minus sales share. Positive means over-invested. */
+  gap: number;
+  verdict: MixGap;
+  ros: number;
+  cover: number;
+}
+
+/**
+ * Both shares are on units, deliberately. Value-weighting the sales side and
+ * unit-weighting the stock side is the classic way to make a category look
+ * over-invested when it is only cheaper — the comparison has to be like for
+ * like. Sales value rides along as a column for context.
+ */
+function mixRows(rows: StockRow[], bucketOf: (style: Style) => { key: string; label: string }, order: string[]): MixRow[] {
+  const buckets = new Map<string, { label: string; inv: number; sold: number; value: number; ros: number }>();
+  for (const r of rows) {
+    const style = styleById(r.styleId);
+    const { key, label } = bucketOf(style);
+    const b = buckets.get(key) ?? { label, inv: 0, sold: 0, value: 0, ros: 0 };
+    b.inv += sellable(r);
+    b.sold += r.sold28;
+    b.value += r.sold28 * style.mrp;
+    b.ros += trueRos(r);
+    buckets.set(key, b);
+  }
+  const totalInv = [...buckets.values()].reduce((a, b) => a + b.inv, 0);
+  const totalSold = [...buckets.values()].reduce((a, b) => a + b.sold, 0);
+  return order
+    .filter((k) => buckets.has(k))
+    .map((key) => {
+      const b = buckets.get(key)!;
+      const invShare = totalInv > 0 ? b.inv / totalInv : 0;
+      const salesShare = totalSold > 0 ? b.sold / totalSold : 0;
+      return {
+        key,
+        label: b.label,
+        invUnits: b.inv,
+        invShare,
+        soldUnits: b.sold,
+        salesValue: Math.round(b.value),
+        salesShare,
+        gap: invShare - salesShare,
+        verdict: mixGapVerdict(invShare, salesShare),
+        ros: b.ros,
+        cover: coverDays(b.inv, b.ros),
+      };
+    })
+    .sort((a, b) => b.gap - a.gap);
+}
+
+function ownBrandRows(stores: Store[], brand: Brand = PLANNING_BRAND): StockRow[] {
+  const ids = new Set(stores.map((s) => s.id));
+  const mine = new Set(STYLES.filter((s) => s.brand === brand).map((s) => s.id));
+  return STOCK.filter((r) => ids.has(r.storeId) && mine.has(r.styleId));
+}
+
+/** Category mix for one store or a set of them. */
+export function categoryMix(stores: Store[]): MixRow[] {
+  const brand = stores[0]?.brand ?? PLANNING_BRAND;
+  return mixRows(ownBrandRows(stores, brand), (s) => ({ key: s.category, label: s.category }), CATEGORIES);
+}
+
+/** The same cut by price band — where the money is invested, not just the units. */
+export function priceBandMix(stores: Store[]): MixRow[] {
+  const brand = stores[0]?.brand ?? PLANNING_BRAND;
+  return mixRows(
+    ownBrandRows(stores, brand),
+    (s) => {
+      const band = priceBandFor(s.mrp);
+      return { key: band.key, label: band.label };
+    },
+    PRICE_BANDS.map((b) => b.key),
+  );
+}
+
+// ── Space against sales ──────────────────────────────────────────────────────
+
+export interface SpaceRow {
+  category: Category;
+  spaceShare: number;
+  bays: number;
+  salesShare: number;
+  invShare: number;
+  /** Space share minus sales share. Positive means the bay is not earning it. */
+  gap: number;
+  verdict: MixGap;
+}
+
+/**
+ * Floor space is the weakest input in the platform — see DATA_INPUTS. It is
+ * here because the question ("is the floor laid out the way the store actually
+ * sells?") is worth asking even while the answer is directional.
+ */
+export function spaceVsSales(storeId: string): SpaceRow[] {
+  const store = storeById(storeId);
+  const space = categorySpace(storeId);
+  const mix = categoryMix([store]);
+  const byCat = new Map(mix.map((m) => [m.key, m]));
+  return space
+    .map((line: SpaceLine) => {
+      const m = byCat.get(line.category);
+      const salesShare = m?.salesShare ?? 0;
+      return {
+        category: line.category,
+        spaceShare: line.share,
+        bays: line.bays,
+        salesShare,
+        invShare: m?.invShare ?? 0,
+        gap: line.share - salesShare,
+        verdict: mixGapVerdict(line.share, salesShare, SPACE_GAP_TRIGGER),
+      };
+    })
+    .sort((a, b) => b.gap - a.gap);
+}
+
+// ── Staff and UPT ────────────────────────────────────────────────────────────
+
+/**
+ * The home store has a hand-written roster. Every other door gets its people
+ * from the register, with the store's own bills and units spread across them —
+ * seeded, so the same store always shows the same team performing the same way.
+ */
+export function staffKpis(storeId: string): StaffKpi[] {
+  const seeded = STAFF.filter((s) => s.storeId === storeId);
+  if (seeded.length > 0) return seeded;
+  const v = vitalsFor(storeId);
+  const team: Person[] = PEOPLE.filter((p) => p.scope === storeId && (p.role === "Store manager" || p.role === "Store staff"));
+  if (team.length === 0) return [];
+  const r = rng(hash("staff" + storeId));
+  // The manager bills less than the floor; weights are seeded but ordered.
+  const weights = team.map((p) => (p.role === "Store manager" ? 0.7 : 0.85) + r() * 0.6);
+  const sum = weights.reduce((a, w) => a + w, 0);
+  return team.map((p, i) => {
+    const share = weights[i] / sum;
+    const bills = Math.max(1, Math.round(v.bills * share));
+    // Each person's UPT drifts around the store's, so a laggard is findable.
+    const rate = v.upt * (0.72 + ((hash(p.id) % 100) / 100) * 0.62);
+    return {
+      name: p.name,
+      storeId,
+      bills,
+      qty: Math.max(bills, Math.round(bills * rate)),
+      sales: Math.round(v.mtdSales * share),
+      role: p.role === "Store manager" ? "SM" : i % 2 === 0 ? "Sr.FA" : "FA",
+    };
+  });
+}
+
+export interface UptPosition {
+  upt: number;
+  target: number;
+  network: number;
+  bills: number;
+  /** Units a month the shortfall is worth at this store's bill count. */
+  upside: number;
+  laggards: Array<{ name: string; role: string; upt: number; bills: number; behind: number }>;
+}
+
+/** Where a store sits on units per bill, and who is holding it there. */
+export function uptPosition(storeId: string): UptPosition {
+  const v = vitalsFor(storeId);
+  const peers = planningStores();
+  const network = peers.length ? peers.reduce((a, s) => a + vitalsFor(s.id).upt, 0) / peers.length : v.upt;
+  const staff = staffKpis(storeId);
+  const bar = Math.min(UPT_TARGET, network);
+  const laggards = staff
+    .map((s) => ({ name: s.name, role: s.role, upt: uptOf(s.qty, s.bills), bills: s.bills }))
+    .filter((s) => s.upt < bar)
+    .map((s) => ({ ...s, behind: uptUpside(s.bills, s.upt, bar) }))
+    .sort((a, b) => b.behind - a.behind);
+  return {
+    upt: v.upt,
+    target: UPT_TARGET,
+    network,
+    bills: v.bills,
+    upside: uptUpside(v.bills, v.upt),
+    laggards,
+  };
+}
+
+// ── What to push in this store ───────────────────────────────────────────────
+
+export interface PushRow {
+  style: Style;
+  storeRos: number;
+  peerRos: number;
+  sellable: number;
+  cover: number;
+  /** Two weeks of the rate gap, at MRP. What closing it is worth. */
+  upside: number;
+}
+
+/**
+ * The peer comparison Tarun asked for: a style the cluster sells and this door
+ * does not, with stock already on the floor. Peers are the same cluster, so a
+ * Mumbai flagship is not judged against a C-grade door in Guwahati.
+ */
+export function pushList(storeId: string, limit = 6): PushRow[] {
+  const store = storeById(storeId);
+  const peers = planningStores().filter((s) => s.id !== storeId && s.clusterId === store.clusterId);
+  const out: PushRow[] = [];
+  for (const style of stylesAtStore(storeId)) {
+    if (style.brand !== store.brand) continue;
+    const rows = stockForStyleAtStore(storeId, style.id);
+    const units = rows.reduce((a, r) => a + sellable(r), 0);
+    if (units <= 0) continue;
+    const storeRos = styleTrueRos(storeId, style.id);
+    const carrying = peers.filter((p) => stockForStyleAtStore(p.id, style.id).length > 0);
+    if (carrying.length === 0) continue;
+    const peerRos = carrying.reduce((a, p) => a + styleTrueRos(p.id, style.id), 0) / carrying.length;
+    // A real gap, not noise: the peers sell it half again as fast.
+    if (peerRos < storeRos * 1.5 || peerRos - storeRos < 0.2) continue;
+    out.push({
+      style,
+      storeRos,
+      peerRos,
+      sellable: units,
+      cover: coverDays(units, storeRos),
+      upside: Math.round((peerRos - storeRos) * 14 * style.mrp),
+    });
+  }
+  return out.sort((a, b) => b.upside - a.upside).slice(0, limit);
+}
+
+// ── Rate of sale at style level ──────────────────────────────────────────────
+
+export interface RosWatchRow {
+  store: Store;
+  style: Style;
+  ros: number;
+  sellable: number;
+  cover: number;
+  status: SizeSetResult["status"];
+  warehouse: number;
+  /** A fortnight of sales at risk if it goes out, at MRP. */
+  risk: number;
+  fix: "pull" | "transfer" | "recut";
+}
+
+/**
+ * The planner's spine in-season: where rate of sale is high, availability has to
+ * hold. Ranked by what is at risk, not by rate — a fast style with deep cover is
+ * not a problem, and a fast style about to break is the whole job.
+ */
+export function rosWatch(stores: Store[], limit = 12): RosWatchRow[] {
+  const out: RosWatchRow[] = [];
+  for (const store of stores) {
+    for (const style of stylesAtStore(store.id)) {
+      if (style.brand !== store.brand) continue;
+      const rows = stockForStyleAtStore(store.id, style.id);
+      const units = rows.reduce((a, r) => a + sellable(r), 0);
+      const ros = styleTrueRos(store.id, style.id);
+      if (ros <= 0.15) continue;
+      const health = sizeSetHealth(style, rows);
+      const cover = coverDays(units, ros);
+      // Thin cover or a broken run: either way availability is the problem.
+      if (cover > 21 && health.status === "healthy") continue;
+      const warehouse = warehouseTotal(style.id);
+      const donor = findDonors(store.id, style.id, health.missingCore[0] ?? style.coreSizes[0], 1);
+      out.push({
+        store,
+        style,
+        ros,
+        sellable: units,
+        cover,
+        status: health.status,
+        warehouse,
+        risk: Math.round(ros * 14 * style.mrp),
+        fix: warehouse > 0 ? "pull" : donor.length > 0 ? "transfer" : "recut",
+      });
+    }
+  }
+  return out.sort((a, b) => b.risk - a.risk).slice(0, limit);
+}
+
+// ── VM adherence ─────────────────────────────────────────────────────────────
+
+export interface VmRow {
+  store: Store;
+  done: string[];
+  score: number;
+  lastAt: number;
+  missing: VmCheck[];
+}
+
+export function vmFor(storeId: string, doneOverride?: string[]): VmRow {
+  const store = storeById(storeId);
+  const status = vmStatus(storeId);
+  const done = doneOverride ?? status.done;
+  return {
+    store,
+    done,
+    score: VM_CHECKS.length ? done.length / VM_CHECKS.length : 1,
+    lastAt: status.lastAt,
+    missing: VM_CHECKS.filter((c) => !done.includes(c.id)),
+  };
+}
+
+/** The estate view, so nobody has to ring twenty-four doors to find the four. */
+export function vmAdherence(stores: Store[], overrides: Record<string, string[]> = {}): VmRow[] {
+  return stores.map((s) => vmFor(s.id, overrides[s.id])).sort((a, b) => a.score - b.score);
+}
+
+// ── The consolidated store-intelligence view ─────────────────────────────────
+
+export interface IntelRow {
+  store: Store;
+  /** The biggest over-investment on the floor right now. */
+  topGap: MixRow | null;
+  spaceGap: SpaceRow | null;
+  upt: number;
+  uptNetwork: number;
+  uptUpside: number;
+  vmScore: number;
+  pushCount: number;
+}
+
+/**
+ * Every store's cockpit, rolled up. This is what makes the store screens useful
+ * to HQ rather than a store-only toy: planning sees the same finding the manager
+ * sees, and can tell whether it is one door or a pattern.
+ */
+export function storeIntel(stores: Store[], vmOverrides: Record<string, string[]> = {}): IntelRow[] {
+  const peers = planningStores();
+  const network = peers.length ? peers.reduce((a, s) => a + vitalsFor(s.id).upt, 0) / peers.length : 0;
+  return stores.map((store) => {
+    const mix = categoryMix([store]);
+    const space = spaceVsSales(store.id);
+    const v = vitalsFor(store.id);
+    const topGap = mix.find((m) => m.verdict === "push") ?? null;
+    return {
+      store,
+      topGap,
+      spaceGap: space.find((s) => s.verdict === "push") ?? null,
+      upt: v.upt,
+      uptNetwork: network,
+      uptUpside: uptUpside(v.bills, v.upt),
+      vmScore: vmFor(store.id, vmOverrides[store.id]).score,
+      pushCount: mix.filter((m) => m.verdict === "push").length,
+    };
+  });
+}
+
+// ── Allocation, cut by category and price band ───────────────────────────────
+
+export interface AllocationSplitRow {
+  key: string;
+  label: string;
+  share: number;
+  units: number;
+}
+
+/**
+ * A recut recommendation of N units is not actionable until it says N of what.
+ * The split follows what the store *sells*, not what it holds — allocating to
+ * the existing stock mix is how a door ends up deeper in the wrong category.
+ */
+export function allocationSplit(storeId: string, units: number): { byCategory: AllocationSplitRow[]; byBand: AllocationSplitRow[] } {
+  const store = storeById(storeId);
+  const cat = categoryMix([store]);
+  const band = priceBandMix([store]);
+  const spread = (rows: MixRow[]): AllocationSplitRow[] => {
+    const total = rows.reduce((a, r) => a + r.soldUnits, 0);
+    if (total <= 0) return [];
+    const raw = rows.map((r) => ({ key: r.key, label: r.label, share: r.soldUnits / total, units: Math.floor((r.soldUnits / total) * units) }));
+    // Give the rounding remainder to the biggest seller rather than losing it.
+    const assigned = raw.reduce((a, r) => a + r.units, 0);
+    const rest = units - assigned;
+    if (rest > 0 && raw.length > 0) {
+      const top = raw.reduce((best, r) => (r.share > best.share ? r : best), raw[0]);
+      top.units += rest;
+    }
+    return raw.filter((r) => r.units > 0).sort((a, b) => b.units - a.units);
+  };
+  return { byCategory: spread(cat), byBand: spread(band) };
+}
+
+// ── The season, in three phases ──────────────────────────────────────────────
+
+export type SeasonPhase = "pre" | "in" | "post";
+
+export interface SeasonState {
+  phase: SeasonPhase;
+  season: Season;
+  dayOfSeason: number;
+  daysLeft: number;
+  /** Drops landed against drops bought. */
+  dropsLanded: number;
+  dropsTotal: number;
+}
+
+const SEASON_DAYS = 182;
+
+export function seasonState(at = NOW): SeasonState {
+  const season = CURRENT_SEASON;
+  const day = Math.round((at - season.startsAt) / (24 * 3600_000));
+  const drops = DROPS.filter((d) => d.seasonId === season.id);
+  const landed = drops.filter((d) => d.landsAt <= at).length;
+  const phase: SeasonPhase = day < 0 ? "pre" : day > SEASON_DAYS - 21 ? "post" : "in";
+  return {
+    phase,
+    season,
+    dayOfSeason: day,
+    daysLeft: Math.max(0, SEASON_DAYS - day),
+    dropsLanded: landed,
+    dropsTotal: drops.length,
+  };
+}
+
+export interface InSeasonAction {
+  id: string;
+  kind: "availability" | "markdown" | "pullback" | "recut";
+  title: string;
+  detail: string;
+  storeId?: string;
+  styleId?: string;
+  /** Rupees on the table — what acting is worth, or what not acting costs. */
+  value: number;
+}
+
+/**
+ * The in-season action layer: the four things a planner actually does between
+ * launch and end of season, ranked against each other by money rather than
+ * kept in four separate screens where the biggest one can hide.
+ */
+export function inSeasonActions(stores: Store[], limit = 14): InSeasonAction[] {
+  const out: InSeasonAction[] = [];
+
+  // Availability, where rate of sale is high enough to care.
+  for (const r of rosWatch(stores, 8)) {
+    out.push({
+      id: `av-${r.store.id}-${r.style.id}`,
+      kind: "availability",
+      title: `${r.style.name} · ${r.store.name}`,
+      detail:
+        r.fix === "pull"
+          ? `Selling ${r.ros.toFixed(1)}/day, ${Math.round(r.cover)} days left. ${r.warehouse} in the warehouse.`
+          : r.fix === "transfer"
+            ? `Selling ${r.ros.toFixed(1)}/day, warehouse empty. A peer store holds it.`
+            : `Selling ${r.ros.toFixed(1)}/day with nothing behind it. Needs a recut.`,
+      storeId: r.store.id,
+      styleId: r.style.id,
+      value: r.risk,
+    });
+  }
+
+  // Markdown, and pull-backs — both fall out of what is not selling.
+  for (const store of stores) {
+    for (const g of gradedStyles(store.id, 40)) {
+      if (g.grade !== "dud") continue;
+      const { style, cover, ros, sellable: units } = g.signal;
+      if (cover > 120) {
+        out.push({
+          id: `pb-${store.id}-${style.id}`,
+          kind: "pullback",
+          title: `${style.name} · ${store.name}`,
+          detail: `${Math.round(cover)} days of cover at ${ros.toFixed(1)}/day. Pull it and free the space.`,
+          storeId: store.id,
+          styleId: style.id,
+          value: Math.round(units * style.mrp * 0.4),
+        });
+      } else if (style.productType === "fashion") {
+        out.push({
+          id: `md-${store.id}-${style.id}`,
+          kind: "markdown",
+          title: `${style.name} · ${store.name}`,
+          detail: `${pctOf(g.sellThrough)} sold through with ${Math.round(cover)} days of cover. Mark it or move it.`,
+          storeId: store.id,
+          styleId: style.id,
+          value: Math.round(units * style.mrp * 0.25),
+        });
+      }
+    }
+  }
+
+  // Recuts, where a door is beating its target and has earned more stock.
+  for (const store of stores) {
+    const v = vitalsFor(store.id);
+    if (v.achievement < 1.04) continue;
+    const units = Math.round(store.norm * (v.achievement - 1) * 1.6);
+    if (units < 40) continue;
+    out.push({
+      id: `rc-${store.id}`,
+      kind: "recut",
+      title: `${store.name} is trading at ${pctOf(v.achievement)}`,
+      detail: `Earned roughly ${units.toLocaleString("en-IN")} more units. Split by what it sells, not what it holds.`,
+      storeId: store.id,
+      value: Math.round(units * 2800),
+    });
+  }
+
+  return out.sort((a, b) => b.value - a.value).slice(0, limit);
+}
+
+const pctOf = (n: number) => `${Math.round(n * 100)}%`;

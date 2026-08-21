@@ -500,6 +500,10 @@ export const ASSUMPTIONS: Assumption[] = [
   { key: "coreTarget", label: "Target core share", value: "A 42% · B 50% · C 58%", basis: "invented", source: "—" },
   { key: "productType", label: "Core vs fashion", value: "product-master attribute", basis: "confirmed", source: "Client confirmed" },
   { key: "otbHeadroom", label: "OTB budget headroom", value: "12% above the committed buy", basis: "invented", source: "—" },
+  { key: "uptTarget", label: "UPT target", value: "2.6 units per bill — stated, never measured", basis: "invented", source: "—" },
+  { key: "mixGap", label: "Mix gap worth acting on", value: "5 points of share", basis: "invented", source: "—" },
+  { key: "priceBands", label: "Price architecture", value: "4 bands from under ₹2,500 to ₹7,000+", basis: "invented", source: "—" },
+  { key: "spaceData", label: "Floor space by category", value: "synthetic — nobody holds the planogram as data", basis: "invented", source: "—" },
 ];
 
 /** Warehouse holdback: the share of a season buy kept back to fund the run. */
@@ -750,4 +754,123 @@ export function unitsToSets(curve: CurveStep[], units: Partial<Record<Size, numb
 export function maxSets(curve: CurveStep[], available: Partial<Record<Size, number>>): number {
   const per = curve.map((c) => Math.floor((available[c.size] ?? 0) / c.ratio));
   return per.length ? Math.max(0, Math.min(...per)) : 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The intelligence layer
+//
+// Everything above this point answers "what is true". What follows answers "so
+// what" — the difference between a store manager who can read a report and one
+// who knows which two things to do today.
+//
+// Each rule here is a threshold somebody will want to argue with. They are
+// named, exported and listed in ASSUMPTIONS for exactly that reason.
+
+/**
+ * Units per bill. The target is a stated ambition, not a measured figure — it
+ * came out of a conversation, and the network average is computed beside it so
+ * a store can be judged against its peers rather than against a round number.
+ */
+export const UPT_TARGET = 2.6;
+
+/**
+ * How far a category's share of stock may drift from its share of sales before
+ * it is worth acting on. Five points is roughly one bay's worth of floor in a
+ * mid-size door: below that the noise in a 28-day window swamps the signal.
+ */
+export const MIX_GAP_TRIGGER = 0.05;
+
+/** Same idea for floor space against sales. */
+export const SPACE_GAP_TRIGGER = 0.05;
+
+/** Price architecture. Bands, not points, because that is how a buy is planned. */
+export interface PriceBand {
+  key: string;
+  label: string;
+  min: number;
+  max: number;
+}
+
+export const PRICE_BANDS: PriceBand[] = [
+  { key: "entry", label: "Under ₹2,500", min: 0, max: 2499 },
+  { key: "core", label: "₹2,500–4,499", min: 2500, max: 4499 },
+  { key: "premium", label: "₹4,500–6,999", min: 4500, max: 6999 },
+  { key: "top", label: "₹7,000+", min: 7000, max: Infinity },
+];
+
+export function priceBandFor(mrp: number): PriceBand {
+  return PRICE_BANDS.find((b) => mrp >= b.min && mrp <= b.max) ?? PRICE_BANDS[PRICE_BANDS.length - 1];
+}
+
+/** Units per bill. */
+export function upt(qty: number, bills: number): number {
+  return bills > 0 ? qty / bills : 0;
+}
+
+export type MixGap = "push" | "feed" | "in_line";
+
+/**
+ * A category holding more of the floor than it earns of the sales is a push:
+ * the stock is already bought, so the answer is to sell it, not to send less.
+ * The reverse — selling harder than its share of stock — is a feed.
+ */
+export function mixGapVerdict(invShare: number, salesShare: number, trigger = MIX_GAP_TRIGGER): MixGap {
+  const gap = invShare - salesShare;
+  if (gap >= trigger) return "push";
+  if (-gap >= trigger) return "feed";
+  return "in_line";
+}
+
+export const MIX_GAP_LABEL: Record<MixGap, string> = {
+  push: "Push",
+  feed: "Feed",
+  in_line: "In line",
+};
+
+/**
+ * How much a store's UPT shortfall is worth in units over a month, so the gap
+ * argues for itself. Bills are the store's own; the rate is the difference.
+ */
+export function uptUpside(bills: number, actual: number, target = UPT_TARGET): number {
+  return Math.max(0, Math.round(bills * (target - actual)));
+}
+
+// ── Data readiness ───────────────────────────────────────────────────────────
+//
+// Intelligence built on an input nobody trusts is worse than no intelligence,
+// because it is wrong with a straight face. Every derived number on the
+// intelligence screens is traced back to one of these inputs and carries its
+// trust level, so a planner knows whether to act on it or to go fix the input
+// first.
+
+export type Trust = "solid" | "partial" | "weak";
+
+export interface DataInput {
+  key: string;
+  label: string;
+  trust: Trust;
+  /** Why it sits at that level, in one line. */
+  note: string;
+  /** What would move it up. */
+  fix: string;
+}
+
+export const DATA_INPUTS: DataInput[] = [
+  { key: "soh", label: "Stock on hand", trust: "solid", note: "System of record, reconciled at GRN and cycle count.", fix: "—" },
+  { key: "sales", label: "Sales & bills", trust: "solid", note: "Billed at the till, nothing inferred.", fix: "—" },
+  { key: "product", label: "Product master", trust: "solid", note: "Category, MRP, core vs fashion, size set — all attributes.", fix: "—" },
+  { key: "ist", label: "Inter-store transfers", trust: "partial", note: "Movement is captured; the reason often is not.", fix: "Make a reason mandatory on despatch." },
+  { key: "staff", label: "Sale-to-staff attribution", trust: "partial", note: "Tagged at billing, but skipped when the queue is long.", fix: "Enforce the tag before the bill closes." },
+  { key: "pincode", label: "Customer pin code", trust: "weak", note: "Optional on most bills, so the mapped base under-counts unevenly by store.", fix: "Capture at loyalty enrolment, not at billing." },
+  { key: "space", label: "Floor space by category", trust: "weak", note: "Not held anywhere today; planogram lives in decks and in people's heads.", fix: "Hold the planogram as data, per store." },
+];
+
+export const TRUST_LABEL: Record<Trust, string> = { solid: "Trusted", partial: "Partial", weak: "Weak" };
+
+/** The inputs a given derived number rests on — used to mark it on screen. */
+export function trustOf(inputKeys: string[]): Trust {
+  const levels = inputKeys.map((k) => DATA_INPUTS.find((d) => d.key === k)?.trust ?? "weak");
+  if (levels.includes("weak")) return "weak";
+  if (levels.includes("partial")) return "partial";
+  return "solid";
 }

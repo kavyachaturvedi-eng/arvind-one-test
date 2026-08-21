@@ -25,6 +25,16 @@ export interface NavGroup {
   children: NavChild[];
 }
 
+/**
+ * Which roles the demo shows. Buying and Super Admin are built and routed —
+ * they are simply not on the door today, because the story being told is the
+ * store and the planning team. Add an id back and it reappears everywhere:
+ * the login, the switcher and the palette all read this.
+ */
+export const DEMO_ROLES: RoleId[] = ["staff", "store", "planner"];
+
+export const isDemoRole = (role: RoleId) => DEMO_ROLES.includes(role);
+
 export const NAV_GROUPS: NavGroup[] = [
   // ── Operations — staff and manager ──
   {
@@ -88,6 +98,8 @@ export const NAV_GROUPS: NavGroup[] = [
     key: "performance", label: "Performance", glyph: "◧", roles: ["store"], section: "Insights",
     children: [
       { id: "home", label: "My store today" },
+      { id: "intel", label: "What to fix today" },
+      { id: "vm", label: "VM adherence" },
       { id: "reports", label: "Reports" },
     ],
   },
@@ -118,6 +130,14 @@ export const NAV_GROUPS: NavGroup[] = [
     children: [
       { id: "store360", label: "Store 360" },
       { id: "inv", label: "Inventory" },
+      { id: "intel", label: "Store intelligence" },
+      { id: "vm", label: "VM adherence" },
+    ],
+  },
+  {
+    key: "pcycle", label: "Season", glyph: "◈", roles: ["planner"], section: "Planning",
+    children: [
+      { id: "season", label: "Pre / in / post" },
     ],
   },
   {
@@ -132,6 +152,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     key: "pseason", label: "Season", glyph: "◈", roles: ["catplan"], section: "Planning",
     children: [
+      { id: "season", label: "Pre / in / post" },
       { id: "otb", label: "Open To Buy" },
       { id: "alloc", label: "Allocation" },
       { id: "performance", label: "Performance" },
@@ -234,6 +255,8 @@ export const NAV_ACTIONS: NavAction[] = [
   { label: "Check if devices are working", hint: "Systems", id: "health", roles: ["store"] },
   { label: "Review smart stock moves", hint: "Festival & swap suggestions", id: "merch", roles: ["planner"] },
   { label: "Review agent approvals", hint: "AI agents waiting on you", id: "agents", roles: ["store", "planner", "leadership"] },
+  { label: "What to fix today", hint: "The store's own intelligence", id: "intel", roles: ["store"] },
+  { label: "Where the season stands", hint: "Pre, in and post-season", id: "season", roles: ["planner", "catplan"] },
   { label: "Publish a training", hint: "To any set of stores, from anywhere", id: "trainings", overlay: "training", roles: ["planner", "catplan", "leadership"] },
   { label: "Open live execution", hint: "The estate right now", id: "live", roles: ["planner", "leadership"] },
 ];

@@ -351,6 +351,34 @@ export const styleById = (id: string) => STYLES.find((s) => s.id === id)!;
  * a store added at runtime (Admin → Stores) gets an assortment built exactly the
  * same way the seeded ones did, rather than appearing with an empty floor.
  */
+// ── How over- or under-invested a door is, category by category ─────────────
+//
+// Stock and sales are generated independently, which makes every category's
+// share of the floor land within a point or two of its share of sales — and a
+// mix report where nothing is ever out of line teaches a store manager nothing.
+// Real estates are not like that: a door carries a third of its floor in a
+// category that earns a tenth of its sales, because that is what got bought and
+// nobody went back to look.
+//
+// This is keyed off store and category on its own generator, deliberately: it
+// must not consume the row generator's stream, or every other figure in the
+// dataset would shift with it.
+
+const INVESTMENT = new Map<string, number>();
+
+function investmentSkew(storeId: string, category: Category): number {
+  const key = `${storeId}|${category}`;
+  const cached = INVESTMENT.get(key);
+  if (cached !== undefined) return cached;
+  const r = rng(hashStr("mix" + key));
+  const roll = r();
+  // Roughly a third of the categories in any door are meaningfully out, split
+  // between over-bought and starved. The rest sit near plan.
+  const skew = roll < 0.17 ? 1.7 + r() * 1.1 : roll < 0.34 ? 0.3 + r() * 0.25 : 0.85 + r() * 0.3;
+  INVESTMENT.set(key, skew);
+  return skew;
+}
+
 export function generateStockForStore(store: Store, si: number): StockRow[] {
   const rows: StockRow[] = [];
   {
@@ -370,6 +398,9 @@ export function generateStockForStore(store: Store, si: number): StockRow[] {
       if (!brandMatch && carry > 0.35) return;
       if (brandMatch && carry > gradeGate) return;
 
+      // One skew per style, so a category moves together rather than by size.
+      const skew = investmentSkew(store.id, style.category);
+
       style.sizes.forEach((size, zi) => {
         const r = rng(si * 100003 + yi * 1009 + zi * 17);
         const isCore = style.coreSizes.includes(size);
@@ -386,7 +417,7 @@ export function generateStockForStore(store: Store, si: number): StockRow[] {
         // would not recognise as its own.
         const markdownShare = style.launchedDaysAgo > 100 ? 0.16 + r() * 0.16 : r() * 0.05;
 
-        let onHand = Math.max(0, Math.round((r() * 14 + 2) * gradeMult * (isCore ? 1.1 : 1)));
+        let onHand = Math.max(0, Math.round((r() * 14 + 2) * gradeMult * (isCore ? 1.1 : 1) * skew));
         // Deliberately manufacture broken size sets on some hot styles.
         if (isCore && r() < 0.19) onHand = 0;
 
@@ -1293,3 +1324,94 @@ export const PEOPLE: Person[] = (() => {
 
 export const peopleForStore = (storeId: string) => PEOPLE.filter((p) => p.scope === storeId);
 export const personById = (id: string) => PEOPLE.find((p) => p.id === id);
+
+// ── Floor space by category ──────────────────────────────────────────────────
+//
+// AFL does not hold the planogram as data today: it lives in VM decks and in
+// the area manager's head. So this is synthetic, and it is marked as the weakest
+// input on the data-readiness panel rather than passed off as a system figure.
+//
+// It is deliberately misaligned in a few doors — a category can hold a third of
+// the floor and earn a tenth of the sales — because a space report where
+// everything already matches teaches a store manager nothing.
+
+export interface SpaceLine {
+  category: Category;
+  /** Share of sellable floor space, 0–1. Sums to 1 across categories. */
+  share: number;
+  /** Rough bay count, for a number a store manager recognises. */
+  bays: number;
+}
+
+const SPACE_CACHE = new Map<string, SpaceLine[]>();
+
+export function categorySpace(storeId: string): SpaceLine[] {
+  const cached = SPACE_CACHE.get(storeId);
+  if (cached) return cached;
+  const store = storeById(storeId);
+  const r = rng(hashStr("space" + storeId));
+  // Bays scale with the door: a flagship has more of them to argue about.
+  const totalBays = store.grade === "A" ? 28 : store.grade === "B" ? 22 : 16;
+  // Base weights follow how the range is bought, then get pulled around per
+  // store so the gap against sales is real in some doors and not in others.
+  const base: Record<Category, number> = {
+    Polo: 0.18,
+    Shirts: 0.19,
+    "T-Shirts": 0.15,
+    Denim: 0.16,
+    Trousers: 0.11,
+    Outerwear: 0.09,
+    Knitwear: 0.08,
+    Accessories: 0.04,
+  };
+  const weights = CATEGORIES.map((c) => Math.max(0.02, base[c] * (0.6 + r() * 0.95)));
+  const sum = weights.reduce((a, w) => a + w, 0);
+  const lines = CATEGORIES.map((category, i) => ({
+    category,
+    share: weights[i] / sum,
+    bays: Math.max(1, Math.round((weights[i] / sum) * totalBays)),
+  }));
+  SPACE_CACHE.set(storeId, lines);
+  return lines;
+}
+
+// ── VM adherence ─────────────────────────────────────────────────────────────
+//
+// The checklist a store closes out with a photo. Chasing this across the EBO
+// network by phone is the thing being replaced, so the state has to live here
+// and roll up, not sit in an inbox.
+
+export interface VmCheck {
+  id: string;
+  label: string;
+  detail: string;
+  /** A photo is the proof; some checks are a straight yes or no. */
+  needsPhoto: boolean;
+}
+
+export const VM_CHECKS: VmCheck[] = [
+  { id: "window", label: "Window creative", detail: "Current campaign up, both panels, no gaps", needsPhoto: true },
+  { id: "mannequin", label: "Mannequin styling", detail: "Styled to the kit, full look, correct sizes", needsPhoto: true },
+  { id: "focus", label: "Focus table", detail: "This drop's hero styles front of store", needsPhoto: true },
+  { id: "size", label: "Size runs on the rack", detail: "Sized small to large, one style per arm", needsPhoto: false },
+  { id: "tags", label: "Price tags", detail: "Revised tags on every marked-down style", needsPhoto: false },
+  { id: "light", label: "Lighting", detail: "All spots working, window lit after dark", needsPhoto: false },
+];
+
+/**
+ * Where each store stands today. Deterministic, and skewed so the estate has a
+ * long tail — a VM report where every door is at 100% is not worth building.
+ */
+export function vmStatus(storeId: string): { done: string[]; lastAt: number } {
+  const r = rng(hashStr("vm" + storeId));
+  // A door has a standard, and then it either holds it or does not. Rolling
+  // each check independently gives every store the same middling score; drawing
+  // the standard first is what produces a long tail worth chasing.
+  const standard = 0.3 + r() * 0.75;
+  const done: string[] = [];
+  for (const c of VM_CHECKS) {
+    if (r() < standard) done.push(c.id);
+  }
+  const hoursAgo = Math.round(2 + r() * 70);
+  return { done, lastAt: NOW - hoursAgo * 3600_000 };
+}

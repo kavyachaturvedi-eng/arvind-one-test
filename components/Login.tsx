@@ -4,11 +4,12 @@
 
 import React, { useState } from "react";
 import { ROLES, STORES } from "@/lib/seed";
+import { isDemoRole } from "@/lib/nav";
 import { useApp } from "@/lib/state";
 import BrandMark from "@/components/BrandMark";
 import type { RoleId } from "@/lib/types";
 
-const ORDER: RoleId[] = ["staff", "store", "planner", "catplan", "leadership"];
+const ORDER: RoleId[] = (["staff", "store", "planner", "catplan", "leadership"] as RoleId[]).filter(isDemoRole);
 
 const DESC: Record<RoleId, string> = {
   store: "Run the store: operations plus insights",

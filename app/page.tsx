@@ -20,6 +20,9 @@ import Reallocation from "@/components/modules/Reallocation";
 import StrategicMoves from "@/components/modules/StrategicMoves";
 import Performance from "@/components/modules/Performance";
 import Catchment from "@/components/modules/Catchment";
+import Season from "@/components/modules/Season";
+import StoreIntel from "@/components/modules/StoreIntel";
+import Vm from "@/components/modules/Vm";
 import AskOne from "@/components/modules/AskOne";
 import Governance from "@/components/modules/Governance";
 import Grn from "@/components/modules/Grn";
@@ -114,6 +117,12 @@ function Router() {
       return <StrategicMoves />;
     case "performance":
       return <Performance />;
+    case "intel":
+      return <StoreIntel />;
+    case "vm":
+      return <Vm />;
+    case "season":
+      return <Season />;
     case "catchment":
       return <Catchment />;
     case "ask":

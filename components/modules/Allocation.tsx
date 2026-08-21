@@ -11,7 +11,7 @@ import React, { useMemo, useState } from "react";
 import { Card, Chip, SectionTitle, SortTh, Stat, StatusDot, Table, Td, Th, fmtRunDate, relTime, useSort } from "@/components/ui";
 import DropBar from "@/components/DropBar";
 import EstateFilterBar from "@/components/EstateFilterBar";
-import { PLANNING_BRAND, dropAllocation, dropPerformance, dropUnitsFor, filterStores } from "@/lib/engine";
+import { PLANNING_BRAND, allocationSplit, dropAllocation, dropPerformance, dropUnitsFor, filterStores } from "@/lib/engine";
 import { CURRENT_SEASON, DROPS, NOW, clusterById } from "@/lib/seed";
 import { useApp } from "@/lib/state";
 import StoreLink from "@/components/StoreLink";
@@ -20,6 +20,7 @@ import { HOLDBACK_SHARE, pct } from "@/lib/rules";
 type Sort = "store" | "cluster" | "ach" | "fill" | "plan" | "rec" | "delta";
 
 export default function Allocation() {
+  const [split, setSplit] = useState<string | null>(null);
   const app = useApp();
   const dropId = app.estate.dropId;
   const drop = DROPS.find((d) => d.id === dropId) ?? DROPS[0];
@@ -160,6 +161,7 @@ export default function Allocation() {
               {ran && <Th>Why</Th>}
               <Th align="right">Final</Th>
               {ran && <Th align="right">Take</Th>}
+              <Th align="right">Split</Th>
             </tr>
           </thead>
           <tbody>
@@ -167,7 +169,8 @@ export default function Allocation() {
               const final = finalFor(r.store.id, r.planned, r.recommended);
               const edited = override[r.store.id] !== undefined;
               return (
-                <tr key={r.store.id} data-alloc-row={taken[r.store.id] ? "taken" : "plan"}>
+                <React.Fragment key={r.store.id}>
+                <tr data-alloc-row={taken[r.store.id] ? "taken" : "plan"}>
                   <Td>
                     <span className="inline-flex items-center gap-2">
                       <StatusDot tone={r.delta > 0 ? "good" : r.delta < 0 ? "warn" : "neutral"} />
@@ -219,7 +222,24 @@ export default function Allocation() {
                       />
                     </Td>
                   )}
+                  <Td align="right">
+                    <button
+                      className="btn !py-1 !text-2xs"
+                      data-alloc-split
+                      onClick={() => setSplit(split === r.store.id ? null : r.store.id)}
+                    >
+                      {split === r.store.id ? "Hide" : "Of what"}
+                    </button>
+                  </Td>
                 </tr>
+                {split === r.store.id && (
+                  <tr data-alloc-split-row>
+                    <Td colSpan={ran ? 11 : 7}>
+                      <AllocationOfWhat storeId={r.store.id} units={final} />
+                    </Td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -256,6 +276,40 @@ export default function Allocation() {
           </tbody>
         </Table>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * A number of units is not a decision until it says units of what. The split
+ * follows what the door sells, not what it already holds — allocating to the
+ * standing stock mix is how a store ends up deeper in the wrong category.
+ */
+function AllocationOfWhat({ storeId, units }: { storeId: string; units: number }) {
+  const split = useMemo(() => allocationSplit(storeId, units), [storeId, units]);
+  if (units <= 0) return <div className="text-xs text-ink2 py-1">Nothing allocated to this door.</div>;
+  return (
+    <div className="grid sm:grid-cols-2 gap-x-8 gap-y-1 py-1">
+      <div>
+        <div className="label mb-1">By category</div>
+        {split.byCategory.map((r) => (
+          <div key={r.key} className="flex items-baseline gap-2 text-xs py-0.5" data-of-what-cat>
+            <span className="text-ink flex-1 truncate">{r.label}</span>
+            <span className="num text-ink2">{pct(r.share)}</span>
+            <span className="num text-ink font-medium w-12 text-right">{r.units}</span>
+          </div>
+        ))}
+      </div>
+      <div>
+        <div className="label mb-1">By price point</div>
+        {split.byBand.map((r) => (
+          <div key={r.key} className="flex items-baseline gap-2 text-xs py-0.5" data-of-what-band>
+            <span className="text-ink flex-1 truncate">{r.label}</span>
+            <span className="num text-ink2">{pct(r.share)}</span>
+            <span className="num text-ink font-medium w-12 text-right">{r.units}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

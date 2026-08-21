@@ -21,6 +21,7 @@ import {
   STYLES,
   storeById,
   styleById,
+  vmStatus,
 } from "./seed";
 import { classifyCancellation, evaluateIstPolicy, splitOutward, type IstPolicyInput } from "./rules";
 import { NO_FILTERS, type EstateFilters, type Period } from "./engine";
@@ -72,6 +73,9 @@ export type ModuleId =
   | "reports"
   | "exec"
   | "trainings"
+  | "intel"
+  | "vm"
+  | "season"
   | "agents"
   | "team"
   | "merch"
@@ -152,6 +156,8 @@ interface AppState {
   hqTasks: HqAssignment[];
   /** Stores the replenishment run is paused for. It fires for everyone else. */
   pausedStores: string[];
+  /** VM checklist progress per store: the check ids a door has closed out. */
+  vm: Record<string, string[]>;
   /** Run thresholds, editable in Planning → Rules. */
   thresholds: { fillTrigger: number; brokenTrigger: number };
   /** Replenishment, renewal and allocation cycles. */
@@ -262,6 +268,7 @@ type Action =
   | { type: "norm:set"; storeId: string; to: number; by: string; reason: string }
   | { type: "hq:assign"; task: HqAssignment }
   | { type: "store:pause"; storeId: string; paused: boolean; by: string }
+  | { type: "vm:check"; storeId: string; checkId: string; done: boolean; by: string; label: string }
   | { type: "rule:set"; patch: Partial<AppState["thresholds"]>; by: string; label: string }
   | { type: "cycle:create"; cycle: Cycle }
   | { type: "cycle:decide"; id: string; status: "approved" | "rejected"; by: string; note?: string }
@@ -490,6 +497,7 @@ const initial: AppState = {
   normLog: [],
   hqTasks: [],
   pausedStores: [],
+  vm: {},
   thresholds: { fillTrigger: 0.92, brokenTrigger: 0.55 },
   cycles: [],
   moves: [],
@@ -861,6 +869,27 @@ function reducer(state: AppState, action: Action): AppState {
           ...state.audit,
         ],
       };
+
+    case "vm:check": {
+      const current = state.vm[action.storeId] ?? vmStatus(action.storeId).done;
+      const next = action.done
+        ? [...new Set([...current, action.checkId])]
+        : current.filter((id) => id !== action.checkId);
+      return {
+        ...state,
+        vm: { ...state.vm, [action.storeId]: next },
+        audit: [
+          {
+            at: NOW,
+            actor: action.by,
+            action: action.done ? "VM check closed" : "VM check reopened",
+            object: `${action.label} · ${storeById(action.storeId).name}`,
+            system: "Arvind One",
+          },
+          ...state.audit,
+        ],
+      };
+    }
 
     case "rule:set":
       return {

@@ -12,7 +12,7 @@ import { Callout, Card, Chip, SectionTitle, Stat, StatusDot, Table, Td, Th } fro
 import { CLUSTERS, CURRENT_SEASON } from "@/lib/seed";
 import { PLANNING_BRAND, planningStores } from "@/lib/engine";
 import { useApp } from "@/lib/state";
-import { ASSUMPTIONS, coreShareTarget, pct } from "@/lib/rules";
+import { ASSUMPTIONS, DATA_INPUTS, TRUST_LABEL, coreShareTarget, pct } from "@/lib/rules";
 
 export default function PlanningSettings() {
   const app = useApp();
@@ -34,9 +34,49 @@ export default function PlanningSettings() {
         <Stat label="Confirmed by AFL" value={String(confirmed.length)} tone="good" emphasis />
         <Stat label="Invented by us" value={String(invented)} tone="warn" />
         <Stat label="Clusters" value={String(CLUSTERS.filter((c) => stores.some((s) => s.clusterId === c.id)).length)} sub={`${stores.length} stores`} />
-        <Stat label="Waiting on Vector" value={String(invented)} />
+        <Stat label="Inputs not fully trusted" value={String(DATA_INPUTS.filter((d) => d.trust !== "solid").length)} tone="warn" sub={`of ${DATA_INPUTS.length}`} />
       </div>
 
+
+      {/* Symmetry before intelligence. A number is only as good as its input,
+          and the intelligence screens mark themselves against this table. */}
+      <Card>
+        <SectionTitle
+          title="What the data can carry"
+          right={<span className="text-2xs text-muted">Every derived screen is marked against this</span>}
+        />
+        <Table>
+          <thead>
+            <tr>
+              <Th>Input</Th>
+              <Th>Trust</Th>
+              <Th>Why</Th>
+              <Th>What would move it</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {DATA_INPUTS.map((d) => (
+              <tr key={d.key} data-input={d.trust}>
+                <Td className="text-ink">{d.label}</Td>
+                <Td>
+                  <span className="inline-flex items-center gap-1.5 text-xs text-ink2">
+                    <StatusDot tone={d.trust === "solid" ? "good" : d.trust === "partial" ? "warn" : "critical"} />
+                    {TRUST_LABEL[d.trust]}
+                  </span>
+                </Td>
+                <Td className="text-xs text-ink2">{d.note}</Td>
+                <Td className="text-xs text-ink2">{d.fix}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+        <div className="mt-3">
+          <Callout tone="warn" title="Symmetry first, then intelligence">
+            The store cockpit and the estate rollup are built on the top three rows. Anything resting on the bottom two is
+            marked on screen and is directional — right about the ranking long before it is right about the counts.
+          </Callout>
+        </div>
+      </Card>
 
       <Card>
         <SectionTitle title="Where every number comes from" />
