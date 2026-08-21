@@ -8,6 +8,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { NAV_ACTIONS, NAV_GROUPS } from "@/lib/nav";
 import { STORES } from "@/lib/seed";
 import { useApp } from "@/lib/state";
+import { openPublishTraining } from "./PublishTraining";
 
 interface Item {
   key: string;
@@ -39,7 +40,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
       kind: "Action" as const,
       label: a.label,
       hint: a.hint,
-      run: () => app.go(a.id, a.focus),
+      run: () => (a.overlay === "training" ? openPublishTraining() : app.go(a.id, a.focus)),
     }));
     const stores: Item[] = storeSide
       ? STORES.map((s) => ({

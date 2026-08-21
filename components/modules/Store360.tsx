@@ -10,7 +10,7 @@
 // One brand: planning owns Tommy. There is no brand switch anywhere here.
 
 import React, { useMemo } from "react";
-import { Card, Chip, Meter, SectionTitle, SortTh, Stat, StatusDot, Table, Tabs, Td, Th, useSort } from "@/components/ui";
+import { Card, Chip, Meter, SectionTitle, SortTh, Sparkline, Stat, StatusDot, Table, Tabs, Td, Th, useSort } from "@/components/ui";
 import EstateFilterBar from "@/components/EstateFilterBar";
 import {
   PERIODS,
@@ -20,10 +20,12 @@ import {
   filterStores,
   istDiscipline,
   planningStores,
+  markdownTrend,
   storeRows,
   type Period,
 } from "@/lib/engine";
 import { useApp } from "@/lib/state";
+import type { Store } from "@/lib/types";
 import StoreLink from "@/components/StoreLink";
 import { inr, pct } from "@/lib/rules";
 
@@ -129,47 +131,8 @@ export default function Store360() {
 
           <div className="grid lg:grid-cols-[1.35fr_1fr] gap-3 items-start">
             <Card>
-              <SectionTitle title={`KPIs · ${PERIOD_LABEL[period].toLowerCase()}`} />
-              <Table>
-                <thead>
-                  <tr>
-                    <Th>Period</Th>
-                    <Th align="right">Sales</Th>
-                    <Th align="right">Bills</Th>
-                    <Th align="right">Qty</Th>
-                    <Th align="right">ATV</Th>
-                    <Th align="right">UPT</Th>
-                    <Th align="right">ASP</Th>
-                    <Th align="right">Conversion</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <Td className="text-ink2">This year</Td>
-                    <Td align="right" className="num">{inr(summary.sales, { compact: true })}</Td>
-                    <Td align="right" className="num">{Math.round(summary.bills).toLocaleString("en-IN")}</Td>
-                    <Td align="right" className="num">{Math.round(summary.qty).toLocaleString("en-IN")}</Td>
-                    <Td align="right" className="num">{inr(summary.atv)}</Td>
-                    <Td align="right" className="num">{summary.upt.toFixed(2)}</Td>
-                    <Td align="right" className="num">{inr(summary.asp)}</Td>
-                    <Td align="right" className="num">{pct(summary.conversion)}</Td>
-                  </tr>
-                  <tr>
-                    <Td className="text-ink2">Last year</Td>
-                    <Td align="right" className="num text-ink2">{inr(summary.lySales, { compact: true })}</Td>
-                    <Td align="right" className="num text-ink2" colSpan={6} />
-                  </tr>
-                  <tr>
-                    <Td className="text-ink2">Growth</Td>
-                    <Td align="right" colSpan={7}>
-                      <span className="num" style={{ color: summary.growth >= 0 ? "var(--status-good)" : "var(--status-critical)" }}>
-                        {summary.growth >= 0 ? "+" : ""}
-                        {pct(summary.growth)}
-                      </span>
-                    </Td>
-                  </tr>
-                </tbody>
-              </Table>
+              <SectionTitle title="Markdown exposure" right={<Chip tone={summary.sellThrough >= 0.85 ? "good" : "warn"}>{pct(summary.sellThrough)} full price</Chip>} />
+              <MarkdownTrend stores={stores} period={period} />
             </Card>
 
             <Card>
@@ -272,3 +235,33 @@ export default function Store360() {
   );
 }
 
+// ── Markdown exposure over the chosen window ────────────────────────────────
+//
+// The number that matters upstream of everything else: what is still unsold as
+// the full-price window closes, and what discounting it would cost. Follows the
+// filters and the period above it.
+
+function MarkdownTrend({ stores, period }: { stores: Store[]; period: Period }) {
+  const series = useMemo(() => markdownTrend(stores, period), [stores, period]);
+  const latest = series[series.length - 1] ?? 0;
+  const first = series[0] ?? 0;
+  const move = first > 0 ? (latest - first) / first : 0;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <div className="text-[26px] font-semibold text-ink leading-none num">{inr(latest, { compact: true })}</div>
+          <div className="text-2xs text-muted mt-1.5 num">
+            {move >= 0 ? "+" : ""}
+            {pct(move)} over the window
+          </div>
+        </div>
+        <span className="num text-2xs" style={{ color: move > 0 ? "var(--status-critical)" : "var(--status-good)" }}>
+          {move > 0 ? "building" : "clearing"}
+        </span>
+      </div>
+      <Sparkline data={series} height={54} color={move > 0 ? "var(--flag-red)" : "var(--status-good)"} />
+    </div>
+  );
+}

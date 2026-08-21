@@ -20,9 +20,11 @@ import {
   trend,
   warehouseHeld,
   type InventoryLine,
+  type StyleInventoryRow,
 } from "@/lib/engine";
 import { NOW as _NOW, STYLES } from "@/lib/seed";
 import { useApp } from "@/lib/state";
+import type { Store } from "@/lib/types";
 import EstateFilterBar from "@/components/EstateFilterBar";
 import { HOLDBACK_GOAL, inr, pct } from "@/lib/rules";
 
@@ -94,7 +96,7 @@ export default function Inventory() {
 
       <EstateFilterBar />
 
-      <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Stat
           label="On floor"
           value={summary.sellableUnits.toLocaleString("en-IN")}
@@ -103,7 +105,6 @@ export default function Inventory() {
           emphasis
         />
         <Stat label="Floor value at MRP" value={inr(floorValue, { compact: true })} />
-        <Stat label="In transit" value={summary.inTransit.toLocaleString("en-IN")} />
         <Stat label="Warehouse held" value={pct(held.share)} />
         <Stat
           label="Estate cover"
@@ -113,14 +114,8 @@ export default function Inventory() {
         <Stat
           label="At risk this week"
           value={inr(summary.valueAtRisk, { compact: true })}
-          sub={`${summary.brokenStyles} broken size sets`}
+          sub={`${summary.brokenStuds} broken studs`}
           tone={summary.valueAtRisk > 0 ? "critical" : "good"}
-        />
-        <Stat
-          label="Broken studs"
-          value={String(summary.brokenStuds)}
-          sub={summary.brokenStuds > 0 ? inr(summary.brokenStudValue, { compact: true }) : undefined}
-          tone={summary.brokenStuds > 0 ? "critical" : "good"}
         />
       </div>
 
@@ -243,6 +238,70 @@ export default function Inventory() {
           </tbody>
         </Table>
       </Card>
+      <PointOfView stores={stores} lines={byCluster} styles={styles} atRisk={summary.valueAtRisk} />
     </div>
+  );
+}
+
+// ── The written view ─────────────────────────────────────────────────────────
+//
+// A planner does not forward a table, they forward a paragraph. This drafts one
+// from the figures on screen and lets it be edited before it goes.
+
+function PointOfView({
+  stores,
+  lines,
+  styles,
+  atRisk,
+}: {
+  stores: Store[];
+  lines: InventoryLine[];
+  styles: StyleInventoryRow[];
+  atRisk: number;
+}) {
+  const draft = useMemo(() => {
+    const heaviest = [...lines].sort((a, b) => b.floorValue - a.floorValue)[0];
+    const thinnest = [...lines].filter((l) => l.cover < 900).sort((a, b) => a.cover - b.cover)[0];
+    const worst = styles[0];
+    const risk = atRisk;
+    const parts = [
+      `${stores.length} stores hold ${lines.reduce((a, l) => a + l.sellable, 0).toLocaleString("en-IN")} units, ${inr(lines.reduce((a, l) => a + l.floorValue, 0), { compact: true })} at MRP.`,
+      heaviest ? `${heaviest.label} carries the most at ${inr(heaviest.floorValue, { compact: true })}.` : "",
+      thinnest ? `${thinnest.label} is thinnest at ${Math.round(thinnest.cover)} days of cover.` : "",
+      worst ? `${worst.style.name} is the single biggest exposure at ${inr(worst.valueAtRisk, { compact: true })}, broken in ${worst.unhealthyStores} stores.` : "",
+      risk > 0 ? `${inr(risk, { compact: true })} at risk this week across the range.` : "",
+    ];
+    return parts.filter(Boolean).join(" ");
+  }, [stores.length, lines, styles, atRisk]);
+
+  const [text, setText] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const value = text ?? draft;
+
+  return (
+    <Card>
+      <SectionTitle
+        title="Where this leaves us"
+        right={
+          <div className="flex items-center gap-2">
+            {text !== null && (
+              <button className="btn !py-1 !text-2xs" data-pov-reset onClick={() => { setText(null); setSaved(false); }}>
+                Reset
+              </button>
+            )}
+            <button className="btn !py-1 !text-2xs" data-pov-save onClick={() => setSaved(true)}>
+              {saved ? "Saved" : "Save"}
+            </button>
+          </div>
+        }
+      />
+      <textarea
+        value={value}
+        data-pov
+        rows={4}
+        onChange={(e) => { setText(e.target.value); setSaved(false); }}
+        className="w-full border border-line bg-raised px-3 py-2.5 text-sm text-ink leading-relaxed"
+      />
+    </Card>
   );
 }

@@ -85,8 +85,12 @@ export default function Replenishment() {
     app.toastNow(`Asked planning for ${units} × ${sig.style.name}`, "good");
   }
 
-  function raiseAll() {
-    openPulls.forEach(raisePull);
+  const [picked, setPicked] = useState<Record<string, boolean>>({});
+  const pickedPulls = openPulls.filter((s) => picked[s.style.id]);
+
+  function raisePicked() {
+    pickedPulls.forEach(raisePull);
+    setPicked({});
   }
 
   return (
@@ -95,9 +99,7 @@ export default function Replenishment() {
         <div>
           <h1 className="text-xl font-semibold text-ink">Replenishment</h1>
         </div>
-        {openPulls.length > 1 && (
-          <button className="btn-primary" data-ask-all onClick={raiseAll}>Ask planning for all {openPulls.length}</button>
-        )}
+
       </div>
 
       <Card>
@@ -155,7 +157,12 @@ export default function Replenishment() {
                       {done ? (
                         <span className="inline-flex items-center gap-1.5 text-xs text-ink2"><StatusDot tone="warn" />With planning</span>
                       ) : (
-                        <button className="btn-primary !py-1.5 !text-xs" data-ask-pull onClick={() => raisePull(s)}>Ask</button>
+                        <input
+                          type="checkbox"
+                          data-pull-pick
+                          checked={!!picked[s.style.id]}
+                          onChange={(e) => setPicked({ ...picked, [s.style.id]: e.target.checked })}
+                        />
                       )}
                     </Td>
                   </tr>
@@ -163,6 +170,25 @@ export default function Replenishment() {
               })}
             </tbody>
           </Table>
+        )}
+        {openPulls.length > 0 && (
+          <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+            <button
+              className="btn !py-1 !text-2xs"
+              data-pull-pick-all
+              onClick={() => setPicked(Object.fromEntries(openPulls.map((s2) => [s2.style.id, true])))}
+            >
+              Select all {openPulls.length}
+            </button>
+            <button
+              className={pickedPulls.length > 0 ? "btn-primary" : "btn"}
+              data-ask-picked
+              disabled={pickedPulls.length === 0}
+              onClick={raisePicked}
+            >
+              Ask planning{pickedPulls.length > 0 ? ` for ${pickedPulls.length}` : ""}
+            </button>
+          </div>
         )}
       </Card>
 

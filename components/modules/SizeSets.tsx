@@ -121,13 +121,25 @@ export default function SizeSets() {
     setOpenId(null);
   }
 
-  function findDonor(sig: StyleSignal) {
-    const missing = sig.health.missingCore[0];
-    app.go("savesale");
-    app.toastNow(
-      `Save the Sale opened with ${sig.style.name}${missing ? ` · size ${missing}` : ""} pre-loaded. ${sig.donorUnits} donor units inside the transfer radius.`,
-      "info"
-    );
+  /** The floor asks for a transfer; which store it comes from is planning's call. */
+  function askTransfer(sig: StyleSignal) {
+    app.raiseRequest({
+      kind: "replenish",
+      storeId: app.storeId,
+      styleId: sig.style.id,
+      size: sig.health.missingCore[0] ?? sig.style.coreSizes[0],
+      units: Math.max(1, sig.decision.units || Math.ceil(sig.ros * 7)),
+      note: sig.decision.reason,
+      evidence: {
+        fillRate: vitals.fillRate,
+        sellable: sig.sellable,
+        ros: sig.ros,
+        coverDays: sig.cover,
+        sizeSetStatus: sig.health.status,
+        valueAtRisk: Math.round(sig.valueAtRisk),
+      },
+    });
+    app.toastNow(`Asked planning for ${sig.style.name}`, "good");
     setOpenId(null);
   }
 
@@ -163,30 +175,20 @@ export default function SizeSets() {
       </div>
 
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
-        <Stat label="Styles carried" value={String(carried)} sub="assortment live at this store" />
+        <Stat label="Styles carried" value={String(carried)} />
         <Stat
           label="Size-set health"
           value={pct(vitals.sizeSetScore)}
           tone={vitals.sizeSetScore < 0.7 ? "critical" : vitals.sizeSetScore < 0.85 ? "warn" : "good"}
-          sub="core sizes on the floor"
-          freshness={4}
         />
-        <Stat label="Broken sets" value={String(vitals.brokenStyles)} tone="critical" sub="two or more core sizes gone" />
-        <Stat label="At risk" value={String(vitals.atRiskStyles)} tone="warn" sub="one core size gone" />
-        <Stat
-          label="Value at risk"
-          value={inr(vitals.valueAtRisk, { compact: true })}
-          tone="critical"
-          sub="next 7 days"
-          emphasis
-        />
+        <Stat label="Broken sets" value={String(vitals.brokenStyles)} tone="critical" />
+        <Stat label="At risk" value={String(vitals.atRiskStyles)} tone="warn" />
+        <Stat label="Value at risk" value={inr(vitals.valueAtRisk, { compact: true })} tone="critical" emphasis />
       </div>
-
-      {top && <RosExplainer sig={top} storeId={app.storeId} />}
 
       <Card>
         <SectionTitle
-          title="Exception queue"
+          title="Needs fixing"
           right={
             <div className="flex items-center gap-2 flex-wrap">
               <Tabs
@@ -282,7 +284,7 @@ export default function SizeSets() {
           storeId={app.storeId}
           onClose={() => setOpenId(null)}
           onReplenish={() => replenish(selected)}
-          onDonor={() => findDonor(selected)}
+          onTransfer={() => askTransfer(selected)}
           onStop={() => stopFeaturing(selected)}
         />
       )}
@@ -290,37 +292,6 @@ export default function SizeSets() {
   );
 }
 
-// ── True ROS vs naive ROS ────────────────────────────────────────────────────
-
-function RosExplainer({ sig, storeId }: { sig: StyleSignal; storeId: string }) {
-  const rows = stockForStyleAtStore(storeId, sig.style.id);
-  const avgInStock = rows.length ? rows.reduce((a, r) => a + r.inStockDays, 0) / rows.length : 28;
-  const stockoutDays = Math.max(0, 28 - avgInStock);
-  const multiple = sig.naiveRos > 0 ? sig.ros / sig.naiveRos : 1;
-  const weekGap = Math.max(0, (sig.ros - sig.naiveRos) * 7);
-
-  return (
-    <Card>
-      <SectionTitle
-        title="True ROS vs naive ROS"
-        sub={`Top exception: ${sig.style.name}.`}
-      />
-      <div className="grid gap-3 lg:grid-cols-[1.15fr_1fr] items-start">
-        <BeforeAfter
-          beforeLabel="Naive ROS, units ÷ 28 days"
-          afterLabel="True ROS, units ÷ days genuinely in stock"
-          before={`${sig.naiveRos.toFixed(2)} units/day`}
-          after={`${sig.ros.toFixed(2)} units/day`}
-        />
-        <Callout tone="warn" title={`Demand understated ${multiple.toFixed(1)}×`}>
-          This style was in stock <strong>{avgInStock.toFixed(0)} of the last 28 days</strong>, so{" "}
-          <strong>{stockoutDays.toFixed(0)} stockout days</strong> sit in the naive denominator and suppress its ROS. At
-          True ROS this style needs <strong>{weekGap.toFixed(0)} more units a week</strong> than the naive figure.
-        </Callout>
-      </div>
-    </Card>
-  );
-}
 
 // ── Decision modal ───────────────────────────────────────────────────────────
 
@@ -329,21 +300,22 @@ function DecisionModal({
   storeId,
   onClose,
   onReplenish,
-  onDonor,
+  onTransfer,
   onStop,
 }: {
   sig: StyleSignal;
   storeId: string;
   onClose: () => void;
   onReplenish: () => void;
-  onDonor: () => void;
+  onTransfer: () => void;
   onStop: () => void;
 }) {
   const missing: Size[] = sig.health.missingCore;
-  const noSupply = sig.dcUnits <= 0 && sig.donorUnits <= 0;
-  const belowRegion = sig.regionalRos > 0 && sig.ros < sig.regionalRos * 0.85;
-  const nosNearEnd = sig.style.isNOS && sig.daysLeftInWindow <= 21;
-  const replenUnits = Math.max(1, Math.min(sig.dcUnits, sig.decision.units || Math.ceil(sig.ros * 7)));
+  const needed = Math.max(1, sig.decision.units || Math.ceil(sig.ros * 7));
+
+  // Where the ask goes is decided by what can actually cover it, not by the
+  // floor hunting for a donor store. That is planning's call.
+  const route = sig.dcUnits >= needed ? "warehouse" : sig.donorUnits > 0 ? "transfer" : "none";
 
   return (
     <Modal
@@ -351,102 +323,55 @@ function DecisionModal({
       wide
       onClose={onClose}
       title={sig.style.name}
+      sub={`${sig.style.id} · ${sig.style.colour} · ${missing.length ? `${missing.join(", ")} gone` : "set healthy"}`}
       footer={
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <button className="btn" onClick={onClose}>
             Close
           </button>
-          <button className="btn" disabled={sig.donorUnits <= 0} onClick={onDonor}>
-            Find a donor store
+          <button className="btn" data-stop-featuring onClick={onStop}>
+            Stop featuring
           </button>
-          <button className="btn" onClick={onStop}>
-            Stop featuring + re-space fixture
-          </button>
-          <button className="btn-primary" disabled={sig.dcUnits <= 0} onClick={onReplenish}>
-            Replenish {replenUnits} from warehouse
-          </button>
+          {route === "warehouse" && (
+            <button className="btn-primary" data-ask-warehouse onClick={onReplenish}>
+              Ask warehouse for {needed}
+            </button>
+          )}
+          {route === "transfer" && (
+            <button className="btn-primary" data-ask-transfer onClick={onTransfer}>
+              Ask for a transfer of {needed}
+            </button>
+          )}
+          {route === "none" && (
+            <button className="btn-primary" data-ask-planning onClick={onTransfer}>
+              Flag to planning
+            </button>
+          )}
         </div>
       }
     >
       <div className="space-y-3.5">
-        <Callout tone={sig.decision.action === "stop_sell" ? "critical" : "brand"} title={ACTION_LABEL[sig.decision.action]}>
-          {sig.decision.reason}
-          <div className="mt-1.5 text-2xs text-muted">
-            Confidence {pct(sig.decision.confidence)} · recommended quantity {sig.decision.units} units · decision rule in
-            the metric registry.
-          </div>
-        </Callout>
-
         <div>
-          <div className="label mb-2">Sellable units by size (★ core)</div>
+          <div className="label mb-2">Units by size (★ pivotal)</div>
           <SizeGrid sizes={sig.style.sizes} units={unitsBySize(storeId, sig.style.id)} core={sig.style.coreSizes} />
-          <div className="text-2xs text-muted mt-2">
-            Missing core sizes: {missing.length ? missing.join(", ") : "none"} · core coverage {pct(sig.health.coverage)}
-          </div>
         </div>
 
         <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-          <MiniStat label="Warehouse (RPC)" value={`${sig.dcUnits} units`} note={sig.dcUnits > 0 ? "available to pull today" : "exhausted for this size"} />
-          <MiniStat label="Donor units nearby" value={`${sig.donorUnits} units`} note={sig.donorUnits > 0 ? "above a week's cover at peer stores" : "no peer store holds spare units"} />
-          <MiniStat label="Regional rank" value={`#${sig.regionalRank}`} note={`of same-brand stores in region · regional avg ${sig.regionalRos.toFixed(2)}/day`} />
-          <MiniStat label="This store's True ROS" value={`${sig.ros.toFixed(2)}/day`} note={`${sig.cover >= 999 ? "no sale recorded" : `${sig.cover.toFixed(0)} days cover`} · ${sig.daysLeftInWindow} days of full-price window left`} />
-        </div>
-
-        {noSupply && (
-          <Callout tone="critical" title="Zero donors and zero warehouse stock">
-            Nothing is available to replenish {missing.join(", ") || "the missing sizes"} anywhere in the network, so both
-            supply buttons are disabled. Stop featuring it, re-space the fixture, and flag the SKU to planning for the next
-            buy.
-          </Callout>
-        )}
-
-        {nosNearEnd && (
-          <Callout tone="warn" title="NOS core style near the end of its window">
-            {sig.style.name} is a never-out-of-stock carry-forward line with {sig.daysLeftInWindow} days left in the
-            window. The pull-back rule is suppressed for NOS styles, this stock carries into the next season at full
-            price.
-          </Callout>
-        )}
-
-        {belowRegion && (
-          <Callout tone="warn" title="This is a display problem, not a stock problem">
-            This store sells {sig.style.name} at {sig.ros.toFixed(2)} units/day against a regional average of{" "}
-            {sig.regionalRos.toFixed(2)}, rank #{sig.regionalRank} among same-brand peers. More stock will not fix a
-            style that is not being seen. Raise the VM task below: move it to a faceout, re-space the fixture and check
-            the size run on the floor before pulling more units into the store.
-          </Callout>
-        )}
-
-        <div className="rounded-lg border border-line p-3">
-          <div className="label mb-1.5">Supply check</div>
-          <ul className="text-xs text-ink2 space-y-1 leading-relaxed">
-            <li>
-              {sig.dcUnits > 0
-                ? `Warehouse replenishment enabled. ${sig.dcUnits} units held back at the RPC for this size.`
-                : "Warehouse replenishment disabled: the RPC shows zero units for the missing core size."}
-            </li>
-            <li>
-              {sig.donorUnits > 0
-                ? `Donor transfer enabled. ${sig.donorUnits} units sit above a week's cover at peer stores inside the radius.`
-                : "Donor transfer disabled: no peer store holds units above its own week of cover."}
-            </li>
-            <li>
-              Value at risk {inr(sig.valueAtRisk)}. {Math.min(7, sig.daysLeftInWindow)} days of True ROS demand at full
-              price that this set cannot currently serve.
-            </li>
-          </ul>
+          <MiniStat label="Warehouse" value={`${sig.dcUnits}`} />
+          <MiniStat label="Cover" value={sig.cover >= 999 ? "—" : `${sig.cover.toFixed(0)}d`} />
+          <MiniStat label="Window left" value={`${sig.daysLeftInWindow}d`} />
+          <MiniStat label="At risk" value={inr(sig.valueAtRisk, { compact: true })} />
         </div>
       </div>
     </Modal>
   );
 }
 
-function MiniStat({ label, value, note }: { label: string; value: string; note: string }) {
+function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-line p-3">
+    <div className="border border-line p-2.5">
       <div className="label">{label}</div>
-      <div className="text-lg font-semibold text-ink num mt-1 leading-none">{value}</div>
-      <div className="text-2xs text-muted mt-1.5 leading-snug">{note}</div>
+      <div className="text-lg font-semibold text-ink num mt-1">{value}</div>
     </div>
   );
 }

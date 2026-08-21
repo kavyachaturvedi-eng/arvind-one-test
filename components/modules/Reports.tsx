@@ -7,6 +7,7 @@ import { STORES, rng, storeById } from "@/lib/seed";
 import { PLANNING_BRAND, allVitals, brandRollups, enterprise, planningStores, regionRollups, sizeSetExceptions, topSellers, vitalsFor } from "@/lib/engine";
 import { useApp } from "@/lib/state";
 import { Card, Chip, SectionTitle, Swatch, Table, Tabs, Td, Th, inr, pct } from "@/components/ui";
+import Catchment from "@/components/modules/Catchment";
 
 const hash = (s: string) => { let h = 11; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) | 0; return Math.abs(h); };
 
@@ -32,6 +33,9 @@ function EstateReports() {
   const vitals = useMemo(() => allVitals().filter((v) => scopeStores.some((st) => st.id === v.store.id)), [scopeStores]);
   const laggards = useMemo(() => [...vitals].sort((a, b) => a.achievement - b.achievement).slice(0, 5), [vitals]);
 
+  const [tab, setTab] = useState<"estate" | "newstores">("estate");
+  const [note, setNote] = useState("");
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -39,8 +43,22 @@ function EstateReports() {
           <h1 className="text-xl font-semibold text-ink">Reports</h1>
           <p className="text-sm text-ink2 mt-1">Estate level</p>
         </div>
-        <button className="btn-primary !py-1.5 !text-xs" onClick={() => app.toastNow("Estate pack sent to leadership", "good")}>Send pack</button>
+        <div className="flex items-center gap-2">
+          <Tabs
+            value={tab}
+            onChange={setTab}
+            options={[
+              { id: "estate", label: "Estate" },
+              { id: "newstores", label: "New stores" },
+            ]}
+          />
+          <button className="btn-primary !py-1.5 !text-xs" onClick={() => app.toastNow(note.trim() ? "Estate pack sent to leadership, with your note" : "Estate pack sent to leadership", "good")}>Send pack</button>
+        </div>
       </div>
+
+      {tab === "newstores" && <Catchment />}
+      {tab === "estate" && (
+        <>
 
       <Card>
         <SectionTitle title="Estate DSR" />
@@ -89,6 +107,21 @@ function EstateReports() {
           <div className="mt-2 text-2xs text-muted">By region: {regions.map((r) => `${r.region} ${pct(r.sellThrough)}`).join(" · ")}</div>
         </Card>
       </div>
+
+      {/* A pack goes out with a covering note, not just tables. */}
+      <Card>
+        <SectionTitle title="Note on the pack" right={<span className="text-2xs text-muted">Goes out with it</span>} />
+        <textarea
+          value={note}
+          data-report-note
+          rows={3}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="What leadership should read first."
+          className="w-full border border-line bg-raised px-3 py-2.5 text-sm text-ink leading-relaxed placeholder:text-muted"
+        />
+      </Card>
+        </>
+      )}
     </div>
   );
 }

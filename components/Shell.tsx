@@ -8,6 +8,7 @@ import { sizeSetExceptions } from "@/lib/engine";
 import { NAV_GROUPS, SECTION_ORDER, type NavChild } from "@/lib/nav";
 import { useApp, type ModuleId } from "@/lib/state";
 import CommandPalette from "./CommandPalette";
+import PublishTraining from "./PublishTraining";
 import { Chip, Freshness, Toast } from "./ui";
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -97,6 +98,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
       document.documentElement.style.fontSize = "16px";
     };
   }, [app.role]);
+
+  // Publishing a training is reachable from every screen, so it listens for a
+  // window event rather than being owned by one module.
+  const [trainingOpen, setTrainingOpen] = useState(false);
+  useEffect(() => {
+    const onPublish = () => setTrainingOpen(true);
+    window.addEventListener("training:publish", onPublish);
+    return () => window.removeEventListener("training:publish", onPublish);
+  }, []);
 
   // ⌘K / Ctrl-K opens the palette from anywhere.
   useEffect(() => {
@@ -282,6 +292,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <PublishTraining open={trainingOpen} onClose={() => setTrainingOpen(false)} />
       {app.toast && <Toast key={app.toast.id} message={app.toast.message} tone={app.toast.tone} onDone={() => app.dispatch({ type: "toast:clear" })} />}
     </div>
   );

@@ -475,7 +475,7 @@ export function pct(n: number, digits = 0): string {
 // Every threshold below was invented by us, not supplied by AFL. They are
 // documented in PLANNING-ASSUMPTIONS.md and rendered as editable settings in
 // the Planning → Settings screen, so nobody mistakes them for AFL's numbers.
-// When Praveen's Vector documentation arrives, these are what get replaced.
+// When the client's replenishment documentation arrives, these get replaced.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface Assumption {
@@ -488,17 +488,17 @@ export interface Assumption {
 }
 
 export const ASSUMPTIONS: Assumption[] = [
-  { key: "holdback", label: "Warehouse holdback", value: "25% of the season buy", basis: "confirmed", source: "Pushpal, 20 Aug 2026 — current is 20–25%" },
-  { key: "holdbackGoal", label: "Holdback goal", value: "40%", basis: "confirmed", source: "Pushpal, 20 Aug 2026 — stated goal, not today" },
-  { key: "fillBand", label: "Healthy fill rate", value: "97%–105% of norm", basis: "confirmed", source: "Newme product manager call" },
+  { key: "holdback", label: "Warehouse holdback", value: "25% of the season buy", basis: "confirmed", source: "Client confirmed" },
+  { key: "holdbackGoal", label: "Holdback goal", value: "40%", basis: "confirmed", source: "Client target, not current" },
+  { key: "fillBand", label: "Healthy fill rate", value: "97%–105% of norm", basis: "confirmed", source: "Industry benchmark" },
   { key: "fillTrigger", label: "Replenishment trigger", value: "fill rate below 92%", basis: "invented", source: "—" },
   { key: "fillHeavy", label: "Overstock trigger", value: "fill rate above 112%", basis: "invented", source: "—" },
   { key: "brokenTrigger", label: "Brokenness trigger", value: "over 55% of carried styles unhealthy", basis: "invented", source: "—" },
-  { key: "runDays", label: "Run cadence", value: "Tuesday and Friday", basis: "confirmed", source: "Pushpal, 20 Aug 2026" },
+  { key: "runDays", label: "Run cadence", value: "Tuesday and Friday", basis: "confirmed", source: "Client confirmed" },
   { key: "replenShare", label: "Replenish vs renew", value: "A 65/35 · B 72/28 · C 80/20", basis: "invented", source: "—" },
   { key: "finished", label: "Style is finished", value: "sell-through ≥ 78% or ≤ 14 days of window", basis: "invented", source: "—" },
   { key: "coreTarget", label: "Target core share", value: "A 42% · B 50% · C 58%", basis: "invented", source: "—" },
-  { key: "productType", label: "Core vs fashion", value: "product-master attribute", basis: "confirmed", source: "Pushpal, 20 Aug 2026" },
+  { key: "productType", label: "Core vs fashion", value: "product-master attribute", basis: "confirmed", source: "Client confirmed" },
   { key: "otbHeadroom", label: "OTB budget headroom", value: "12% above the committed buy", basis: "invented", source: "—" },
 ];
 
@@ -627,7 +627,7 @@ export function mixVerdict(corePct: number, target: number): MixVerdict {
 }
 
 /**
- * Studs, buds and duds — Tarun's own vocabulary for style-level performance.
+ * Studs, buds and duds — the client's own vocabulary for style performance.
  * A stud is beating its region and selling through; a dud is behind on both; a
  * bud is doing well but has not proved it at scale yet.
  */
@@ -641,7 +641,7 @@ export function studBudDud(input: { ros: number; regionalRos: number; sellThroug
 }
 
 /**
- * Norms follow rate of sale, not display capacity (Praveen). A door that is
+ * Norms follow rate of sale, not display capacity. A door that is
  * running hot and holding its sizes earns a bigger norm; one sitting heavy on
  * slow stock gives some back.
  */

@@ -188,8 +188,8 @@ export default function BillHistory() {
       {manager && (
         <div className="grid grid-cols-3 gap-3">
           <Stat label="Bills, last 30 days" value={String(rows.length)} />
-          <Stat label="Returns" value={String(returned.length)} tone={returned.length > 2 ? "warn" : "good"} sub={`${inr(refundValue, { compact: true })} refunded`} />
-          <Stat label="Exchanges" value={String(exchanged.length)} sub={exchanged[0]?.reason ?? ""} />
+          <Stat label="Returns" value={String(returned.length)} tone={returned.length > 2 ? "warn" : "good"} />
+          <Stat label="Exchanges" value={String(exchanged.length)} />
         </div>
       )}
 

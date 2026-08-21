@@ -188,7 +188,7 @@ export default function StoreView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Stat
           label="Fill rate"
           value={pct(fill)}
@@ -210,14 +210,8 @@ export default function StoreView() {
         <Stat
           label="At risk this week"
           value={inr(summary.valueAtRisk, { compact: true })}
-          sub={`${summary.brokenStyles} broken · ${summary.atRiskStyles} at risk`}
+          sub={`${summary.brokenStuds} broken studs`}
           tone={summary.valueAtRisk > 0 ? "critical" : "good"}
-        />
-        <Stat
-          label="Broken studs"
-          value={String(summary.brokenStuds)}
-          sub={summary.brokenStuds > 0 ? inr(summary.brokenStudValue, { compact: true }) : undefined}
-          tone={summary.brokenStuds > 0 ? "critical" : "good"}
         />
         <Stat
           label="IST sold in 2 days"

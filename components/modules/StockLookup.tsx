@@ -6,7 +6,7 @@
 
 import React, { useMemo, useState } from "react";
 import { NOW, STORES, STYLES, storeById, styleById } from "@/lib/seed";
-import { dcAvailable, sellable, skuRow, stockForStyleAtStore } from "@/lib/engine";
+import { dcAvailable, sellable, skuRow, stockForStyleAtStore, styleSignal } from "@/lib/engine";
 import { useApp } from "@/lib/state";
 import { Card, Chip, Empty, SectionTitle, SizeGrid, StatusDot, Swatch, Table, Td, Th, inr } from "@/components/ui";
 import type { Size } from "@/lib/types";
@@ -22,6 +22,8 @@ export default function StockLookup() {
 
   // The full list, with its own search and filters.
   const [fullList, setFullList] = useState(false);
+  // The size grid opens where you are, rather than throwing you back to search.
+  const [inline, setInline] = useState<string | null>(null);
   const [listQuery, setListQuery] = useState("");
   const [brandFilter, setBrandFilter] = useState("All brands");
   const [catFilter, setCatFilter] = useState("All categories");
@@ -158,7 +160,8 @@ export default function StockLookup() {
               </thead>
               <tbody>
                 {listRows.map((r) => (
-                  <tr key={r.style.id}>
+                  <React.Fragment key={r.style.id}>
+                  <tr>
                     <Td>
                       <span className="inline-flex items-center gap-2">
                         <Swatch hex={r.style.colourHex} />
@@ -191,12 +194,21 @@ export default function StockLookup() {
                     <Td align="right">
                       <button
                         className="btn !py-1 !text-2xs"
-                        onClick={() => { setStyleId(r.style.id); setSize(""); setFullList(false); }}
+                        data-check-sizes
+                        onClick={() => setInline(inline === r.style.id ? null : r.style.id)}
                       >
-                        Check sizes
+                        {inline === r.style.id ? "Hide" : "Check sizes"}
                       </button>
                     </Td>
                   </tr>
+                  {inline === r.style.id && (
+                    <tr data-inline-sizes>
+                      <Td colSpan={7}>
+                        <InlineSizes styleId={r.style.id} />
+                      </Td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </Table>
@@ -339,6 +351,71 @@ export default function StockLookup() {
           )}
         </Card>
       )}
+    </div>
+  );
+}
+
+// ── The size grid, opened in place ───────────────────────────────────────────
+//
+// Sizes here, and the two things a floor can do about a gap: ask the warehouse,
+// or ask for a transfer. Which store a transfer comes from is planning's call.
+
+function InlineSizes({ styleId }: { styleId: string }) {
+  const app = useApp();
+  const style = styleById(styleId);
+  const sig = useMemo(() => styleSignal(app.storeId, styleId), [app.storeId, styleId]);
+  const units = useMemo(() => {
+    const out: Record<string, number> = {};
+    style.sizes.forEach((sz) => {
+      const row = skuRow(app.storeId, styleId, sz);
+      out[sz] = row ? Math.max(0, row.onHand - row.reserved) : 0;
+    });
+    return out;
+  }, [app.storeId, styleId, style.sizes]);
+
+  const [size, setSize] = useState<Size>(sig.health.missingCore[0] ?? style.coreSizes[0]);
+  const wh = dcAvailable(styleId, size);
+  // A week's cover, but never a token single unit: a pivotal size that has run
+  // out needs enough to hold the run together.
+  const week = Math.ceil(sig.ros * 7);
+  const floor = style.coreSizes.includes(size) ? 3 : 2;
+  const need = Math.max(sig.decision.units, week, floor);
+
+  function ask(kind: "warehouse" | "transfer") {
+    app.raiseRequest({
+      kind: "replenish",
+      storeId: app.storeId,
+      styleId,
+      size,
+      units: kind === "warehouse" ? Math.min(need, wh) : need,
+      note: kind === "warehouse" ? "Warehouse pull" : "Transfer",
+      evidence: {
+        fillRate: 0,
+        sellable: sig.sellable,
+        ros: sig.ros,
+        coverDays: sig.cover,
+        sizeSetStatus: sig.health.status,
+        valueAtRisk: Math.round(sig.valueAtRisk),
+      },
+    });
+    app.toastNow(`Asked planning for ${kind === "warehouse" ? Math.min(need, wh) : need} × ${style.name} (${size})`, "good");
+  }
+
+  return (
+    <div className="py-1 space-y-2.5">
+      <SizeGrid sizes={style.sizes} units={units} core={style.coreSizes} selected={size} onPick={(sz) => setSize(sz as Size)} />
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-ink2 num">
+          Size {size} · {units[size] ?? 0} here · {wh} in warehouse
+        </span>
+        <span className="flex-1" />
+        <button className="btn !py-1 !text-2xs" data-inline-transfer onClick={() => ask("transfer")}>
+          Ask for a transfer
+        </button>
+        <button className="btn-primary !py-1 !text-2xs" data-inline-replenish disabled={wh <= 0} onClick={() => ask("warehouse")}>
+          Ask warehouse for {Math.min(need, wh)}
+        </button>
+      </div>
     </div>
   );
 }

@@ -112,7 +112,7 @@ export const NAV_GROUPS: NavGroup[] = [
   //
   // Rebuilt for the planning layer: the hierarchy first, then the run, then the
   // exception paths. The old planner IA (live execution, reallocation, strategic
-  // moves, catchment, trainings) is retired from this role — leadership keeps it.
+  // moves, trainings) is retired from this role — leadership keeps it.
   {
     key: "pest", label: "Estate", glyph: "◎", roles: ["planner", "catplan"], section: "Planning",
     children: [
@@ -181,7 +181,6 @@ export const NAV_GROUPS: NavGroup[] = [
     children: [
       { id: "allocate", label: "Reallocation" },
       { id: "moves", label: "Strategic Moves" },
-      { id: "catchment", label: "Catchment" },
     ],
   },
   {
@@ -217,6 +216,8 @@ export interface NavAction {
   id: ModuleId;
   focus?: string;
   roles: RoleId[];
+  /** Opens an overlay instead of navigating. */
+  overlay?: "training";
 }
 
 export const NAV_ACTIONS: NavAction[] = [
@@ -233,6 +234,6 @@ export const NAV_ACTIONS: NavAction[] = [
   { label: "Check if devices are working", hint: "Systems", id: "health", roles: ["store"] },
   { label: "Review smart stock moves", hint: "Festival & swap suggestions", id: "merch", roles: ["planner"] },
   { label: "Review agent approvals", hint: "AI agents waiting on you", id: "agents", roles: ["store", "planner", "leadership"] },
-  { label: "Create a training", hint: "Publishes to every store", id: "trainings", roles: ["planner"] },
+  { label: "Publish a training", hint: "To any set of stores, from anywhere", id: "trainings", overlay: "training", roles: ["planner", "catplan", "leadership"] },
   { label: "Open live execution", hint: "The estate right now", id: "live", roles: ["planner", "leadership"] },
 ];

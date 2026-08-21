@@ -86,7 +86,7 @@ export const ROLES: Role[] = [
     initials: "PK",
     mode: "observe",
     does: "Watches execution across every store and acts on what it surfaces — reallocate, rebalance.",
-    basedOn: "Praveen — retail planning conversation",
+    basedOn: "Retail planning discovery",
   },
   {
     id: "catplan",
@@ -97,7 +97,7 @@ export const ROLES: Role[] = [
     initials: "CP",
     mode: "observe",
     does: "Owns the season: what to buy, how deep, what stays core — and how the buy is cut across clusters.",
-    basedOn: "Praveen — planning organisation, buying vs retail planning split",
+    basedOn: "Planning organisation: buying vs retail planning",
   },
   {
     id: "leadership",
@@ -296,7 +296,7 @@ const STYLE_SPECS: Array<[string, Category, Brand, string, string, number]> = [
   ["FM Hooded Sweatshirt", "Knitwear", "Flying Machine", "Grey", "#8F8F8A", 2299],
 ];
 
-// Core vs fashion is a product-master attribute, not a derived number (Pushpal,
+// Core vs fashion is a product-master attribute, not a derived number (client,
 // 20 Aug). Core carries across more than one season and is never discounted;
 // fashion is seasonal and drives floor freshness. NOS is a subset of core.
 const CORE_LEANING: Category[] = ["Polo", "Shirts", "T-Shirts", "Denim", "Trousers", "Accessories"];

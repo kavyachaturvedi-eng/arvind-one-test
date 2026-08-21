@@ -456,8 +456,13 @@ export default function Pos() {
         <button className={`btn !py-1.5 !text-xs ${view === "day" ? "!border-[color:var(--brand)] !text-[color:var(--brand)]" : ""}`} onClick={() => setView(view === "till" ? "day" : "till")}>
           {view === "till" ? "Today's sales" : "Back to billing"}
         </button>
-        <button data-exit-till className="btn !py-1.5 !text-xs" onClick={() => app.go(app.role === "staff" ? "bills" : "home")}>
-          Exit billing screen
+        <button
+          data-exit-till
+          className="btn !py-1.5 !text-xs"
+          title="Home"
+          onClick={() => app.go(app.role === "staff" ? "bills" : "home")}
+        >
+          ⌂ Home
         </button>
       </div>
 

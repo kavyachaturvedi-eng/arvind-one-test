@@ -146,7 +146,7 @@ export default function Catchment() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Customer Catchment</h1>
+          <h2 className="text-base font-semibold text-ink">Where to open next</h2>
         </div>
         <div className="flex items-center gap-2">
           <Chip tone="brand">Source: loyalty ledger · {store.name}</Chip>
@@ -338,19 +338,12 @@ export default function Catchment() {
               List built · {reach.toLocaleString("en-IN")} customers · estimated reach {(reach + reachUntapped).toLocaleString("en-IN")}
             </Chip>
           )}
-          <span className="text-2xs text-muted">
-            Written to the audit trail. No CRM request, no wait.
-          </span>
         </div>
       </Card>
 
-      <Callout tone="warn" title="The honest caveat — read this before quoting any of the numbers above">
-        This screen is only as good as pin-code capture at the till. Today the CRM mobile-number capture is a manual daily check
-        on the store floor walk, and pin code is optional on most bills — so the mapped base under-counts, and it under-counts
-        unevenly across stores. The first version of this view is directional: it is right about the <em>ranking</em> of areas
-        long before it is right about the <em>counts</em>. Fix capture at the till and the same screen becomes a media-buying
-        instrument. Untapped catchment uses a stated penetration curve (28% at the store, falling ~0.8 points per km), not
-        census data; it is an assumption you can argue with, which is why it is written down here rather than hidden in a model.
+      <Callout tone="warn" title="Directional only">
+        Pin code is optional on most bills, so the mapped base under-counts, unevenly by store. Trust the ranking of areas, not
+        the counts. Untapped uses a stated penetration curve — 28% at the store, falling ~0.8 points per km.
       </Callout>
     </div>
   );

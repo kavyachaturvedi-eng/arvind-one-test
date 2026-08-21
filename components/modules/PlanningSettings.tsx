@@ -4,7 +4,7 @@
 //
 // Every threshold the planning layer runs on is listed here with where it came
 // from. "Confirmed" means the client told us. "Invented" means we made it up so
-// the thing would run, and it is waiting to be replaced by Praveen's Vector
+// the thing would run, and it is waiting to be replaced by the client's own
 // documentation. Nobody should be able to mistake one for the other.
 
 import React from "react";

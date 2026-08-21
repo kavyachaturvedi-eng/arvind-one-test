@@ -34,6 +34,7 @@ import {
   growth,
   inr,
   lastRunAt,
+  markdownExposure,
   mixVerdict,
   qualifiesForRun,
   replenishmentDecision,
@@ -1106,7 +1107,7 @@ export function brandScopes(): Scope[] {
   return [BRAND_SCOPE, ...BRANDS.map((b) => ({ level: "brand" as const, id: b, label: b }))];
 }
 
-/** Studs, buds and duds for a store, using Tarun's own vocabulary. */
+/** Studs, buds and duds for a store, in the client's own vocabulary. */
 export interface GradedStyle {
   signal: StyleSignal;
   grade: StyleGrade;
@@ -1259,7 +1260,7 @@ export function clusterRollups(): Array<{ cluster: Cluster; summary: ScopeSummar
 
 // ── Drop allocation and pre-season reallocation ──────────────────────────────
 //
-// Praveen's hardest problem, in his words: "given what we already bought, how do
+// The hardest problem, as the client put it: "given what we already bought, how do
 // we most efficiently reallocate it using the freshest store signals?" The plan
 // was cut a year ago on norms; the recommendation re-cuts it on how each door is
 // trading now. The diff between the two is the whole point of the screen.
@@ -1996,4 +1997,31 @@ export function istDiscipline(storeId: string): { received: number; soldIn2Days:
   const base = 0.42 + v.sellThrough * 0.5;
   const soldIn2Days = Math.min(received, Math.round(received * Math.min(0.97, base + r() * 0.12)));
   return { received, soldIn2Days, share: received > 0 ? soldIn2Days / received : 0 };
+}
+
+/**
+ * Markdown exposure across the window: units that will still be unsold when the
+ * full-price window closes, priced at the discount they will need. Deterministic,
+ * and it moves with the period so a trend is a trend rather than a flat line.
+ */
+export function markdownTrend(stores: Store[], period: Period, points = 14): number[] {
+  if (stores.length === 0) return [];
+  const base = stores.reduce((a, s) => {
+    let exposure = 0;
+    stylesAtStore(s.id)
+      .filter((st) => st.brand === s.brand)
+      .forEach((st) => {
+        const sig = styleSignal(s.id, st.id);
+        // Only what the window cannot absorb counts as exposure.
+        const canSell = sig.ros * Math.max(0, sig.daysLeftInWindow);
+        const residual = Math.max(0, sig.sellable - canSell);
+        exposure += markdownExposure({ residualUnits: residual, mrp: st.mrp, expectedDepth: 0.35 });
+      });
+    return a + exposure;
+  }, 0);
+  // Longer windows drift further; the last point is always today's figure.
+  const drift = period === "today" ? 0.004 : period === "week" ? 0.01 : period === "month" ? 0.018 : 0.03;
+  const series = trend(`md-${stores.length}-${period}`, points, Math.max(1, base), drift);
+  series[series.length - 1] = base;
+  return series;
 }

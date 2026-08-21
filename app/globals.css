@@ -53,7 +53,7 @@
   --series-7: #8A93A6;
   --series-8: #B4552D;
 
-  --f-display: "Inter Tight", -apple-system, BlinkMacSystemFont, sans-serif;
+  --f-display: "Helvetica Neue", Helvetica, "Inter Tight", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
   --f-serif: "Source Serif 4", Georgia, serif;
   --f-mono: "JetBrains Mono", "SFMono-Regular", monospace;
 }
@@ -94,7 +94,9 @@ h3 {
   font-family: var(--f-serif);
   font-style: italic;
   font-weight: 400;
-  color: var(--brand);
+  /* Flag red, not navy: the accent word sits on the navy sign-in panel as well
+     as on paper, and navy on navy is invisible. */
+  color: var(--flag-red);
 }
 
 /* Sharp corners everywhere. The document look, not the app look.
